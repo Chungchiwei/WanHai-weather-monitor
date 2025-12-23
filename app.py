@@ -5,7 +5,7 @@ from datetime import datetime
 import plotly.graph_objects as go
 from typing import List, Dict
 import time
-
+import sqlite3
 # 導入你的模組（需與你原專案一致）
 from weather_crawler import PortWeatherCrawler
 from weather_parser import WeatherParser, WeatherRecord
@@ -883,11 +883,23 @@ def fetch_and_analyze_ports(crawler: PortWeatherCrawler, port_codes: List[str]) 
     for i, port_code in enumerate(port_codes):
         status.write(f"正在處理 **{port_code}**（{i+1}/{len(port_codes)}）")
 
+        # 🔧 修正：先下載資料（這會確保資料庫有最新資料）
         success, message = crawler.fetch_port_data(port_code)
-        if success:
+        
+        if success or "已是最新" in message:
+            # 🔧 修正：使用正確的 port_code 從資料庫讀取
             db_data = crawler.get_data_from_db(port_code)
+            
             if db_data:
                 content, issued_time, port_name = db_data
+                
+                # 🔧 新增：顯示除錯資訊
+                print(f"✅ {port_code}: 成功讀取資料")
+                print(f"   - 港口名稱: {port_name}")
+                print(f"   - 發布時間: {issued_time}")
+                print(f"   - 內容長度: {len(content)} 字元")
+                print(f"   - 內容預覽: {content[:100]}...")
+                
                 try:
                     _, records, warnings = parser.parse_content(content)
 
@@ -912,13 +924,23 @@ def fetch_and_analyze_ports(crawler: PortWeatherCrawler, port_codes: List[str]) 
                         "all_records": records,
                         "warnings": warnings,
                         "status": "success",
-                        "raw_content": content,
+                        "raw_content": content,  # 🔧 這裡應該是正確的內容
                     }
+                    
+                    print(f"   ✅ 解析成功：{len(records)} 筆記錄")
+                    
                 except Exception as e:
-                    results[port_code] = {"status": "parse_error", "error": str(e)}
+                    print(f"   ❌ 解析失敗: {e}")
+                    results[port_code] = {
+                        "status": "parse_error", 
+                        "error": str(e),
+                        "raw_content": content  # 🔧 即使解析失敗也保留原始內容
+                    }
             else:
+                print(f"❌ {port_code}: 資料庫無資料")
                 results[port_code] = {"status": "no_data", "message": "無資料"}
         else:
+            print(f"❌ {port_code}: 下載失敗 - {message}")
             results[port_code] = {"status": "fetch_error", "message": message}
 
         progress.progress((i + 1) / len(port_codes))
@@ -965,7 +987,8 @@ def display_weather_table(records: List[WeatherRecord]):
     st.dataframe(df.style.apply(highlight, axis=1), use_container_width=True, height=420, hide_index=True)
 
 
-def plot_port_trends(records: List[WeatherRecord]):
+def plot_port_trends(records: List[WeatherRecord], port_code: str = ""):
+    """繪製港口趨勢圖，加入 port_code 作為唯一識別"""
     if not records:
         st.info("無資料可繪圖")
         return
@@ -1016,7 +1039,9 @@ def plot_port_trends(records: List[WeatherRecord]):
     fig_w.add_hline(y=25, line_width=1, line_color="rgba(217,119,6,0.75)", annotation_text="注意 25", annotation_font_color="rgba(217,119,6,0.95)")
     fig_w.add_hline(y=30, line_width=1, line_color="rgba(234,88,12,0.75)", annotation_text="警告 30", annotation_font_color="rgba(234,88,12,0.95)")
     fig_w.update_layout(title=dict(text="風速趨勢（knots）", font=dict(color=BRAND["TEXT"], size=16, family="Inter")), **common)
-    st.plotly_chart(fig_w, use_container_width=True)
+    
+    # 加入唯一的 key
+    st.plotly_chart(fig_w, use_container_width=True, key=f"wind_chart_{port_code}")
 
     # Wave
     fig_s = go.Figure()
@@ -1032,7 +1057,9 @@ def plot_port_trends(records: List[WeatherRecord]):
     fig_s.add_hline(y=2.0, line_width=1, line_color="rgba(217,119,6,0.75)", annotation_text="注意 2.0", annotation_font_color="rgba(217,119,6,0.95)")
     fig_s.add_hline(y=2.5, line_width=1, line_color="rgba(234,88,12,0.75)", annotation_text="警告 2.5", annotation_font_color="rgba(234,88,12,0.95)")
     fig_s.update_layout(title=dict(text="浪高趨勢（meter）", font=dict(color=BRAND["TEXT"], size=16, family="Inter")), **common)
-    st.plotly_chart(fig_s, use_container_width=True)
+    
+    # 加入唯一的 key
+    st.plotly_chart(fig_s, use_container_width=True, key=f"wave_chart_{port_code}")
 
 
 def display_port_detail(port_code: str, data: Dict):
@@ -1063,7 +1090,8 @@ def display_port_detail(port_code: str, data: Dict):
     st.markdown("---")
 
     if view == "📈 趨勢圖表":
-        plot_port_trends(data["all_records"])
+        # 傳入 port_code 作為唯一識別
+        plot_port_trends(data["all_records"], port_code)
 
     elif view == "📋 完整資料表":
         display_weather_table(data["all_records"])
@@ -1096,7 +1124,7 @@ def display_port_detail(port_code: str, data: Dict):
             )
 
     else:
-        st.text_area("WNI 原始資料", value=data["raw_content"], height=520)
+        st.text_area("WNI 原始資料", value=data["raw_content"], height=520, key=f"raw_data_{port_code}")
 
 
 def display_risk_summary(results: Dict):
@@ -1285,7 +1313,11 @@ def main():
                         st.session_state.analysis_results = res
                         st.session_state.last_update = datetime.now()
                         st.rerun()
-
+            if st.button("🔍 檢查資料庫"):
+                conn = sqlite3.connect('WNI_port_weather.db')
+                df = pd.read_sql_query("SELECT whl_port_code, port_name, station_id, issued_time, LENGTH(content) as content_length FROM weather_data ORDER BY download_time DESC LIMIT 10", conn)
+                st.dataframe(df)
+                conn.close()
             if st.session_state.last_update:
                 st.caption(f"🕒 最後更新：{st.session_state.last_update.strftime('%Y-%m-%d %H:%M')}")
 
@@ -1380,7 +1412,7 @@ def main():
         for tab, (code, data) in zip(tabs, items):
             with tab:
                 display_port_detail(code, data)
-
+    
 
 if __name__ == "__main__":
     main()
