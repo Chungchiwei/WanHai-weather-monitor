@@ -901,8 +901,22 @@ def main():
         st.subheader("系統設定")
 
         with st.expander("帳號設定", expanded=not st.session_state.login_configured):
-            username = st.text_input("帳號", value=st.session_state.aedyn_username, key="公司個人信箱")
-            password = st.text_input("密碼", value=st.session_state.aedyn_password, type="password", key="預設為wanhai888")
+            username = st.text_input(
+                "帳號",
+                value=st.session_state.aedyn_username,
+                placeholder="請輸入公司個人信箱（例如：name@wanhai.com）",
+                key="username"
+            )
+
+            password = st.text_input(
+                "密碼",
+                value=st.session_state.aedyn_password,
+                type="password",
+                placeholder="預設為 wanhai888",
+                key="password"
+            )
+
+            st.caption("帳號請填公司個人信箱；密碼預設為 **wanhai888**（如已變更請輸入新密碼）。")
 
             if st.button("儲存並登入", use_container_width=True):
                 if username and password:
