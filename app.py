@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 import plotly.graph_objects as go
 from typing import List, Dict
+import time
 
 # 導入你的模組（需與你原專案一致）
 from weather_crawler import PortWeatherCrawler
@@ -34,18 +35,17 @@ BRAND = {
     "BORDER": "rgba(15, 23, 42, 0.10)",
 }
 
-# Logo（請換成你可用的資源）
-LOGO_URL = "data:image/jpeg;base64,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"
-
+# Logo（萬海官網 Logo）
+LOGO_URL = "https://www.wanhai.com/upload/2021/09/20210929112345678.png"
 
 # =========================
-# CSS (Wan Hai-like Corporate Style)
+# CSS (Wan Hai-like Corporate Style - Enhanced)
 # =========================
 def load_css():
     st.markdown(
         f"""
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
 
         :root {{
           --navy: {BRAND['NAVY']};
@@ -60,9 +60,12 @@ def load_css():
 
           --radius: 16px;
           --radius-sm: 12px;
+          --radius-lg: 20px;
 
           --shadow-sm: 0 1px 2px rgba(2, 6, 23, 0.06);
-          --shadow-md: 0 14px 40px rgba(2, 6, 23, 0.10);
+          --shadow-md: 0 8px 24px rgba(2, 6, 23, 0.12);
+          --shadow-lg: 0 16px 48px rgba(2, 6, 23, 0.16);
+          --shadow-xl: 0 24px 64px rgba(2, 6, 23, 0.20);
         }}
 
         html, body, [class*="css"] {{
@@ -75,22 +78,27 @@ def load_css():
         /* App 背景：官網系乾淨底色 + 頂部淡淡品牌漸層 */
         .stApp {{
           background:
-            radial-gradient(1000px 520px at 18% 0%, rgba(11,46,91,0.10), transparent 60%),
-            radial-gradient(900px 520px at 88% 0%, rgba(230,0,18,0.06), transparent 62%),
-            linear-gradient(180deg, #FFFFFF 0%, var(--bg) 40%, var(--bg) 100%);
+            radial-gradient(1200px 600px at 20% 0%, rgba(11,46,91,0.08), transparent 65%),
+            radial-gradient(1000px 600px at 85% 0%, rgba(230,0,18,0.05), transparent 65%),
+            linear-gradient(180deg, #FFFFFF 0%, var(--bg) 35%, var(--bg) 100%);
         }}
 
         .block-container {{
-          max-width: 1240px;
-          padding-top: 1.2rem;
-          padding-bottom: 2.2rem;
+          max-width: 1280px;
+          padding-top: 1.5rem;
+          padding-bottom: 2.5rem;
         }}
 
         h1,h2,h3,h4 {{
           color: var(--text) !important;
-          font-weight: 850 !important;
-          letter-spacing: -0.02em;
+          font-weight: 900 !important;
+          letter-spacing: -0.025em;
         }}
+        
+        h1 {{ font-size: 2.2rem !important; }}
+        h2 {{ font-size: 1.75rem !important; }}
+        h3 {{ font-size: 1.35rem !important; }}
+        
         p, li, label, span {{ color: var(--text); }}
         .stCaption, [data-testid="stCaptionContainer"] {{
           color: var(--muted) !important;
@@ -98,49 +106,133 @@ def load_css():
         hr {{ border-color: rgba(15, 23, 42, 0.10) !important; }}
 
         /* =========================
-           Sidebar：白底 + 上方品牌條
+           Sidebar：白底 + 精緻品牌區塊
         ========================== */
         section[data-testid="stSidebar"] {{
-          background: #FFFFFF;
+          background: linear-gradient(180deg, #FFFFFF 0%, #FAFBFC 100%);
           border-right: 1px solid rgba(15, 23, 42, 0.08);
         }}
+        
         section[data-testid="stSidebar"] .block-container {{
-          padding-top: 1.0rem;
+          padding-top: 1.2rem;
         }}
 
-        /* Sidebar top brand bar */
+        /* Sidebar 品牌區塊 - 放大 Logo 並優化布局 */
         .sidebar-brand {{
-          border-radius: var(--radius);
-          padding: 14px 14px;
-          background: linear-gradient(135deg, rgba(11,46,91,1), rgba(10,35,66,1));
-          box-shadow: var(--shadow-md);
+          position: relative;
+          border-radius: var(--radius-lg);
+          padding: 24px 20px;
+          background: linear-gradient(135deg, rgba(11,46,91,1) 0%, rgba(10,35,66,1) 100%);
+          box-shadow: var(--shadow-lg);
           color: #fff;
-          margin-bottom: 14px;
+          margin-bottom: 20px;
+          overflow: hidden;
         }}
+        
+        /* 品牌區塊背景裝飾 */
+        .sidebar-brand::before {{
+          content: '';
+          position: absolute;
+          top: -50%;
+          right: -20%;
+          width: 200px;
+          height: 200px;
+          background: radial-gradient(circle, rgba(230,0,18,0.15) 0%, transparent 70%);
+          border-radius: 50%;
+        }}
+        
+        .sidebar-brand::after {{
+          content: '';
+          position: absolute;
+          bottom: -30%;
+          left: -10%;
+          width: 150px;
+          height: 150px;
+          background: radial-gradient(circle, rgba(31,111,235,0.12) 0%, transparent 70%);
+          border-radius: 50%;
+        }}
+        
+        .sidebar-brand-content {{
+          position: relative;
+          z-index: 1;
+        }}
+        
+        .sidebar-brand .logo-container {{
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          margin-bottom: 16px;
+        }}
+        
+        .sidebar-brand .logo-wrapper {{
+          flex-shrink: 0;
+          width: 64px;
+          height: 64px;
+          border-radius: 14px;
+          background: rgba(255,255,255,0.15);
+          backdrop-filter: blur(10px);
+          border: 2px solid rgba(255,255,255,0.25);
+          padding: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+          transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }}
+        
+        .sidebar-brand .logo-wrapper:hover {{
+          transform: translateY(-2px) scale(1.02);
+          box-shadow: 0 12px 32px rgba(0,0,0,0.20);
+        }}
+        
+        .sidebar-brand .logo-wrapper img {{
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          filter: brightness(0) invert(1);
+        }}
+        
+        .sidebar-brand .text-content {{
+          flex: 1;
+        }}
+        
         .sidebar-brand .title {{
-          margin: 0;
+          margin: 0 0 6px 0;
           font-weight: 900;
-          font-size: 1.0rem;
+          font-size: 1.1rem;
           color: #fff;
+          line-height: 1.3;
+          letter-spacing: -0.01em;
         }}
+        
         .sidebar-brand .sub {{
-          margin: 6px 0 0 0;
-          font-size: 0.82rem;
-          color: rgba(255,255,255,0.78);
-          line-height: 1.35;
+          margin: 0;
+          font-size: 0.85rem;
+          color: rgba(255,255,255,0.80);
+          line-height: 1.4;
+          font-weight: 500;
         }}
+        
         .sidebar-brand .badge {{
           display: inline-flex;
-          align-items:center;
-          gap:8px;
-          margin-top: 10px;
-          padding: 6px 10px;
+          align-items: center;
+          gap: 8px;
+          margin-top: 14px;
+          padding: 8px 14px;
           border-radius: 999px;
           background: rgba(255,255,255,0.12);
-          border: 1px solid rgba(255,255,255,0.18);
-          color: rgba(255,255,255,0.92);
-          font-size: 0.80rem;
+          backdrop-filter: blur(10px);
+          border: 1px solid rgba(255,255,255,0.20);
+          color: rgba(255,255,255,0.95);
+          font-size: 0.82rem;
           font-weight: 800;
+          transition: all 0.2s ease;
+        }}
+        
+        .sidebar-brand .badge:hover {{
+          background: rgba(255,255,255,0.18);
+          border-color: rgba(255,255,255,0.30);
+          transform: translateX(2px);
         }}
 
         /* Inputs / Select：明亮官網風 */
@@ -149,18 +241,21 @@ def load_css():
           border: 1px solid rgba(15, 23, 42, 0.14) !important;
           background: #FFFFFF !important;
           color: var(--text) !important;
-          box-shadow: 0 1px 0 rgba(2,6,23,0.02) !important;
+          box-shadow: 0 1px 2px rgba(2,6,23,0.04) !important;
+          transition: all 0.2s ease !important;
         }}
+        
         .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {{
-          border-color: rgba(31,111,235,0.65) !important;
-          box-shadow: 0 0 0 4px rgba(31,111,235,0.12) !important;
+          border-color: rgba(31,111,235,0.50) !important;
+          box-shadow: 0 0 0 4px rgba(31,111,235,0.10), 0 2px 8px rgba(2,6,23,0.08) !important;
           outline: none !important;
         }}
+        
         .stTextInput input::placeholder, .stTextArea textarea::placeholder {{
-          color: rgba(91,102,122,0.70) !important;
+          color: rgba(91,102,122,0.60) !important;
         }}
 
-        /* Autofill：避免瀏覽器把 input 變成奇怪顏色 */
+        /* Autofill */
         input:-webkit-autofill,
         input:-webkit-autofill:hover,
         input:-webkit-autofill:focus {{
@@ -175,10 +270,12 @@ def load_css():
           border-color: rgba(15, 23, 42, 0.14) !important;
           background: #FFFFFF !important;
           color: var(--text) !important;
+          transition: all 0.2s ease !important;
         }}
+        
         [data-baseweb="select"] > div:focus-within {{
-          border-color: rgba(31,111,235,0.65) !important;
-          box-shadow: 0 0 0 4px rgba(31,111,235,0.12) !important;
+          border-color: rgba(31,111,235,0.50) !important;
+          box-shadow: 0 0 0 4px rgba(31,111,235,0.10) !important;
         }}
 
         /* Buttons：官網 CTA（紅）+ 次要（白） */
@@ -187,24 +284,32 @@ def load_css():
           border: 1px solid rgba(15, 23, 42, 0.14);
           background: #FFFFFF;
           color: var(--text);
-          font-weight: 850;
-          padding: 0.62rem 0.95rem;
-          transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease, background .12s ease;
+          font-weight: 800;
+          padding: 0.65rem 1.1rem;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
           box-shadow: var(--shadow-sm);
         }}
+        
         .stButton > button:hover {{
           transform: translateY(-1px);
-          border-color: rgba(15, 23, 42, 0.20);
+          border-color: rgba(15, 23, 42, 0.24);
           box-shadow: var(--shadow-md);
         }}
-        .stButton > button[kind="primary"] {{
-          background: linear-gradient(180deg, var(--red), #C80010);
-          border-color: rgba(230,0,18,0.60);
-          color: #FFFFFF;
-          box-shadow: 0 16px 44px rgba(230,0,18,0.18);
+        
+        .stButton > button:active {{
+          transform: translateY(0px);
         }}
+        
+        .stButton > button[kind="primary"] {{
+          background: linear-gradient(135deg, var(--red) 0%, #C80010 100%);
+          border-color: rgba(230,0,18,0.40);
+          color: #FFFFFF;
+          box-shadow: 0 8px 24px rgba(230,0,18,0.25), 0 2px 8px rgba(230,0,18,0.15);
+        }}
+        
         .stButton > button[kind="primary"]:hover {{
-          box-shadow: 0 20px 60px rgba(230,0,18,0.22);
+          box-shadow: 0 12px 32px rgba(230,0,18,0.30), 0 4px 12px rgba(230,0,18,0.20);
+          transform: translateY(-2px);
         }}
 
         /* Cards / Panels */
@@ -213,133 +318,229 @@ def load_css():
           border: 1px solid rgba(15, 23, 42, 0.10);
           border-radius: var(--radius);
           box-shadow: var(--shadow-sm);
+          transition: all 0.3s ease;
         }}
-        .card.pad {{ padding: 16px 18px; }}
+        
+        .card.pad {{ 
+          padding: 20px 22px; 
+        }}
+        
         .card:hover {{
-          border-color: rgba(15, 23, 42, 0.14);
+          border-color: rgba(15, 23, 42, 0.16);
           box-shadow: var(--shadow-md);
+          transform: translateY(-2px);
         }}
 
+        /* Top Bar */
         .topbar {{
-          background: linear-gradient(135deg, rgba(11,46,91,1), rgba(10,35,66,1));
-          border-radius: var(--radius);
-          box-shadow: var(--shadow-md);
-          padding: 16px 18px;
-          margin-bottom: 14px;
+          position: relative;
+          background: linear-gradient(135deg, rgba(11,46,91,1) 0%, rgba(10,35,66,1) 100%);
+          border-radius: var(--radius-lg);
+          box-shadow: var(--shadow-lg);
+          padding: 24px 26px;
+          margin-bottom: 20px;
           color: #fff;
+          overflow: hidden;
         }}
+        
+        .topbar::before {{
+          content: '';
+          position: absolute;
+          top: -50%;
+          right: -10%;
+          width: 300px;
+          height: 300px;
+          background: radial-gradient(circle, rgba(230,0,18,0.12) 0%, transparent 70%);
+          border-radius: 50%;
+        }}
+        
+        .topbar-content {{
+          position: relative;
+          z-index: 1;
+        }}
+        
         .topbar .h {{
-          margin: 0;
-          font-size: 1.25rem;
+          margin: 0 0 10px 0;
+          font-size: 1.5rem;
           font-weight: 900;
           color: #fff;
+          letter-spacing: -0.02em;
         }}
+        
         .topbar .p {{
-          margin: 6px 0 0 0;
-          color: rgba(255,255,255,0.78);
-          font-size: 0.92rem;
+          margin: 0;
+          color: rgba(255,255,255,0.85);
+          font-size: 0.95rem;
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 10px;
         }}
+        
         .topbar .chip {{
-          display:inline-flex;
-          align-items:center;
-          gap:8px;
-          padding: 6px 10px;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 7px 13px;
           border-radius: 999px;
-          background: rgba(255,255,255,0.12);
-          border: 1px solid rgba(255,255,255,0.18);
-          color: rgba(255,255,255,0.92);
-          font-size: 0.82rem;
-          font-weight: 850;
-          margin-left: 10px;
+          background: rgba(255,255,255,0.14);
+          backdrop-filter: blur(10px);
+          border: 1px solid rgba(255,255,255,0.22);
+          color: rgba(255,255,255,0.95);
+          font-size: 0.84rem;
+          font-weight: 800;
+          transition: all 0.2s ease;
+        }}
+        
+        .topbar .chip:hover {{
+          background: rgba(255,255,255,0.20);
+          transform: translateY(-1px);
         }}
 
         /* Info card (Port header) */
         .info-card {{
-          background: #FFFFFF;
+          background: linear-gradient(135deg, #FFFFFF 0%, #FAFBFC 100%);
           border: 1px solid rgba(15, 23, 42, 0.10);
-          border-radius: var(--radius);
-          padding: 18px 18px;
-          box-shadow: var(--shadow-sm);
-          margin-bottom: 14px;
+          border-radius: var(--radius-lg);
+          padding: 24px 26px;
+          box-shadow: var(--shadow-md);
+          margin-bottom: 20px;
+          transition: all 0.3s ease;
         }}
+        
+        .info-card:hover {{
+          box-shadow: var(--shadow-lg);
+          transform: translateY(-2px);
+        }}
+        
         .info-meta {{
-          display:flex;
+          display: flex;
           flex-wrap: wrap;
-          gap: 12px;
-          align-items:center;
+          gap: 14px;
+          align-items: center;
           color: var(--muted);
           font-size: 0.92rem;
+          margin-top: 12px;
         }}
+        
         .divider-dot {{
           width: 4px;
           height: 4px;
           border-radius: 999px;
-          background: rgba(91,102,122,0.55);
-          display:inline-block;
+          background: rgba(91,102,122,0.50);
+          display: inline-block;
         }}
 
         /* Risk badge */
         .risk-badge {{
-          padding: 6px 12px;
+          padding: 7px 14px;
           border-radius: 999px;
-          font-size: 0.84em;
+          font-size: 0.85em;
           font-weight: 900;
           display: inline-flex;
           align-items: center;
           gap: 8px;
           border: 1px solid transparent;
           white-space: nowrap;
+          transition: all 0.2s ease;
         }}
-        .risk-0 {{ background: rgba(34,197,94,0.12); color: #0F5132; border-color: rgba(34,197,94,0.22); }}
-        .risk-1 {{ background: rgba(245,158,11,0.12); color: #7A4B00; border-color: rgba(245,158,11,0.22); }}
-        .risk-2 {{ background: rgba(251,146,60,0.12); color: #7A2E00; border-color: rgba(251,146,60,0.22); }}
-        .risk-3 {{ background: rgba(230,0,18,0.10); color: #8A0010; border-color: rgba(230,0,18,0.22); }}
+        
+        .risk-badge:hover {{
+          transform: scale(1.05);
+        }}
+        
+        .risk-0 {{ 
+          background: rgba(34,197,94,0.14); 
+          color: #0F5132; 
+          border-color: rgba(34,197,94,0.25); 
+        }}
+        .risk-1 {{ 
+          background: rgba(245,158,11,0.14); 
+          color: #7A4B00; 
+          border-color: rgba(245,158,11,0.25); 
+        }}
+        .risk-2 {{ 
+          background: rgba(251,146,60,0.14); 
+          color: #7A2E00; 
+          border-color: rgba(251,146,60,0.25); 
+        }}
+        .risk-3 {{ 
+          background: rgba(230,0,18,0.12); 
+          color: #8A0010; 
+          border-color: rgba(230,0,18,0.25); 
+        }}
 
         /* Alert list card */
         .port-alert-card {{
           background: #FFFFFF;
           border: 1px solid rgba(15, 23, 42, 0.10);
-          border-radius: var(--radius-sm);
-          padding: 14px 16px;
-          margin-bottom: 10px;
+          border-radius: var(--radius);
+          padding: 18px 20px;
+          margin-bottom: 12px;
           box-shadow: var(--shadow-sm);
+          transition: all 0.3s ease;
         }}
+        
+        .port-alert-card:hover {{
+          box-shadow: var(--shadow-md);
+          transform: translateX(4px);
+        }}
+        
         .port-alert-card .title {{
-          margin: 0;
+          margin: 0 0 8px 0;
           font-weight: 900;
+          font-size: 1.05rem;
         }}
+        
         .port-alert-card .meta {{
-          margin: 6px 0 0 0;
+          margin: 0;
           color: var(--muted);
-          font-size: 0.92rem;
+          font-size: 0.90rem;
         }}
+        
         .pill {{
-          padding: 6px 10px;
+          padding: 7px 12px;
           border-radius: 999px;
           font-size: 0.82rem;
           font-weight: 900;
-          border: 1px solid rgba(15,23,42,0.14);
-          background: rgba(11,46,91,0.04);
+          border: 1px solid rgba(15,23,42,0.16);
+          background: rgba(11,46,91,0.06);
           color: var(--navy);
           white-space: nowrap;
+          transition: all 0.2s ease;
+        }}
+        
+        .pill:hover {{
+          background: rgba(11,46,91,0.10);
+          transform: scale(1.05);
         }}
 
         /* Metrics */
         div[data-testid="stMetric"] {{
-          background: #FFFFFF;
+          background: linear-gradient(135deg, #FFFFFF 0%, #FAFBFC 100%);
           border: 1px solid rgba(15, 23, 42, 0.10);
-          padding: 14px 16px;
+          padding: 18px 20px;
           border-radius: var(--radius);
           box-shadow: var(--shadow-sm);
+          transition: all 0.3s ease;
         }}
+        
+        div[data-testid="stMetric"]:hover {{
+          box-shadow: var(--shadow-md);
+          transform: translateY(-2px);
+        }}
+        
         div[data-testid="stMetric"] [data-testid="stMetricLabel"] {{
           color: var(--muted) !important;
           font-weight: 800 !important;
+          font-size: 0.90rem !important;
         }}
+        
         div[data-testid="stMetric"] [data-testid="stMetricValue"] {{
           color: var(--text) !important;
           font-weight: 900 !important;
-          letter-spacing: -0.01em;
+          letter-spacing: -0.02em;
+          font-size: 2.0rem !important;
         }}
 
         /* DataFrame */
@@ -353,48 +554,92 @@ def load_css():
 
         /* Tabs / Radio */
         [data-testid="stTabs"] button {{
-          font-weight: 850 !important;
-          color: rgba(91,102,122,0.95) !important;
+          font-weight: 800 !important;
+          color: rgba(91,102,122,0.90) !important;
+          transition: all 0.2s ease !important;
         }}
+        
+        [data-testid="stTabs"] button:hover {{
+          color: var(--navy) !important;
+        }}
+        
         [data-testid="stTabs"] button[aria-selected="true"] {{
           color: var(--navy) !important;
+          font-weight: 900 !important;
         }}
 
         /* Plotly modebar */
         .js-plotly-plot .plotly .modebar {{
-          opacity: 0.20;
-          transition: opacity .15s ease;
+          opacity: 0.15;
+          transition: opacity 0.2s ease;
         }}
+        
         .js-plotly-plot:hover .plotly .modebar {{
-          opacity: 0.95;
+          opacity: 1;
         }}
 
         /* Welcome hero */
         .hero {{
-          max-width: 980px;
-          margin: 14px auto 0 auto;
+          max-width: 1000px;
+          margin: 20px auto 0 auto;
           text-align: center;
-          padding: 24px 10px 10px 10px;
+          padding: 32px 16px 16px 16px;
         }}
+        
         .hero h1 {{
-          margin: 0 0 8px 0;
-          font-size: 2.05rem;
+          margin: 0 0 12px 0;
+          font-size: 2.4rem;
+          background: linear-gradient(135deg, var(--navy) 0%, var(--navy2) 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
         }}
+        
         .hero .sub {{
           margin: 0 auto;
-          max-width: 740px;
+          max-width: 760px;
           color: var(--muted);
-          font-size: 1.02rem;
-          line-height: 1.6;
+          font-size: 1.05rem;
+          line-height: 1.7;
         }}
+        
         .hero-grid {{
-          margin-top: 18px;
+          margin-top: 24px;
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 14px;
+          gap: 18px;
         }}
+        
         @media (max-width: 920px) {{
           .hero-grid {{ grid-template-columns: 1fr; }}
+        }}
+        
+        .hero-grid .card {{
+          text-align: left;
+        }}
+        
+        .hero-grid .card h3 {{
+          background: linear-gradient(135deg, var(--navy) 0%, var(--sky) 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }}
+
+        /* Expander */
+        .streamlit-expanderHeader {{
+          font-weight: 800 !important;
+          border-radius: 12px !important;
+        }}
+
+        /* Progress bar */
+        .stProgress > div > div > div {{
+          background: linear-gradient(90deg, var(--navy) 0%, var(--sky) 100%);
+        }}
+
+        /* Info/Warning/Error boxes */
+        .stAlert {{
+          border-radius: var(--radius) !important;
+          border-width: 1px !important;
         }}
 
         </style>
@@ -497,7 +742,6 @@ class WeatherRiskAnalyzer:
 
     @classmethod
     def get_risk_color(cls, risk_level: int) -> str:
-        # 官網風：Danger 用品牌紅，其他用較穩重色
         return {0: "#16A34A", 1: "#D97706", 2: "#EA580C", 3: BRAND["RED"]}.get(risk_level, "#64748B")
 
     @classmethod
@@ -506,16 +750,19 @@ class WeatherRiskAnalyzer:
 
 
 # =========================
-# Functions (保持你原本行為，這裡做相容寫法)
+# Functions
 # =========================
 def init_crawler(username: str, password: str):
-    """
-    你的原始實作可能會動態替換模組常數並 refresh cookies。
-    這裡用「盡量相容」寫法：若 crawler 有 login_manager/refresh_cookies 就沿用。
-    """
+    """初始化爬蟲，首次登入會顯示等待訊息"""
     try:
-        import weather_crawler as wc  # 你的模組
-
+        import weather_crawler as wc
+        
+        status_container = st.empty()
+        progress_bar = st.progress(0)
+        
+        status_container.info("🔍 正在檢查登入狀態...")
+        progress_bar.progress(10)
+        
         original_username = getattr(wc, "AEDYN_USERNAME", None)
         original_password = getattr(wc, "AEDYN_PASSWORD", None)
 
@@ -524,26 +771,57 @@ def init_crawler(username: str, password: str):
         if original_password is not None:
             wc.AEDYN_PASSWORD = password
 
+        progress_bar.progress(20)
+        status_container.info("⚙️ 正在初始化系統...")
+        
         crawler = PortWeatherCrawler(auto_login=False)
 
-        # 還原
         if original_username is not None:
             wc.AEDYN_USERNAME = original_username
         if original_password is not None:
             wc.AEDYN_PASSWORD = original_password
 
-        # 若有 login_manager，填入帳密
+        progress_bar.progress(40)
+        
         if hasattr(crawler, "login_manager"):
             crawler.login_manager.username = username
             crawler.login_manager.password = password
+            
+            status_container.info("🔐 正在驗證登入憑證...")
+            progress_bar.progress(60)
+            
             if hasattr(crawler.login_manager, "verify_cookies") and not crawler.login_manager.verify_cookies():
-                st.warning("Cookie 無效，正在重新登入...")
+                status_container.warning("⚠️ Cookie 已過期或首次登入，正在重新登入...")
+                status_container.info("🌐 正在啟動瀏覽器進行登入（首次登入約需 10-30 秒）...")
+                progress_bar.progress(70)
+                
                 if hasattr(crawler, "refresh_cookies"):
-                    crawler.refresh_cookies(headless=True)
-
+                    with st.spinner("正在執行以下步驟：\n1. 啟動瀏覽器\n2. 連接 WNI 登入頁面\n3. 輸入帳號密碼\n4. 取得認證 Cookie\n5. 儲存登入狀態"):
+                        success = crawler.refresh_cookies(headless=True)
+                        
+                    if success:
+                        progress_bar.progress(90)
+                        status_container.success("✅ 登入成功！Cookie 已儲存，下次將自動使用")
+                    else:
+                        progress_bar.progress(0)
+                        status_container.error("❌ 登入失敗，請檢查帳號密碼")
+                        return None
+            else:
+                progress_bar.progress(80)
+                status_container.success("✅ 使用已儲存的登入狀態")
+        
+        progress_bar.progress(100)
+        status_container.success("🎉 系統初始化完成！")
+        
+        time.sleep(1)
+        status_container.empty()
+        progress_bar.empty()
+        
         return crawler
+        
     except Exception as e:
-        st.error(f"初始化失敗：{e}")
+        st.error(f"❌ 初始化失敗：{e}")
+        st.info("💡 提示：首次登入需要較長時間，請耐心等候")
         return None
 
 
@@ -575,13 +853,29 @@ def fetch_and_analyze_ports(crawler: PortWeatherCrawler, port_codes: List[str]) 
     parser = WeatherParser()
     analyzer = WeatherRiskAnalyzer()
 
-    # verify cookie if available
+    cookie_status = st.empty()
+    
     if hasattr(crawler, "login_manager") and hasattr(crawler.login_manager, "verify_cookies"):
+        cookie_status.info("🔍 正在驗證登入狀態...")
+        
         if not crawler.login_manager.verify_cookies():
-            st.warning("Cookie 已過期，重新登入中...")
-            if hasattr(crawler, "refresh_cookies") and not crawler.refresh_cookies(headless=True):
-                st.error("無法更新 Cookie")
-                return results
+            cookie_status.warning("⚠️ Cookie 已過期，正在重新登入...")
+            
+            with st.spinner("🌐 正在重新取得登入憑證（約需 10-30 秒）..."):
+                if hasattr(crawler, "refresh_cookies"):
+                    success = crawler.refresh_cookies(headless=True)
+                    
+                    if not success:
+                        cookie_status.error("❌ 無法更新 Cookie，請重新初始化系統")
+                        return results
+                    else:
+                        cookie_status.success("✅ 登入憑證已更新")
+                        time.sleep(1)
+        else:
+            cookie_status.success("✅ 登入狀態正常")
+            time.sleep(0.5)
+    
+    cookie_status.empty()
 
     progress = st.progress(0)
     status = st.empty()
@@ -658,7 +952,6 @@ def display_weather_table(records: List[WeatherRecord]):
 
     df = pd.DataFrame(rows)
 
-    # 官網風：淡淡上色、不刺眼
     def highlight(row):
         label = row["風險等級"]
         if "危險" in label:
@@ -823,10 +1116,12 @@ def display_risk_summary(results: Dict):
     st.markdown(
         f"""
         <div class="topbar">
-          <div class="h">港口氣象監控總覽</div>
-          <div class="p">
-            監控港口：<span class="chip">⚓ {total_ports} Ports</span>
-            <span class="chip">🕒 Last update: {st.session_state.last_update.strftime('%Y-%m-%d %H:%M') if st.session_state.last_update else '—'}</span>
+          <div class="topbar-content">
+            <div class="h">⚓ 港口氣象監控總覽</div>
+            <div class="p">
+              <span class="chip">📊 監控港口：{total_ports} Ports</span>
+              <span class="chip">🕒 Last update: {st.session_state.last_update.strftime('%Y-%m-%d %H:%M') if st.session_state.last_update else '—'}</span>
+            </div>
           </div>
         </div>
         """,
@@ -835,15 +1130,15 @@ def display_risk_summary(results: Dict):
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.metric("危險 Danger", risk_counts[3])
+        st.metric("🔴 危險 Danger", risk_counts[3])
     with c2:
-        st.metric("警告 Warning", risk_counts[2])
+        st.metric("🟠 警告 Warning", risk_counts[2])
     with c3:
-        st.metric("注意 Caution", risk_counts[1])
+        st.metric("🟡 注意 Caution", risk_counts[1])
     with c4:
-        st.metric("安全 Safe", risk_counts[0])
+        st.metric("🟢 安全 Safe", risk_counts[0])
 
-    st.markdown("### 重點關注（Warning / Danger）")
+    st.markdown("### 🎯 重點關注（Warning / Danger）")
     if high_risk:
         high_risk.sort(key=lambda x: x[1]["max_risk_level"], reverse=True)
         for code, data in high_risk:
@@ -854,12 +1149,12 @@ def display_risk_summary(results: Dict):
                 f"""
                 <div class="port-alert-card" style="border-left: 5px solid {color};">
                   <div style="display:flex; justify-content:space-between; gap:12px; align-items:center;">
-                    <h4 class="title">{code} - {data['port_name']}</h4>
+                    <h4 class="title">⚓ {code} - {data['port_name']}</h4>
                     <span class="pill" style="border-color: {color}; color:{color}; background: rgba(230,0,18,0.04);">
                       {label}
                     </span>
                   </div>
-                  <p class="meta">🔴 高風險時段：<b>{cnt}</b> ｜ 發布：{data['issued_time']}</p>
+                  <p class="meta">🔴 高風險時段：<b>{cnt}</b> ｜ 📅 發布：{data['issued_time']}</p>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -885,22 +1180,26 @@ def main():
         st.markdown(
             f"""
             <div class="sidebar-brand">
-              <div style="display:flex; align-items:center; gap:10px;">
-                <img src="{LOGO_URL}" style="width:34px; height:34px; border-radius:10px; background: rgba(255,255,255,0.10); padding:6px;" />
-                <div>
-                  <div class="title">Wan Hai Marine Technology Division</div>
-                  <div class="sub">風險管理課<br/>Fleet Risk Management Department</div>
+              <div class="sidebar-brand-content">
+                <div class="logo-container">
+                  <div class="logo-wrapper">
+                    <img src="{LOGO_URL}" alt="Wan Hai Lines Logo" />
+                  </div>
+                  <div class="text-content">
+                    <div class="title">Wan Hai Lines</div>
+                    <div class="sub">Marine Technology Division<br/>風險管理課</div>
+                  </div>
                 </div>
+                <div class="badge">⚓ Corporate Dashboard</div>
               </div>
-              <div class="badge">⚓ Corporate Dashboard</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        st.subheader("系統設定")
+        st.subheader("⚙️ 系統設定")
 
-        with st.expander("帳號設定", expanded=not st.session_state.login_configured):
+        with st.expander("🔐 帳號設定", expanded=not st.session_state.login_configured):
             username = st.text_input(
                 "帳號",
                 value=st.session_state.aedyn_username,
@@ -917,28 +1216,56 @@ def main():
             )
 
             st.caption("帳號請填公司個人信箱；密碼預設為 **wanhai888**（如已變更請輸入新密碼）。")
+            
+            st.info("💡 **首次登入說明**\n\n首次登入或 Cookie 過期時，系統需要約 10-30 秒進行以下步驟：\n\n"
+                   "1. 啟動瀏覽器\n"
+                   "2. 連接 WNI 登入頁面\n"
+                   "3. 自動輸入帳密\n"
+                   "4. 取得並儲存 Cookie\n\n"
+                   "完成後，Cookie 將保存 24 小時，期間無需重新登入。")
 
             if st.button("儲存並登入", use_container_width=True):
                 if username and password:
                     st.session_state.aedyn_username = username
                     st.session_state.aedyn_password = password
                     st.session_state.login_configured = True
-                    st.success("已儲存")
+                    st.success("✅ 已儲存帳號設定")
                 else:
-                    st.error("請輸入完整帳號密碼")
+                    st.error("❌ 請輸入完整帳號密碼")
 
         if st.session_state.login_configured:
             if not st.session_state.crawler:
-                if st.button("初始化系統", type="primary", use_container_width=True):
-                    with st.spinner("系統啟動中..."):
-                        crawler = init_crawler(st.session_state.aedyn_username, st.session_state.aedyn_password)
-                        if crawler:
-                            st.session_state.crawler = crawler
-                            st.session_state.crawler_initialized = True
+                if st.button("🚀 初始化系統", type="primary", use_container_width=True):
+                    crawler = init_crawler(st.session_state.aedyn_username, st.session_state.aedyn_password)
+                    if crawler:
+                        st.session_state.crawler = crawler
+                        st.session_state.crawler_initialized = True
+                        st.success("✅ 系統已就緒")
+                        time.sleep(1)
+                        st.rerun()
+            else:
+                if hasattr(st.session_state.crawler, 'login_manager'):
+                    cookie_age = None
+                    if st.session_state.crawler.login_manager.cookie_timestamp:
+                        cookie_age = datetime.now() - st.session_state.crawler.login_manager.cookie_timestamp
+                        hours = int(cookie_age.total_seconds() / 3600)
+                        
+                        if hours < 24:
+                            st.success(f"🔐 登入狀態：正常（已使用 {hours} 小時）")
+                        else:
+                            st.warning(f"⚠️ Cookie 已過期（{hours} 小時），下次抓取時將自動更新")
+                
+                if st.button("🔄 手動更新登入狀態", use_container_width=True):
+                    with st.spinner("正在更新登入憑證..."):
+                        if st.session_state.crawler.refresh_cookies(headless=True):
+                            st.success("✅ 登入憑證已更新")
+                            time.sleep(1)
                             st.rerun()
+                        else:
+                            st.error("❌ 更新失敗")
 
             st.markdown("---")
-            st.subheader("資料抓取")
+            st.subheader("📡 資料抓取")
 
             mode = st.radio("範圍", ["全部港口", "指定港口"], horizontal=True)
 
@@ -952,7 +1279,7 @@ def main():
                     sel = st.multiselect("選擇港口", list(opts.keys()))
                     port_codes = [opts[k] for k in sel]
 
-                if port_codes and st.button("開始更新資料", type="primary", use_container_width=True):
+                if port_codes and st.button("▶️ 開始更新資料", type="primary", use_container_width=True):
                     with st.spinner("抓取並分析中..."):
                         res = fetch_and_analyze_ports(st.session_state.crawler, port_codes)
                         st.session_state.analysis_results = res
@@ -960,7 +1287,7 @@ def main():
                         st.rerun()
 
             if st.session_state.last_update:
-                st.caption(f"最後更新：{st.session_state.last_update.strftime('%Y-%m-%d %H:%M')}")
+                st.caption(f"🕒 最後更新：{st.session_state.last_update.strftime('%Y-%m-%d %H:%M')}")
 
     # Main content
     if not st.session_state.analysis_results:
@@ -969,25 +1296,25 @@ def main():
             <div class="hero">
               <h1>⚓ 海技部-港口氣象監控系統</h1>
               <div class="sub">
-                以WNI氣象資訊基礎，針對未來48Hrs港口風力監控，顯示整體風險等級、趨勢圖與警戒時段，協助船長提早進行風險評估。
-                請先於左側輸入WNI登入資訊並初始化系統。
+                以 WNI 氣象資訊為基礎，針對未來 48 小時港口風力進行監控，顯示整體風險等級、趨勢圖與警戒時段，協助船長提早進行風險評估。
+                請先於左側輸入 WNI 登入資訊並初始化系統。
               </div>
 
               <div class="hero-grid">
                 <div class="card pad">
-                  <h3 style="margin:0 0 6px 0; color: var(--navy);">全船隊監控</h3>
+                  <h3 style="margin:0 0 8px 0;">🌐 全船隊監控</h3>
                   <div style="color: var(--muted); line-height:1.6;">
                     快速掌握所有港口風險分布與重點關注名單
                   </div>
                 </div>
                 <div class="card pad">
-                  <h3 style="margin:0 0 6px 0; color: var(--navy);">即時風險預警</h3>
+                  <h3 style="margin:0 0 8px 0;">⚡ 即時風險預警</h3>
                   <div style="color: var(--muted); line-height:1.6;">
                     以注意/警告/危險等級呈現，降低判讀成本
                   </div>
                 </div>
                 <div class="card pad">
-                  <h3 style="margin:0 0 6px 0; color: var(--navy);">視覺化圖表</h3>
+                  <h3 style="margin:0 0 8px 0;">📊 視覺化圖表</h3>
                   <div style="color: var(--muted); line-height:1.6;">
                     風速、陣風、浪高趨勢一眼看懂，決策更快
                   </div>
@@ -1006,7 +1333,7 @@ def main():
     st.markdown("")
 
     # Details
-    st.markdown("## 詳細分析")
+    st.markdown("## 📋 詳細分析")
 
     colA, colB = st.columns([1, 2])
     with colA:
@@ -1048,7 +1375,6 @@ def main():
                 display_port_detail(code, data)
 
     else:
-        # 全部港口
         items = list(success_ports.items())
         tabs = st.tabs([k for k, _ in items])
         for tab, (code, data) in zip(tabs, items):
