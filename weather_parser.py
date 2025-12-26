@@ -1,40 +1,17 @@
 # weather_parser.py
 import re
-import math
-from datetime import datetime, timedelta, time
-from typing import List, Tuple, Dict, Optional, Any
+from datetime import datetime
+from typing import List, Tuple, Dict, Any
 from dataclasses import dataclass
-
-# ================= 常數定義 =================
-HP_TO_BOLLARD_PULL_PER_100HP = 1.1 
-GRAVITY = 9.81
-
-# 風險閾值
-HIGH_WIND_SPEED = 30   # kts
-HIGH_GUST_SPEED = 40   # kts
-HIGH_WAVE_SIG = 2.5    # m
-VERY_HIGH_WAVE_SIG = 4.0  # m
-EXTREME_GUST = 50      # kts
-NIGHT_HOURS = (20, 6)
-
-# 繫泊幾何
-BREAST_LINE_ANGLE = 90
-SPRING_LINE_ANGLE = 15
-
-# 效率係數（考慮纜繩角度和摩擦）
-HEAD_TRANS_EFF = 0.95   # 頭纜橫向效率
-HEAD_LONG_EFF = 0.15    # 頭纜縱向效率
-SPRING_TRANS_EFF = 0.25 # 倒纜橫向效率
-SPRING_LONG_EFF = 0.95  # 倒纜縱向效率
-
+from constant import kts_to_bft, wind_dir_deg, HIGH_WIND_SPEED_kts, HIGH_WIND_SPEED_Bft, HIGH_GUST_SPEED_kts, HIGH_GUST_SPEED_Bft, HIGH_WAVE_SIG
 
 @dataclass
 class WeatherRecord:
     """氣象記錄資料結構"""
     time: datetime
-    wind_direction: str          # 風向 (例如: NNE)
-    wind_speed: float           # 風速 (knots)
-    wind_gust: float            # 陣風 (knots)
+    wind_direction: str         # 風向 (例如: NNE)
+    wind_speed_kts: float       # 風速 (knots)
+    wind_gust_kts: float        # 陣風 (knots)
     wave_direction: str         # 浪向
     wave_height: float          # 顯著浪高 (meters)
     wave_max: float             # 最大浪高 (meters)
@@ -43,8 +20,8 @@ class WeatherRecord:
     def __post_init__(self):
         """資料驗證與轉換"""
         # 確保數值欄位是浮點數
-        self.wind_speed = float(self.wind_speed)
-        self.wind_gust = float(self.wind_gust)
+        self.wind_speed_kts = float(self.wind_speed_kts)
+        self.wind_gust_kts = float(self.wind_gust_kts)
         self.wave_height = float(self.wave_height)
         self.wave_max = float(self.wave_max)
         self.wave_period = float(self.wave_period)
@@ -56,44 +33,32 @@ class WeatherRecord:
     @property
     def wind_speed_ms(self) -> float:
         """風速轉換為 m/s"""
-        return self.wind_speed * 0.514444
+        return self.wind_speed_kts * 0.514444
+    
+    @property
+    def wind_speed_bft(self) -> int:
+        """風速轉換為 BFT"""
+        return kts_to_bft(self.wind_speed_kts)
     
     @property
     def wind_gust_ms(self) -> float:
         """陣風轉換為 m/s"""
-        return self.wind_gust * 0.514444
+        return self.wind_gust_kts * 0.514444
+    
+    @property
+    def wind_gust_bft(self) -> int:
+        """陣風轉換為 BFT"""
+        return kts_to_bft(self.wind_gust_kts)
     
     @property
     def wind_dir_deg(self) -> float:
         """風向轉換為度數"""
-        compass_map = {
-            'N': 0, 'NNE': 22.5, 'NE': 45, 'ENE': 67.5,
-            'E': 90, 'ESE': 112.5, 'SE': 135, 'SSE': 157.5,
-            'S': 180, 'SSW': 202.5, 'SW': 225, 'WSW': 247.5,
-            'W': 270, 'WNW': 292.5, 'NW': 315, 'NNW': 337.5
-        }
-        return compass_map.get(self.wind_direction, 0.0)
+        return wind_dir_deg(self.wind_direction)
     
     @property
     def wave_dir_deg(self) -> float:
         """浪向轉換為度數"""
-        compass_map = {
-            'N': 0, 'NNE': 22.5, 'NE': 45, 'ENE': 67.5,
-            'E': 90, 'ESE': 112.5, 'SE': 135, 'SSE': 157.5,
-            'S': 180, 'SSW': 202.5, 'SW': 225, 'WSW': 247.5,
-            'W': 270, 'WNW': 292.5, 'NW': 315, 'NNW': 337.5
-        }
-        return compass_map.get(self.wave_direction, 0.0)
-    
-    @property
-    def wind_speed_kts(self) -> float:
-        """風速 (保持原始 knots)"""
-        return self.wind_speed
-    
-    @property
-    def wind_gust_kts(self) -> float:
-        """陣風 (保持原始 knots)"""
-        return self.wind_gust
+        return wind_dir_deg(self.wave_direction)
     
     @property
     def wave_sig_m(self) -> float:
@@ -115,14 +80,16 @@ class WeatherRecord:
         return {
             'time': self.time,
             'wind_direction': self.wind_direction,
-            'wind_speed': self.wind_speed,
-            'wind_gust': self.wind_gust,
+            'wind_speed_kts': self.wind_speed_kts,
+            'wind_speed_ms': self.wind_speed_ms,
+            'wind_speed_bft': self.wind_speed_bft,
+            'wind_gust_kts': self.wind_gust_kts,
+            'wind_gust_ms': self.wind_gust_ms,
+            'wind_gust_bft': self.wind_gust_bft,
             'wave_direction': self.wave_direction,
             'wave_height': self.wave_height,
             'wave_max': self.wave_max,
             'wave_period': self.wave_period,
-            'wind_speed_ms': self.wind_speed_ms,
-            'wind_gust_ms': self.wind_gust_ms,
             'wind_dir_deg': self.wind_dir_deg,
             'wave_dir_deg': self.wave_dir_deg
         }
@@ -130,7 +97,7 @@ class WeatherRecord:
     def __repr__(self) -> str:
         """字串表示"""
         return (f"WeatherRecord(time={self.time.strftime('%Y-%m-%d %H:%M')}, "
-                f"wind={self.wind_direction} {self.wind_speed:.1f}kts (gust {self.wind_gust:.1f}kts), "
+                f"wind={self.wind_direction} {self.wind_speed_kts:.1f}kts (gust {self.wind_gust_kts:.1f}kts), "
                 f"wave={self.wave_direction} {self.wave_height:.1f}m)")
 
 
@@ -192,15 +159,15 @@ class WeatherParser:
                     continue
                 
                 # 解析日期時間
-                lct_date = parts[2]
-                lct_time = parts[3]
+                local_date = parts[2]
+                local_time = parts[3]
                 
                 # 處理跨年
-                if prev_mmdd and prev_mmdd > lct_date and prev_mmdd.startswith("12") and lct_date.startswith("01"):
+                if prev_mmdd and prev_mmdd > local_date and prev_mmdd.startswith("12") and local_date.startswith("01"):
                     current_year += 1
-                prev_mmdd = lct_date
+                prev_mmdd = local_date
                 
-                dt = datetime.strptime(f"{current_year}{lct_date}{lct_time}", "%Y%m%d%H%M")
+                dt = datetime.strptime(f"{current_year}{local_date}{local_time}", "%Y%m%d%H%M")
                 
                 def _safe_float(val_str):
                     """安全轉換為浮點數（處理 * 符號）"""
@@ -211,8 +178,8 @@ class WeatherParser:
                 record = WeatherRecord(
                     time=dt,
                     wind_direction=parts[4],
-                    wind_speed=_safe_float(parts[5]),
-                    wind_gust=_safe_float(parts[6]),
+                    wind_speed_kts=_safe_float(parts[5]),
+                    wind_gust_kts=_safe_float(parts[6]),
                     wave_direction=parts[7],
                     wave_height=_safe_float(parts[8]),
                     wave_max=_safe_float(parts[9]),
@@ -245,25 +212,31 @@ class WeatherParser:
     
     @staticmethod
     def filter_high_risk_records(records: List[WeatherRecord], 
-                                 wind_threshold: float = HIGH_WIND_SPEED,
-                                 gust_threshold: float = HIGH_GUST_SPEED,
+                                 wind_kts_threshold: float = HIGH_WIND_SPEED_kts,
+                                 wind_bft_threshold: int = HIGH_WIND_SPEED_Bft,
+                                 gust_kts_threshold: float = HIGH_GUST_SPEED_kts,
+                                 gust_bft_threshold: int = HIGH_GUST_SPEED_Bft,
                                  wave_threshold: float = HIGH_WAVE_SIG) -> List[WeatherRecord]:
         """
         篩選高風險時段
         
         Args:
             records: 氣象記錄列表
-            wind_threshold: 風速閾值 (kts)
-            gust_threshold: 陣風閾值 (kts)
-            wave_threshold: 浪高閾值 (m)
+            wind_kts_threshold: 風速警戒值 (kts)
+            wind_bft_threshold: 風速警戒值 (BFT)
+            gust_kts_threshold: 陣風警戒值 (kts)
+            gust_bft_threshold: 陣風警戒值 (BFT)
+            wave_threshold: 浪高警戒值 (m)
             
         Returns:
             高風險記錄列表
         """
         return [
             r for r in records
-            if r.wind_speed >= wind_threshold 
-            or r.wind_gust >= gust_threshold 
+            if r.wind_speed_kts >= wind_kts_threshold
+            or r.wind_speed_bft >= wind_bft_threshold
+            or r.wind_gust_kts >= gust_kts_threshold  
+            or r.wind_gust_bft >= gust_bft_threshold
             or r.wave_height >= wave_threshold
         ]
     
@@ -281,9 +254,13 @@ class WeatherParser:
         if not records:
             return {}
         
-        wind_speeds = [r.wind_speed for r in records]
-        wind_gusts = [r.wind_gust for r in records]
-        wave_heights = [r.wave_height for r in records]
+        wind_speeds_kts = [r.wind_speed_kts for r in records]
+        wind_speeds_ms  = [r.wind_speed_ms for r in records]
+        wind_speeds_bft = [r.wind_speed_bft for r in records]
+        wind_gusts_kts  = [r.wind_gust_kts for r in records]
+        wind_gusts_ms   = [r.wind_gust_ms for r in records]
+        wind_gusts_bft  = [r.wind_gust_bft for r in records]
+        wave_heights    = [r.wave_height for r in records]
         
         return {
             'total_records': len(records),
@@ -292,10 +269,17 @@ class WeatherParser:
                 'end': max(r.time for r in records)
             },
             'wind': {
-                'min': min(wind_speeds),
-                'max': max(wind_speeds),
-                'avg': sum(wind_speeds) / len(wind_speeds),
-                'max_gust': max(wind_gusts)
+                'min_kts': min(wind_speeds_kts),
+                'max_kts': max(wind_speeds_kts),
+                'avg_kts': sum(wind_speeds_kts) / len(wind_speeds_kts),
+                'min_ms': min(wind_speeds_ms),
+                'max_ms': max(wind_speeds_ms),
+                'avg_ms': sum(wind_speeds_ms) / len(wind_speeds_ms),
+                'min_bft': min(wind_speeds_bft),
+                'max_bft': max(wind_speeds_bft),
+                'max_gust_kts': max(wind_gusts_kts),
+                'max_gust_ms': max(wind_gusts_ms),
+                'max_gust_bft': max(wind_gusts_bft)
             },
             'wave': {
                 'min': min(wave_heights),
@@ -331,6 +315,8 @@ DATE  TIME  DATE  TIME  DIR  SPD  GST  DIR   SIG   MAX  PER
             print("\n前 3 筆記錄:")
             for i, record in enumerate(records[:3], 1):
                 print(f"{i}. {record}")
+                print(f"   風速: {record.wind_speed_kts:.1f} kts = {record.wind_speed_ms:.1f} m/s = BFT {record.wind_speed_bft}")
+                print(f"   陣風: {record.wind_gust_kts:.1f} kts = {record.wind_gust_ms:.1f} m/s = BFT {record.wind_gust_bft}")
         
         if warnings:
             print("\n警告訊息:")
@@ -340,11 +326,23 @@ DATE  TIME  DATE  TIME  DIR  SPD  GST  DIR   SIG   MAX  PER
         # 統計資訊
         stats = parser.get_statistics(records)
         print("\n統計資訊:")
-        print(f"  風速範圍: {stats['wind']['min']:.1f} - {stats['wind']['max']:.1f} kts")
-        print(f"  最大陣風: {stats['wind']['max_gust']:.1f} kts")
+        print(f"  總記錄數: {stats['total_records']}")
+        print(f"  時間範圍: {stats['time_range']['start']} ~ {stats['time_range']['end']}")
+        print(f"  風速範圍: {stats['wind']['min_kts']:.1f} - {stats['wind']['max_kts']:.1f} kts")
+        print(f"  平均風速: {stats['wind']['avg_kts']:.1f} kts")
+        print(f"  最大陣風: {stats['wind']['max_gust_kts']:.1f} kts (Bf {stats['wind']['max_gust_bft']})")
         print(f"  浪高範圍: {stats['wave']['min']:.1f} - {stats['wave']['max']:.1f} m")
+        print(f"  平均浪高: {stats['wave']['avg']:.1f} m")
+        print(f"  最大浪高: {stats['wave']['max_wave']:.1f} m")
+        
+        # 測試高風險篩選
+        high_risk = parser.filter_high_risk_records(records)
+        print(f"\n高風險時段: {len(high_risk)} 筆")
+        for record in high_risk:
+            print(f"  - {record}")
         
     except Exception as e:
         print(f"錯誤: {e}")
         import traceback
         traceback.print_exc()
+# weather_parser.py
