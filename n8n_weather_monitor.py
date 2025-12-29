@@ -307,7 +307,7 @@ class TeamsNotifier:
                                 "items": [
                                     {
                                         "type": "TextBlock",
-                                        "text": "✅ WHL 海技部：港口氣象監控報告 \n\n present by FRM",
+                                        "text": "✅ WHL 港口氣象監控系統 \n\n present by MarTech-FRM",
                                         "weight": "Bolder",
                                         "size": "Medium",
                                         "color": "Good",
@@ -315,7 +315,7 @@ class TeamsNotifier:
                                     },
                                     {
                                         "type": "TextBlock",
-                                        "text": f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M')} 更新",
+                                        "text": f"📅 最後更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M')} (UTC)",
                                         "isSubtle": True,
                                         "spacing": "None"
                                     }
@@ -379,21 +379,21 @@ class TeamsNotifier:
                     "items": [
                         {
                             "type": "TextBlock",
-                            "text": "⚠️ WHL 海技部：港口氣象監控報告",
+                            "text": "⚠️ WHL 港口氣象監控系統",
                             "weight": "Bolder",
                             "size": "ExtraLarge",
                             "wrap": True
                         },
                         {
                             "type": "TextBlock",
-                            "text": "present by FRM",
+                            "text": "present by MarTech-FRM",
                             "size": "Small",
                             "isSubtle": True,
                             "spacing": "None"
                         },
                         {
                             "type": "TextBlock",
-                            "text": f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M')} 更新",
+                            "text": f"📅 最後更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M')} (UTC)",
                             "isSubtle": True,
                             "spacing": "Small",
                             "size": "Small"
@@ -423,10 +423,10 @@ class TeamsNotifier:
                     "width": "stretch",
                     "items": [{
                         "type": "TextBlock",
-                        "text": f"🔴 危險: {len(danger_ports)}",
+                        "text": f"🔴 危險等級港口: {len(danger_ports)}個",
                         "weight": "Bolder",
                         "color": "Attention",
-                        "size": "Large",
+                        "size": "Medium",
                         "horizontalAlignment": "Center"
                     }]
                 })
@@ -438,10 +438,10 @@ class TeamsNotifier:
                     "width": "stretch",
                     "items": [{
                         "type": "TextBlock",
-                        "text": f"🟠 警告: {len(warning_ports)}",
+                        "text": f"🟠 警告等級港口: {len(warning_ports)}個",
                         "weight": "Bolder",
                         "color": "Warning",
-                        "size": "Large",
+                        "size": "Medium",
                         "horizontalAlignment": "Center"
                     }]
                 })
@@ -453,10 +453,10 @@ class TeamsNotifier:
                     "width": "stretch",
                     "items": [{
                         "type": "TextBlock",
-                        "text": f"🟡 注意: {len(caution_ports)}",
+                        "text": f"🟡 注意等級港口: {len(caution_ports)}個",
                         "weight": "Bolder",
                         "color": "Accent",
-                        "size": "Large",
+                        "size": "Medium",
                         "horizontalAlignment": "Center"
                     }]
                 })
@@ -493,7 +493,7 @@ class TeamsNotifier:
                     "items": [
                         {
                             "type": "TextBlock",
-                            "text": "🔴 危險等級 (Danger) 港口清單",
+                            "text": "🔴(Danger)危險等級港口",
                             "weight": "Bolder",
                             "size": "Medium",
                             "color": "Attention",
@@ -525,7 +525,7 @@ class TeamsNotifier:
                     "items": [
                         {
                             "type": "TextBlock",
-                            "text": "🟠 警告等級 (Warning) 港口清單",
+                            "text": "🟠(Warning)警告等級港口清單",
                             "weight": "Bolder",
                             "size": "Medium",
                             "color": "Warning",
@@ -557,7 +557,7 @@ class TeamsNotifier:
                     "items": [
                         {
                             "type": "TextBlock",
-                            "text": "🟡 注意等級 (Caution) 港口清單",
+                            "text": "🟡(Caution)注意等級港口清單",
                             "weight": "Bolder",
                             "size": "Medium",
                             "color": "Accent",
@@ -700,9 +700,13 @@ class TeamsNotifier:
 
                 # 迴圈建立每一列 (Row)
                 for period in assessment.risk_periods[:5]:
-                    # 處理時間格式：只取 HH:MM (例如 "2025-12-28 14:30" -> "14:30")
+                    # 處理時間格式：只取 MM/DD HH:MM (例如 "2025-12-28 14:30" -> "12/28 14:30")
                     try:
-                        time_str = period['time'].split(' ')[1]
+                        date_part = period['time'].split(' ')[0]
+                        time_part = period['time'].split(' ')[1]
+                        # 將日期格式從 YYYY-MM-DD 轉為 MM/DD
+                        month_day = date_part.split('-')[1] + '/' + date_part.split('-')[2]
+                        time_str = f"{month_day} {time_part}"
                     except:
                         time_str = period['time']
 
