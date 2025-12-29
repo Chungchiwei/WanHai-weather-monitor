@@ -939,55 +939,6 @@ class WeatherMonitorService:
         print(f"\n💾 報告已儲存至: {filepath}")
         
         return filepath
-def send_outlook_email(): # 雖然是用 Gmail，函式名稱不改沒關係
-    # --- 1. 設定 Gmail 伺服器 ---
-    smtp_server = "smtp.gmail.com" # 改成 Gmail
-    smtp_port = 587                # Gmail 也是用 587
-    
-    # 讀取環境變數 (已在 GitHub 更新為 Gmail 帳密)
-    username = os.environ.get('MAIL_USER')     
-    password = os.environ.get('MAIL_PASSWORD') 
-    
-    # 收件人設定
-    sender = username # 你的 Gmail
-    receiver = "harry_chung@wanhai.com" # <--- 改成只寄給你自己
-    ubject = "GITHUB_TRIGGER_WEATHER_REPORT" # <--- 設定一個特殊的標題當暗號
-    
-    # 信件內容
-    body = """
-    (此郵件由 GitHub Actions 透過私人 Gmail 代理發送)
-    """
-
-    # --- 2. 製作信件物件 ---
-    msg = MIMEMultipart()
-    msg['From'] = sender
-    msg['To'] = receiver
-    msg['Subject'] = subject
-    msg.attach(MIMEText(body, 'plain'))
-
-    # --- 3. 連線並發送 ---
-    try:
-        print("正在連線到 Gmail 伺服器...")
-        server = smtplib.SMTP(smtp_server, smtp_port)
-        server.ehlo()     # Gmail 需要打招呼
-        server.starttls() # 啟動加密
-        server.ehlo()     # 加密後再打一次招呼
-        
-        print("正在登入...")
-        server.login(username, password)
-        
-        print("正在發送郵件...")
-        server.sendmail(sender, receiver, msg.as_string())
-        server.quit()
-        print("✅ 郵件發送成功！")
-        
-    except Exception as e:
-        print(f"❌ 郵件發送失敗: {e}")
-        sys.exit(1)
-
-if __name__ == "__main__":
-    send_outlook_email()   
-
 
 def send_teams_notification():
     # --- 1. 從 GitHub Secrets 讀取 Webhook 網址 ---
@@ -1092,6 +1043,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
