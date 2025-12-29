@@ -8,22 +8,49 @@ import os
 import sys
 import json
 import requests
+from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
 import traceback
 import sqlite3
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+load_dotenv()
 
 # 導入自定義模組
 from wni_crawler import PortWeatherCrawler, WeatherDatabase
 from weather_parser import WeatherParser, WeatherRecord
 
 # ================= 設定區 =================
-AEDYN_USERNAME = os.getenv('AEDYN_USERNAME', 'harry_chung@wanhai.com')
-AEDYN_PASSWORD = os.getenv('AEDYN_PASSWORD', 'wanhai888')
-TEAMS_WEBHOOK_URL = os.getenv('TEAMS_WEBHOOK_URL', 'https://default2b20eccf1c1e43ce93400edfe3a226.6f.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/65ec3ae244bf4489b02b7bb6a52b42f5/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=YBZsB6XYwTDMighYOKnQqsIf4dVAUYTKyVTtWhhUQfY')
-EXCEL_FILE_PATH = os.getenv('EXCEL_FILE_PATH', 'WHL_all_ports_list.xlsx')
-DB_FILE_PATH = os.getenv('DB_FILE_PATH', 'WNI_port_weather.db')
+
+# 1. WNI 氣象網站爬蟲帳密 (必要，從 GitHub Secrets 讀取)
+#AEDYN_USERNAME = os.getenv('AEDYN_USERNAME')
+AEDYN_USERNAME = 'harry_chung@wanhai.com'
+#AEDYN_PASSWORD = os.getenv('AEDYN_PASSWORD')
+AEDYN_PASSWORD = 'wanhai888'
+
+# 2. Gmail 接力發信用 (必要，從 GitHub Secrets 讀取) 
+# ⚠️ 這是剛剛新增的，務必加上去！
+MAIL_USER = os.getenv('MAIL_USER')         # 你的 Gmail 帳號
+MAIL_PASSWORD = os.getenv('MAIL_PASSWORD') # 你的 Gmail 應用程式密碼
+
+# 3. 接力信件的目標與暗號 (可以直接寫在程式裡，因為這不是密碼)
+TARGET_EMAIL = "harry_chung@wanhai.com"    # 你的公司信箱 (Power Automate 監聽目標)
+TRIGGER_SUBJECT = "GITHUB_TRIGGER_WEATHER_REPORT" # Power Automate 監聽的標題暗號
+
+# 4. Teams Webhook (選填)
+#TEAMS_WEBHOOK_URL = os.getenv('TEAMS_WEBHOOK_URL')
+TEAMS_WEBHOOK_URL = 'https://default2b20eccf1c1e43ce93400edfe3a226.6f.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/65ec3ae244bf4489b02b7bb6a52b42f5/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=YBZsB6XYwTDMighYOKnQqsIf4dVAUYTKyVTtWhhUQfY'
+
+# 5. 檔案路徑 (給予預設值)
+# 這樣如果你在自己電腦跑，沒設定環境變數也能讀到檔案
+#EXCEL_FILE_PATH = os.getenv('EXCEL_FILE_PATH', 'WHL_all_ports_list.xlsx')
+#DB_FILE_PATH = os.getenv('DB_FILE_PATH', 'WNI_port_weather.db')
+EXCEL_FILE_PATH = 'WHL_all_ports_list.xlsx'
+DB_FILE_PATH = 'WNI_port_weather.db'
 
 # 風險閾值（與 Streamlit App 一致）
 RISK_THRESHOLDS = {
@@ -423,7 +450,7 @@ class TeamsNotifier:
                     "width": "stretch",
                     "items": [{
                         "type": "TextBlock",
-                        "text": f"🔴 危險等級港口: {len(danger_ports)}個",
+                        "text": f"🔴 危險等級: {len(danger_ports)}個",
                         "weight": "Bolder",
                         "color": "Attention",
                         "size": "Medium",
@@ -438,7 +465,7 @@ class TeamsNotifier:
                     "width": "stretch",
                     "items": [{
                         "type": "TextBlock",
-                        "text": f"🟠 警告等級港口: {len(warning_ports)}個",
+                        "text": f"🟠 警告港口: {len(warning_ports)}個",
                         "weight": "Bolder",
                         "color": "Warning",
                         "size": "Medium",
@@ -453,7 +480,7 @@ class TeamsNotifier:
                     "width": "stretch",
                     "items": [{
                         "type": "TextBlock",
-                        "text": f"🟡 注意等級港口: {len(caution_ports)}個",
+                        "text": f"🟡 注意港口: {len(caution_ports)}個",
                         "weight": "Bolder",
                         "color": "Accent",
                         "size": "Medium",
@@ -502,7 +529,7 @@ class TeamsNotifier:
                         },
                         {
                             "type": "TextBlock",
-                            "text": "(條件: 風速 > 40 kts 或 陣風 > 50 kts)",
+                            "text": "(條件: 風速 > 40 kts / 陣風 > 50 kts / 浪高 > 4.0 m)",
                             "size": "Small",
                             "isSubtle": True,
                             "horizontalAlignment": "Center",
@@ -534,7 +561,7 @@ class TeamsNotifier:
                         },
                         {
                             "type": "TextBlock",
-                            "text": "(條件: 風速 > 30 kts 或 陣風 > 40 kts)",
+                            "text": "(條件: 風速 > 30 kts /  陣風 > 40 kts / 浪高 > 2.5 m)",
                             "size": "Small",
                             "isSubtle": True,
                             "horizontalAlignment": "Center",
@@ -566,7 +593,7 @@ class TeamsNotifier:
                         },
                         {
                             "type": "TextBlock",
-                            "text": "(條件: 風速 > 25 kts 或 陣風 > 35 kts)",
+                            "text": "(條件: 風速 > 25 kts /  陣風 > 35 kts / 浪高 > 2.0 m)",
                             "size": "Small",
                             "isSubtle": True,
                             "horizontalAlignment": "Center",
@@ -776,7 +803,61 @@ class TeamsNotifier:
             2: '🟠',
             3: '🔴'
         }.get(risk_level, '⚪')
+        
+class GmailRelayNotifier:
+    """
+    Gmail 接力發信器 (免費版解法)
+    功能：發送一封包含氣象報告的信給 'harry_chung@wanhai.com'
+    目的：觸發 Power Automate (Outlook Trigger) 自動轉發給船端
+    """
+    def __init__(self):
+        # 請確認 GitHub Secrets 有設定這些
+        self.user = os.getenv('MAIL_USER')     # 你的 Gmail
+        self.password = os.getenv('MAIL_PASSWORD') # Gmail 應用程式密碼
+        self.target = "harry_chung@wanhai.com" # 寄給你自己 (公司信箱)
+        self.subject_trigger = "GITHUB_TRIGGER_WEATHER_REPORT" # 暗號，要跟 Power Automate 設定的一樣
 
+    def send_trigger_email(self, report_text: str) -> bool:
+        if not self.user or not self.password:
+            print("⚠️ 未設定 Gmail 帳密，無法發送信件")
+            return False
+
+        msg = MIMEMultipart()
+        msg['From'] = self.user
+        msg['To'] = self.target
+        msg['Subject'] = self.subject_trigger
+        
+        # 信件內容：這裡的內容會被 Power Automate 原封不動轉寄出去
+        body = f"""
+各位長官好，
+
+這是自動化的每日氣象監控報告。
+(系統執行時間: {datetime.now().strftime('%Y-%m-%d %H:%M')})
+
+{report_text}
+
+------------------------------------------------
+此郵件由系統自動生成。
+"""
+        msg.attach(MIMEText(body, 'plain'))
+
+        try:
+            print(f"📧 正在透過 Gmail 發送觸發信件給 {self.target}...")
+            server = smtplib.SMTP("smtp.gmail.com", 587)
+            server.ehlo()
+            server.starttls()
+            server.login(self.user, self.password)
+            server.sendmail(self.user, self.target, msg.as_string())
+            server.quit()
+            print("✅ 觸發信件發送成功！請檢查 Outlook 是否觸發 Power Automate。")
+            return True
+        except Exception as e:
+            print(f"❌ Gmail 發送失敗: {e}")
+            return False
+
+# 在主程式中呼叫：
+# notifier = GmailRelayNotifier()
+# notifier.send_trigger_email(report_text)
 
 class WeatherMonitorService:
     """氣象監控服務（主要執行類別）"""
@@ -976,6 +1057,10 @@ def main():
         
         # 執行每日監控
         report = service.run_daily_monitoring()
+        # 透過 Gmail 發送觸發信件
+        report_text = json.dumps(report, ensure_ascii=False, indent=2)
+        notifier = GmailRelayNotifier()
+        notifier.send_trigger_email(report_text)
         
         # 儲存報告
         report_file = service.save_report_to_file(report)
