@@ -3,6 +3,7 @@
 N8N 自動化氣象監控腳本（基於 Streamlit App 架構）
 用途：每天自動抓取港口天氣，分析高風險港口，並發送到 Teams
 """
+
 import os
 import sys
 import json
@@ -940,54 +941,6 @@ class WeatherMonitorService:
         
         return filepath
 
-def send_teams_notification():
-    # --- 1. 從 GitHub Secrets 讀取 Webhook 網址 ---
-    webhook_url = os.environ.get('TEAMS_WEBHOOK')
-    
-    if not webhook_url:
-        print("❌ 錯誤：找不到 TEAMS_WEBHOOK 環境變數")
-        return
-
-    # --- 2. 準備要傳送的訊息內容 ---
-    # 這裡你可以放任何你想說的話
-    report_title = "🌤️ 每日天氣監控報告"
-    report_content = "**系統狀態**"
-    
-    # 這是 Teams 看得懂的資料格式 (Adaptive Card 的簡化版)
-    payload = {
-        "title": report_title,
-        "text": report_content,
-        "themeColor": "0076D7" # 藍色邊條
-    }
-
-    # --- 3. 發射！ ---
-    try:
-        print("正在傳送訊息到 Teams...")
-        # 這裡的 requests 必須要確保你有安裝 (pip install requests)
-        response = requests.post(
-            webhook_url, 
-            data=json.dumps(payload),
-            headers={'Content-Type': 'application/json'}
-        )
-        
-        if response.status_code == 200:
-            print("✅ Teams 通知發送成功！")
-        else:
-            print(f"❌ 發送失敗，錯誤代碼: {response.status_code}")
-            print(response.text)
-            sys.exit(1) # 讓 GitHub 知道出錯了
-
-    except Exception as e:
-        print(f"❌ 發生錯誤: {e}")
-        sys.exit(1)
-
-# --- 執行主程式 ---
-if __name__ == "__main__":
-    # 這裡是你原本的爬蟲邏輯...
-    # ...
-    
-    # 最後發送通知
-    send_teams_notification()
 
 # ================= 主程式進入點 =================
 def main():
@@ -1043,7 +996,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
