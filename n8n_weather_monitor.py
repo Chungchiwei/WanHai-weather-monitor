@@ -3,9 +3,6 @@
 N8N 自動化氣象監控腳本（基於 Streamlit App 架構）
 用途：每天自動抓取港口天氣，分析高風險港口，並發送到 Teams
 """
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import os
 import sys
 import json
@@ -942,25 +939,28 @@ class WeatherMonitorService:
         print(f"\n💾 報告已儲存至: {filepath}")
         
         return filepath
+def send_outlook_email(): # 雖然是用 Gmail，函式名稱不改沒關係
+    # --- 1. 設定 Gmail 伺服器 ---
+    smtp_server = "smtp.gmail.com" # 改成 Gmail
+    smtp_port = 587                # Gmail 也是用 587
     
-def send_outlook_email():
-    # --- 1. 設定你的帳號資訊 (我們會從 GitHub 的保險箱讀取，不要直接寫在這) ---
-    smtp_server = "smtp.office365.com"
-    smtp_port = 587
+    # 讀取環境變數 (已在 GitHub 更新為 Gmail 帳密)
+    username = os.environ.get('MAIL_USER')     
+    password = os.environ.get('MAIL_PASSWORD') 
     
-    # 讀取環境變數 (這是為了安全，等等會在 GitHub 設定)
-    username = os.environ.get('MAIL_USER')     # 你的員編信箱
-    password = os.environ.get('MAIL_PASSWORD') # 你的密碼
-    
-    # 收件人與內容設定
+    # 收件人設定
     sender = username
-    receiver = "frm_tech@wanhai.com" # 公司群組
-    subject = "[每日自動報告] WHL 天氣監控系統"
+    receiver = "frm_tech@wanhai.com" # 寄給公司群組
+    subject = "[每日自動報告] WHL 天氣監控系統 (Via GitHub)"
     
-    # 這裡放你要寄出的內容，可以是變數
+    # 信件內容
     body = """
-      測試WNI_WEATHER_MONITOR每日自動發信功能。   
-    (此郵件由 GitHub Actions 自動發送)
+    大家好，
+    
+    這是每日定時執行的天氣監控報告。
+    程式執行狀況：正常
+    
+    (此郵件由 GitHub Actions 透過私人 Gmail 代理發送)
     """
 
     # --- 2. 製作信件物件 ---
@@ -972,9 +972,11 @@ def send_outlook_email():
 
     # --- 3. 連線並發送 ---
     try:
-        print("正在連線到 Outlook 伺服器...")
+        print("正在連線到 Gmail 伺服器...")
         server = smtplib.SMTP(smtp_server, smtp_port)
-        server.starttls() # 啟動加密傳輸
+        server.ehlo()     # Gmail 需要打招呼
+        server.starttls() # 啟動加密
+        server.ehlo()     # 加密後再打一次招呼
         
         print("正在登入...")
         server.login(username, password)
@@ -986,14 +988,60 @@ def send_outlook_email():
         
     except Exception as e:
         print(f"❌ 郵件發送失敗: {e}")
-        # 如果是帳號密碼錯，通常會顯示 Authentication Failed
-        sys.exit(1) # 讓 GitHub 知道這一步失敗了
+        sys.exit(1)
 
-# --- 執行發信功能 ---
 if __name__ == "__main__":
-    # 這裡假設你原本的爬蟲邏輯寫在上面...
-    # 爬蟲跑完後，執行發信：
-    send_outlook_email()
+    send_outlook_email()   
+
+
+def send_teams_notification():
+    # --- 1. 從 GitHub Secrets 讀取 Webhook 網址 ---
+    webhook_url = os.environ.get('TEAMS_WEBHOOK')
+    
+    if not webhook_url:
+        print("❌ 錯誤：找不到 TEAMS_WEBHOOK 環境變數")
+        return
+
+    # --- 2. 準備要傳送的訊息內容 ---
+    # 這裡你可以放任何你想說的話
+    report_title = "🌤️ 每日天氣監控報告"
+    report_content = "大家早安，這是今天的自動化天氣監控回報。\n\n**系統狀態**：正常運作中 ✅\n**執行結果**：資料已更新 (這裡可以放你的爬蟲數據)"
+    
+    # 這是 Teams 看得懂的資料格式 (Adaptive Card 的簡化版)
+    payload = {
+        "title": report_title,
+        "text": report_content,
+        "themeColor": "0076D7" # 藍色邊條
+    }
+
+    # --- 3. 發射！ ---
+    try:
+        print("正在傳送訊息到 Teams...")
+        # 這裡的 requests 必須要確保你有安裝 (pip install requests)
+        response = requests.post(
+            webhook_url, 
+            data=json.dumps(payload),
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        if response.status_code == 200:
+            print("✅ Teams 通知發送成功！")
+        else:
+            print(f"❌ 發送失敗，錯誤代碼: {response.status_code}")
+            print(response.text)
+            sys.exit(1) # 讓 GitHub 知道出錯了
+
+    except Exception as e:
+        print(f"❌ 發生錯誤: {e}")
+        sys.exit(1)
+
+# --- 執行主程式 ---
+if __name__ == "__main__":
+    # 這裡是你原本的爬蟲邏輯...
+    # ...
+    
+    # 最後發送通知
+    send_teams_notification()
 
 # ================= 主程式進入點 =================
 def main():
@@ -1049,4 +1097,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
