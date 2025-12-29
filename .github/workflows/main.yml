@@ -1,22 +1,18 @@
 name: Daily Weather Report
 
-# 設定觸發時間
 on:
   schedule:
-    # GitHub 用的是 UTC 時間 (台灣時間 -8小時)
-    # 台灣 08:00 = UTC 00:00
-    # 台灣 20:00 = UTC 12:00
-    - cron: '0 0,12 * * *'
-  
-  # 讓你也可以手動按按鈕執行 (測試用)
+    # 每天台灣時間 08:00 (即 UTC 時間 00:00)
+    - cron: '0 0 * * *'
+  # 允許手動點擊按鈕測試
   workflow_dispatch:
 
 jobs:
-  run-weather-bot:
-    runs-on: ubuntu-latest # 使用 Linux 虛擬機
-
+  run-and-email:
+    runs-on: ubuntu-latest
+    
     steps:
-      # 1. 把你的程式碼下載到虛擬機
+      # 1. 下載程式碼
       - name: Checkout code
         uses: actions/checkout@v3
 
@@ -24,19 +20,19 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9' # 建議用 3.9 或 3.10
+          python-version: '3.9'
 
-      # 3. 安裝套件 (對應你的 requirements.txt)
+      # 3. 安裝套件 (Pandas 等)
       - name: Install dependencies
         run: |
           pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      # 4. 執行主程式
-      # 請確認這裡的檔名跟你上傳的一模一樣
-      - name: Run Weather Script
+      # 4. 執行程式並發信
+      - name: Run Script and Send Email
         env:
-          # 如果你有密碼或 Token，之後要設在 Secrets 裡，這裡是用來讀取的
-          LINE_TOKEN: ${{ secrets.LINE_TOKEN }} 
+          # 這裡就是把保險箱的密碼拿出來，交給 Python 程式
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
         run: |
           python n8n_weather_monitor.py
