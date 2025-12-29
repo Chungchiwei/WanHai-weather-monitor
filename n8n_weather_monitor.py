@@ -3,7 +3,9 @@
 N8N 自動化氣象監控腳本（基於 Streamlit App 架構）
 用途：每天自動抓取港口天氣，分析高風險港口，並發送到 Teams
 """
-
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import os
 import sys
 import json
@@ -940,7 +942,59 @@ class WeatherMonitorService:
         print(f"\n💾 報告已儲存至: {filepath}")
         
         return filepath
+    
+def send_outlook_email():
+    # --- 1. 設定你的帳號資訊 (我們會從 GitHub 的保險箱讀取，不要直接寫在這) ---
+    smtp_server = "smtp.office365.com"
+    smtp_port = 587
+    
+    # 讀取環境變數 (這是為了安全，等等會在 GitHub 設定)
+    username = os.environ.get('MAIL_USER')     # 你的員編信箱
+    password = os.environ.get('MAIL_PASSWORD') # 你的密碼
+    
+    # 收件人與內容設定
+    sender = username
+    receiver = "frm_tech@wanhai.com" # 公司群組
+    subject = "[每日自動報告] WHL 天氣監控系統"
+    
+    # 這裡放你要寄出的內容，可以是變數
+    body = 
+    """
+      測試WNI_WEATHER_MONITOR每日自動發信功能。   
+    (此郵件由 GitHub Actions 自動發送)
+    """
 
+    # --- 2. 製作信件物件 ---
+    msg = MIMEMultipart()
+    msg['From'] = sender
+    msg['To'] = receiver
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
+
+    # --- 3. 連線並發送 ---
+    try:
+        print("正在連線到 Outlook 伺服器...")
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls() # 啟動加密傳輸
+        
+        print("正在登入...")
+        server.login(username, password)
+        
+        print("正在發送郵件...")
+        server.sendmail(sender, receiver, msg.as_string())
+        server.quit()
+        print("✅ 郵件發送成功！")
+        
+    except Exception as e:
+        print(f"❌ 郵件發送失敗: {e}")
+        # 如果是帳號密碼錯，通常會顯示 Authentication Failed
+        sys.exit(1) # 讓 GitHub 知道這一步失敗了
+
+# --- 執行發信功能 ---
+if __name__ == "__main__":
+    # 這裡假設你原本的爬蟲邏輯寫在上面...
+    # 爬蟲跑完後，執行發信：
+    send_outlook_email()
 
 # ================= 主程式進入點 =================
 def main():
