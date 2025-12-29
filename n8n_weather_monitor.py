@@ -958,8 +958,7 @@ def send_outlook_email():
     subject = "[每日自動報告] WHL 天氣監控系統"
     
     # 這裡放你要寄出的內容，可以是變數
-    body = 
-    """
+    body = """
       測試WNI_WEATHER_MONITOR每日自動發信功能。   
     (此郵件由 GitHub Actions 自動發送)
     """
@@ -1050,3 +1049,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
