@@ -918,8 +918,8 @@ class WeatherMonitorService:
         if not assessments:
             return f"""
             <div style="{font_style} color: #2E7D32; padding: 20px; border: 1px solid #4CAF50; background-color: #E8F5E9; border-radius: 5px;">
-                <h3 style="margin-top: 0;">🟢 System Status: ALL CLEAR</h3>
-                <p>今日所有監控港口均處於安全範圍 (All ports are within safe limits).</p>
+                <h3 style="margin-top: 0;">🟢 System Status: Safety</h3>
+                <p>未來48Hrs內所有靠泊港口均處於安全範圍 (All ports are within safe limits).</p>
             </div>
             """
             
@@ -1047,10 +1047,10 @@ class WeatherMonitorService:
 
         # Footer
         html += f"""
-            <div style="margin-top: 40px; border-top: 1px solid #e5e7eb; padding-top: 20px; font-size: 12px; color: #9ca3af; text-align: center; {font_style}">
+            <div style="margin-top: 40px; border-top: 1px solid #e5e7eb; padding-top: 20px; font-size: 15px; color: #9ca3af; text-align: center; {font_style}">
                 <p style="margin: 0;">Wan Hai Lines Ltd. | Marine Technology Division</p>
-                <p style="margin: 0;">Present by Fleet Risk Department</p>
-                <p style="margin: 5px 0 0 0;">Data Source: Weathernews Inc. (WNI) | Automated System</p>
+                <p style="margin: 0;color: blue;">Present by Fleet Risk Department</p>
+                <p style="margin: 0 0 0 0;">Data Source: Weathernews Inc. (WNI) | Automated System</p>
             </div>
         </body>
         </html>
