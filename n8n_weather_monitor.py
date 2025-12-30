@@ -27,39 +27,32 @@ from weather_parser import WeatherParser, WeatherRecord
 # ================= 設定區 =================
 
 # 1. WNI 氣象網站爬蟲帳密 (必要，從 GitHub Secrets 讀取)
-#AEDYN_USERNAME = os.getenv('AEDYN_USERNAME')
-AEDYN_USERNAME = 'harry_chung@wanhai.com'
-#AEDYN_PASSWORD = os.getenv('AEDYN_PASSWORD')
-AEDYN_PASSWORD = 'wanhai888'
+AEDYN_USERNAME = os.getenv('AEDYN_USERNAME', 'harry_chung@wanhai.com')
+AEDYN_PASSWORD = os.getenv('AEDYN_PASSWORD', 'wanhai888')
 
 # 2. Gmail 接力發信用 (必要，從 GitHub Secrets 讀取) 
-# ⚠️ 這是剛剛新增的，務必加上去！
 MAIL_USER = os.getenv('MAIL_USER')         # 你的 Gmail 帳號
 MAIL_PASSWORD = os.getenv('MAIL_PASSWORD') # 你的 Gmail 應用程式密碼
 
-# 3. 接力信件的目標與暗號 (可以直接寫在程式裡，因為這不是密碼)
-TARGET_EMAIL = "harry_chung@wanhai.com"    # 你的公司信箱 (Power Automate 監聽目標)
-TRIGGER_SUBJECT = "GITHUB_TRIGGER_WEATHER_REPORT" # Power Automate 監聽的標題暗號
+# 3. 接力信件的目標與暗號
+TARGET_EMAIL = "harry_chung@wanhai.com"
+TRIGGER_SUBJECT = "GITHUB_TRIGGER_WEATHER_REPORT"
 
 # 4. Teams Webhook (選填)
-#TEAMS_WEBHOOK_URL = os.getenv('TEAMS_WEBHOOK_URL')
-TEAMS_WEBHOOK_URL = 'https://default2b20eccf1c1e43ce93400edfe3a226.6f.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/65ec3ae244bf4489b02b7bb6a52b42f5/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=YBZsB6XYwTDMighYOKnQqsIf4dVAUYTKyVTtWhhUQfY'
+TEAMS_WEBHOOK_URL = os.getenv('TEAMS_WEBHOOK_URL', 'https://default2b20eccf1c1e43ce93400edfe3a226.6f.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/65ec3ae244bf4489b02b7bb6a52b42f5/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=YBZsB6XYwTDMighYOKnQqsIf4dVAUYTKyVTtWhhUQfY')
 
-# 5. 檔案路徑 (給予預設值)
-# 這樣如果你在自己電腦跑，沒設定環境變數也能讀到檔案
-#EXCEL_FILE_PATH = os.getenv('EXCEL_FILE_PATH', 'WHL_all_ports_list.xlsx')
-#DB_FILE_PATH = os.getenv('DB_FILE_PATH', 'WNI_port_weather.db')
-EXCEL_FILE_PATH = 'WHL_all_ports_list.xlsx'
-DB_FILE_PATH = 'WNI_port_weather.db'
+# 5. 檔案路徑
+EXCEL_FILE_PATH = os.getenv('EXCEL_FILE_PATH', 'WHL_all_ports_list.xlsx')
+DB_FILE_PATH = os.getenv('DB_FILE_PATH', 'WNI_port_weather.db')
 
 # 風險閾值（與 Streamlit App 一致）
 RISK_THRESHOLDS = {
-    'wind_caution': 25, #bf 5
-    'wind_warning': 30, #bf 6
-    'wind_danger': 40, #bf 8
-    'gust_caution': 35, #bf 8
-    'gust_warning': 40, #bf 9
-    'gust_danger': 50, #bf 10
+    'wind_caution': 25,  # bf 5
+    'wind_warning': 30,  # bf 6
+    'wind_danger': 40,   # bf 8
+    'gust_caution': 35,  # bf 8
+    'gust_warning': 40,  # bf 9
+    'gust_danger': 50,   # bf 10
     'wave_caution': 2.0,
     'wave_warning': 2.5,
     'wave_danger': 4.0,
@@ -79,8 +72,8 @@ class RiskAssessment:
     max_gust_kts: float
     max_gust_bft: int
     max_wave: float
-    max_wind_time: str  # 最大風速時段
-    max_gust_time: str  # 最大陣風時段
+    max_wind_time: str
+    max_gust_time: str
     risk_periods: List[Dict[str, Any]]
     issued_time: str
     latitude: float
@@ -92,7 +85,8 @@ class RiskAssessment:
 
 
 class WeatherRiskAnalyzer:
-    """氣象風險分析器（與 Streamlit App 一致）"""
+    """氣象風險分析器"""
+    
     @staticmethod
     def kts_to_bft(speed_kts: float) -> int:
         if speed_kts < 1: return 0
@@ -107,7 +101,6 @@ class WeatherRiskAnalyzer:
         if speed_kts < 48: return 9
         if speed_kts < 56: return 10
         if speed_kts < 64: return 11
-        
         return 12
 
     @classmethod
@@ -175,18 +168,7 @@ class WeatherRiskAnalyzer:
     @classmethod
     def analyze_port_risk(cls, port_code: str, port_info: Dict[str, Any],
                          content: str, issued_time: str) -> Optional[RiskAssessment]:
-        """
-        分析單一港口的風險
-        
-        Args:
-            port_code: 港口代碼
-            port_info: 港口資訊
-            content: 氣象內容
-            issued_time: 發布時間
-            
-        Returns:
-            RiskAssessment 或 None
-        """
+        """分析單一港口的風險"""
         try:
             parser = WeatherParser()
             port_name, records, warnings = parser.parse_content(content)
@@ -194,12 +176,10 @@ class WeatherRiskAnalyzer:
             if not records:
                 return None
             
-            # 分析所有記錄
             all_analyzed = []
             risk_periods = []
             max_level = 0
             
-            # 追蹤最大值及其時間
             max_wind_record = max(records, key=lambda r: r.wind_speed_kts)
             max_gust_record = max(records, key=lambda r: r.wind_gust_kts)
             
@@ -222,11 +202,9 @@ class WeatherRiskAnalyzer:
                     })
                     max_level = max(max_level, analyzed['risk_level'])
             
-            # 如果風險等級為 0（安全），不需要回報
             if max_level == 0:
                 return None
             
-            # 收集風險因素
             risk_factors = []
             if max_wind_record.wind_speed_kts >= RISK_THRESHOLDS['wind_caution']:
                 risk_factors.append(
@@ -273,29 +251,19 @@ class TeamsNotifier:
         self.webhook_url = webhook_url
     
     def send_risk_alert(self, risk_assessments: List[RiskAssessment]) -> bool:
-        """
-        發送風險警報到 Teams
-        
-        Args:
-            risk_assessments: 風險評估結果列表
-            
-        Returns:
-            bool: 發送成功返回 True
-        """
+        """發送風險警報到 Teams"""
         if not self.webhook_url:
             print("⚠️ 未設定 Teams Webhook URL")
             return False
         
         if not risk_assessments:
             print("ℹ️ 沒有需要通知的高風險港口")
-            # 發送「全部安全」的通知
             return self._send_all_safe_notification()
         
         try:
-            # 建立 Adaptive Card 訊息
             card = self._create_adaptive_card(risk_assessments)
             
-            # 發送到 Teams
+            # ✅ 修正：移除 verify=False，恢復安全連線
             response = requests.post(
                 self.webhook_url,
                 json=card,
@@ -304,7 +272,7 @@ class TeamsNotifier:
             )
             
             if response.status_code == 200:
-                print(f"✅  ({len(risk_assessments)} 個高風險港口)")
+                print(f"✅ Teams 通知發送成功 ({len(risk_assessments)} 個高風險港口)")
                 return True
             else:
                 print(f"❌ Teams 通知發送失敗 (HTTP {response.status_code})")
@@ -387,413 +355,378 @@ class TeamsNotifier:
             return False
     
     def _create_adaptive_card(self, risk_assessments: List[RiskAssessment]) -> Dict[str, Any]:
-            """建立 Adaptive Card 格式的訊息（分區顯示 - 美化版）"""
-            
-            # 1. 依風險等級分組並排序
-            danger_ports = [r for r in risk_assessments if r.risk_level == 3]
-            warning_ports = [r for r in risk_assessments if r.risk_level == 2]
-            caution_ports = [r for r in risk_assessments if r.risk_level == 1]
-            
-            danger_ports.sort(key=lambda x: x.max_wind_kts, reverse=True)
-            warning_ports.sort(key=lambda x: x.max_wind_kts, reverse=True)
-            caution_ports.sort(key=lambda x: x.max_wind_kts, reverse=True)
-            
-            # 2. 初始化 body 列表，並放入「主標題」
-            body = [
-                {
-                    "type": "Container",
-                    "style": "attention", # 深色背景強調標題
-                    "items": [
-                        {
-                            "type": "TextBlock",
-                            "text": "⚠️ WHL 港口氣象監控系統",
-                            "weight": "Bolder",
-                            "size": "ExtraLarge",
-                            "wrap": True
-                        },
-                        {
-                            "type": "TextBlock",
-                            "text": "present by MarTech-FRM",
-                            "size": "Small",
-                            "isSubtle": True,
-                            "spacing": "None"
-                        },
-                        {
-                            "type": "TextBlock",
-                            "text": f"📅 最後更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M')} (UTC)",
-                            "isSubtle": True,
-                            "spacing": "Small",
-                            "size": "Small"
-                        }
-                    ]
-                }
-            ]
-            
-            # 3. 建立「儀表板摘要 (Summary)」並加入 body
-            # --- Summary 邏輯開始 ---
-            summary_items = [
-                {
-                    "type": "TextBlock",
-                    "text": "📊 未來 48 Hrs 港區風險統計",
-                    "weight": "Bolder",
-                    "size": "Medium",
-                    "horizontalAlignment": "Center",
-                    "spacing": "Medium"
-                }
-            ]
-
-            columns = []
-            # 危險等級 (紅)
-            if danger_ports:
-                columns.append({
-                    "type": "Column",
-                    "width": "stretch",
-                    "items": [{
+        """建立 Adaptive Card 格式的訊息"""
+        
+        danger_ports = [r for r in risk_assessments if r.risk_level == 3]
+        warning_ports = [r for r in risk_assessments if r.risk_level == 2]
+        caution_ports = [r for r in risk_assessments if r.risk_level == 1]
+        
+        danger_ports.sort(key=lambda x: x.max_wind_kts, reverse=True)
+        warning_ports.sort(key=lambda x: x.max_wind_kts, reverse=True)
+        caution_ports.sort(key=lambda x: x.max_wind_kts, reverse=True)
+        
+        body = [
+            {
+                "type": "Container",
+                "style": "attention",
+                "items": [
+                    {
                         "type": "TextBlock",
-                        "text": f"🔴 危險等級: {len(danger_ports)}個",
+                        "text": "⚠️ WHL 港口氣象監控系統",
                         "weight": "Bolder",
-                        "color": "Attention",
-                        "size": "Medium",
-                        "horizontalAlignment": "Center"
-                    }]
-                })
-
-            # 警告等級 (橘)
-            if warning_ports:
-                columns.append({
-                    "type": "Column",
-                    "width": "stretch",
-                    "items": [{
+                        "size": "ExtraLarge",
+                        "wrap": True
+                    },
+                    {
                         "type": "TextBlock",
-                        "text": f"🟠 警告港口: {len(warning_ports)}個",
-                        "weight": "Bolder",
-                        "color": "Warning",
-                        "size": "Medium",
-                        "horizontalAlignment": "Center"
-                    }]
-                })
-
-            # 注意等級 (黃)
-            if caution_ports:
-                columns.append({
-                    "type": "Column",
-                    "width": "stretch",
-                    "items": [{
+                        "text": "present by MarTech-FRM",
+                        "size": "Small",
+                        "isSubtle": True,
+                        "spacing": "None"
+                    },
+                    {
                         "type": "TextBlock",
-                        "text": f"🟡 注意港口: {len(caution_ports)}個",
-                        "weight": "Bolder",
-                        "color": "Accent",
-                        "size": "Medium",
-                        "horizontalAlignment": "Center"
-                    }]
-                })
-
-            if columns:
-                summary_items.append({
-                    "type": "ColumnSet",
-                    "columns": columns,
-                    "spacing": "Small"
-                })
-            else:
-                summary_items.append({
-                    "type": "TextBlock",
-                    "text": "🟢 全線安全無風險",
-                    "horizontalAlignment": "Center",
-                    "color": "Good",
-                    "weight": "Bolder"
-                })
-                
-            # 將摘要加入 body
-            body.extend(summary_items)
-            # --- Summary 邏輯結束 ---
-
-            
-            # 4. 依序加入各等級港口清單
-
-            # 🔴 危險等級港口
-            if danger_ports:
-                body.append({
-                    "type": "Container",
-                    "style": "attention", # 紅色背景區塊
-                    "spacing": "Large",
-                    "separator": True,
-                    "items": [
-                        {
-                            "type": "TextBlock",
-                            "text": "🔴(Danger)危險等級港口",
-                            "weight": "Bolder",
-                            "size": "Medium",
-                            "color": "Attention",
-                            "horizontalAlignment": "Center",
-                            "wrap": True
-                        },
-                        {
-                            "type": "TextBlock",
-                            "text": "(條件: 風速 > 40 kts / 陣風 > 50 kts / 浪高 > 4.0 m)",
-                            "size": "Small",
-                            "isSubtle": True,
-                            "horizontalAlignment": "Center",
-                            "spacing": "None",
-                            "wrap": True
-                        }
-                    ]
-                })
-                
-                for port in danger_ports[:20]:
-                    body.append(self._create_port_container(port, "attention"))
-            
-            # 🟠 警告等級港口
-            if warning_ports:
-                body.append({
-                    "type": "Container",
-                    "style": "warning", # 橘色背景區塊 (Teams 可能顯示淺黃)
-                    "spacing": "Large",
-                    "separator": True,
-                    "items": [
-                        {
-                            "type": "TextBlock",
-                            "text": "🟠(Warning)警告等級港口清單",
-                            "weight": "Bolder",
-                            "size": "Medium",
-                            "color": "Warning",
-                            "horizontalAlignment": "Center",
-                            "wrap": True
-                        },
-                        {
-                            "type": "TextBlock",
-                            "text": "(條件: 風速 > 30 kts /  陣風 > 40 kts / 浪高 > 2.5 m)",
-                            "size": "Small",
-                            "isSubtle": True,
-                            "horizontalAlignment": "Center",
-                            "spacing": "None",
-                            "wrap": True
-                        }
-                    ]
-                })
-                
-                for port in warning_ports[:20]:
-                    body.append(self._create_port_container(port, "warning"))
-            
-            # 🟡 注意等級港口
-            if caution_ports:
-                body.append({
-                    "type": "Container",
-                    "style": "accent", # 淺藍/灰色背景
-                    "spacing": "Medium",
-                    "separator": True,
-                    "items": [
-                        {
-                            "type": "TextBlock",
-                            "text": "🟡(Caution)注意等級港口清單",
-                            "weight": "Bolder",
-                            "size": "Medium",
-                            "color": "Accent",
-                            "horizontalAlignment": "Center",
-                            "wrap": True
-                        },
-                        {
-                            "type": "TextBlock",
-                            "text": "(條件: 風速 > 25 kts /  陣風 > 35 kts / 浪高 > 2.0 m)",
-                            "size": "Small",
-                            "isSubtle": True,
-                            "horizontalAlignment": "Center",
-                            "spacing": "None",
-                            "wrap": True
-                        }
-                    ]
-                })
-                
-                for port in caution_ports[:20]:
-                    body.append(self._create_port_container(port, "default"))
-                
-                if len(caution_ports) > 20:
-                    body.append({
-                        "type": "TextBlock",
-                        "text": f"... 還有 {len(caution_ports) - 20} 個注意港口",
+                        "text": f"📅 最後更新時間: {datetime.now().strftime('%Y-%m-%d %H:%M')} (UTC)",
                         "isSubtle": True,
                         "spacing": "Small",
-                        "horizontalAlignment": "Center"
-                    })
+                        "size": "Small"
+                    }
+                ]
+            }
+        ]
+        
+        summary_items = [
+            {
+                "type": "TextBlock",
+                "text": "📊 未來 48 Hrs 港區風險統計",
+                "weight": "Bolder",
+                "size": "Medium",
+                "horizontalAlignment": "Center",
+                "spacing": "Medium"
+            }
+        ]
+
+        columns = []
+        if danger_ports:
+            columns.append({
+                "type": "Column",
+                "width": "stretch",
+                "items": [{
+                    "type": "TextBlock",
+                    "text": f"🔴 危險等級: {len(danger_ports)}個",
+                    "weight": "Bolder",
+                    "color": "Attention",
+                    "size": "Medium",
+                    "horizontalAlignment": "Center"
+                }]
+            })
+
+        if warning_ports:
+            columns.append({
+                "type": "Column",
+                "width": "stretch",
+                "items": [{
+                    "type": "TextBlock",
+                    "text": f"🟠 警告港口: {len(warning_ports)}個",
+                    "weight": "Bolder",
+                    "color": "Warning",
+                    "size": "Medium",
+                    "horizontalAlignment": "Center"
+                }]
+            })
+
+        if caution_ports:
+            columns.append({
+                "type": "Column",
+                "width": "stretch",
+                "items": [{
+                    "type": "TextBlock",
+                    "text": f"🟡 注意港口: {len(caution_ports)}個",
+                    "weight": "Bolder",
+                    "color": "Accent",
+                    "size": "Medium",
+                    "horizontalAlignment": "Center"
+                }]
+            })
+
+        if columns:
+            summary_items.append({
+                "type": "ColumnSet",
+                "columns": columns,
+                "spacing": "Small"
+            })
+        else:
+            summary_items.append({
+                "type": "TextBlock",
+                "text": "🟢 全線安全無風險",
+                "horizontalAlignment": "Center",
+                "color": "Good",
+                "weight": "Bolder"
+            })
             
-            # 5. 底部提示 (Footer)
+        body.extend(summary_items)
+
+        if danger_ports:
             body.append({
                 "type": "Container",
+                "style": "attention",
                 "spacing": "Large",
                 "separator": True,
                 "items": [
                     {
                         "type": "TextBlock",
-                        "text": "⚠️ 請船管PIC注意業管船舶安全，並提前做好防範措施",
-                        "wrap": True,
-                        "color": "Warning",
+                        "text": "🔴(Danger)危險等級港口",
                         "weight": "Bolder",
-                        "horizontalAlignment": "Center"
+                        "size": "Medium",
+                        "color": "Attention",
+                        "horizontalAlignment": "Center",
+                        "wrap": True
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": "(條件: 風速 > 40 kts / 陣風 > 50 kts / 浪高 > 4.0 m)",
+                        "size": "Small",
+                        "isSubtle": True,
+                        "horizontalAlignment": "Center",
+                        "spacing": "None",
+                        "wrap": True
                     }
                 ]
             })
             
-            # 6. 回傳完整的 Card
-            card = {
-                "type": "message",
-                "attachments": [{
-                    "contentType": "application/vnd.microsoft.card.adaptive",
-                    "content": {
-                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                        "type": "AdaptiveCard",
-                        "version": "1.4",
-                        "body": body
-                    }
-                }]
-            }
-            
-            return card
-    
-    def _create_port_container(self, assessment: RiskAssessment, style: str) -> Dict[str, Any]:
-            """建立單一港口的資訊容器 (美化版)"""
-            risk_emoji = self._get_risk_emoji(assessment.risk_level)
-            
-            # --- 1. 標題區塊 (Header) ---
-            # 讓港口名稱大一點，國家資訊縮小並加上定位圖示
-            header_section = {
-                "type": "ColumnSet",
-                "columns": [
-                    {
-                        "type": "Column",
-                        "width": "stretch",
-                        "items": [
-                            {
-                                "type": "TextBlock",
-                                "text": f"{risk_emoji} {assessment.port_name} ({assessment.port_code})",
-                                "weight": "Bolder",
-                                "size": "Large",  # 加大字體
-                                "wrap": True
-                            },
-                            {
-                                "type": "TextBlock",
-                                "text": f"📍 {assessment.country}",
-                                "isSubtle": True,
-                                "spacing": "None",
-                                "size": "Small",
-                                "wrap": True
-                            }
-                        ]
-                    }
-                ]
-            }
-
-            # --- 2. 核心數據區塊 (Statistics) ---
-            # 使用 emphasis (灰色背景) 讓數據突顯出來
-            
-            # 簡化時段統計文字
-            high_risk_count = len([p for p in assessment.risk_periods if p['risk_level'] >= 2])
-            period_summary = f"共 {len(assessment.risk_periods)} 個時段"
-            if high_risk_count > 0:
-                period_summary += f" ({high_risk_count} 個警告+)"
-
-            stats_section = {
+            for port in danger_ports[:20]:
+                body.append(self._create_port_container(port, "attention"))
+        
+        if warning_ports:
+            body.append({
                 "type": "Container",
-                "style": "emphasis",  # 關鍵：加入灰色背景
-                "spacing": "Small",
+                "style": "warning",
+                "spacing": "Large",
+                "separator": True,
                 "items": [
                     {
-                        "type": "FactSet",
-                        "spacing": "Small",
-                        "facts": [
-                            # 使用 .0f 去除不必要的小數點 (如 23.0 -> 23)
-                            {"title": "💨 未來48Hrs最大風速", "value": f"**{assessment.max_wind_kts:.0f}** kts (Bf: {assessment.max_wind_bft})"},
-                            {"title": "🌬️ 未來48Hrs最大陣風", "value": f"**{assessment.max_gust_kts:.0f}** kts (Bf: {assessment.max_gust_bft})"},
-                            {"title": "🌊 未來48Hrs最大浪高", "value": f"**{assessment.max_wave:.1f}** m"},
-                            {"title": "⚠️ 風險因素", "value": ", ".join(assessment.risk_factors)},
-                            {"title": "🕐 時段統計", "value": period_summary}
-                        ]
+                        "type": "TextBlock",
+                        "text": "🟠(Warning)警告等級港口清單",
+                        "weight": "Bolder",
+                        "size": "Medium",
+                        "color": "Warning",
+                        "horizontalAlignment": "Center",
+                        "wrap": True
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": "(條件: 風速 > 30 kts /  陣風 > 40 kts / 浪高 > 2.5 m)",
+                        "size": "Small",
+                        "isSubtle": True,
+                        "horizontalAlignment": "Center",
+                        "spacing": "None",
+                        "wrap": True
                     }
                 ]
-            }
-
-            # --- 3. 高風險列表區塊 (List) ---
-            # 使用表格化呈現，解決文字擠在一起的問題
-            list_section_items = []
+            })
             
-            if assessment.risk_periods:
-                # 列表標題
-                list_section_items.append({
-                    "type": "TextBlock",
-                    "text": "📋 主要高風險時段 (Top5)",
-                    "weight": "Bolder",
-                    "size": "Small",
-                    "color": "Accent",
-                    "spacing": "Medium"
-                })
-
-                # 迴圈建立每一列 (Row)
-                for period in assessment.risk_periods[:5]:
-                    # 處理時間格式：只取 MM/DD HH:MM (例如 "2025-12-28 14:30" -> "12/28 14:30")
-                    try:
-                        date_part = period['time'].split(' ')[0]
-                        time_part = period['time'].split(' ')[1]
-                        # 將日期格式從 YYYY-MM-DD 轉為 MM/DD
-                        month_day = date_part.split('-')[1] + '/' + date_part.split('-')[2]
-                        time_str = f"{month_day} {time_part}"
-                    except:
-                        time_str = period['time']
-
-                    # 準備數據文字 (使用 emoji 縮短長度，方便手機閱讀)
-                    # 範例: 💨20kt(Bf:5) 🌬️29kt(Bf:7) 🌊2.2m
-                    detail_text = (
-                        f"💨風速:{int(period['wind_speed_kts'])}kt(Bf:{period['wind_speed_bft']})  "
-                        f"🌬️陣風:{int(period['wind_gust_kts'])}kt(Bf:{period['wind_gust_bft']})  "
-                        f"🌊浪高:{period['wave_height']:.1f}m"
-                    )
-
-                    # 建立表格列 (左邊時間，右邊數據)
-                    row = {
-                        "type": "ColumnSet",
-                        "spacing": "Small",
-                        "columns": [
-                            {
-                                "type": "Column",
-                                "width": "auto",  # 自動調整寬度以適應時間
-                                "items": [{
-                                    "type": "TextBlock",
-                                    "text": f"🕒 {time_str}",
-                                    "weight": "Bolder",
-                                    "size": "Small",
-                                    "color": "Attention" if period['risk_level'] >= 2 else "Default"
-                                }]
-                            },
-                            {
-                                "type": "Column",
-                                "width": "stretch",  # 剩餘空間給數據
-                                "items": [{
-                                    "type": "TextBlock",
-                                    "text": detail_text,
-                                    "size": "Small",
-                                    "isSubtle": True,
-                                    "wrap": True
-                                }]
-                            }
-                        ]
-                    }
-                    list_section_items.append(row)
-
-            # 將列表包裝進 Container
-            list_container = {
+            for port in warning_ports[:20]:
+                body.append(self._create_port_container(port, "warning"))
+        
+        if caution_ports:
+            body.append({
                 "type": "Container",
-                "spacing": "Small",
-                "items": list_section_items
-            }
-
-            # --- 4. 組合最終容器 ---
-            return {
-                "type": "Container",
+                "style": "accent",
                 "spacing": "Medium",
                 "separator": True,
                 "items": [
-                    header_section,
-                    stats_section,
-                    list_container
+                    {
+                        "type": "TextBlock",
+                        "text": "🟡(Caution)注意等級港口清單",
+                        "weight": "Bolder",
+                        "size": "Medium",
+                        "color": "Accent",
+                        "horizontalAlignment": "Center",
+                        "wrap": True
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": "(條件: 風速 > 25 kts /  陣風 > 35 kts / 浪高 > 2.0 m)",
+                        "size": "Small",
+                        "isSubtle": True,
+                        "horizontalAlignment": "Center",
+                        "spacing": "None",
+                        "wrap": True
+                    }
                 ]
-            }
+            })
+            
+            for port in caution_ports[:20]:
+                body.append(self._create_port_container(port, "default"))
+            
+            if len(caution_ports) > 20:
+                body.append({
+                    "type": "TextBlock",
+                    "text": f"... 還有 {len(caution_ports) - 20} 個注意港口",
+                    "isSubtle": True,
+                    "spacing": "Small",
+                    "horizontalAlignment": "Center"
+                })
+        
+        body.append({
+            "type": "Container",
+            "spacing": "Large",
+            "separator": True,
+            "items": [
+                {
+                    "type": "TextBlock",
+                    "text": "⚠️ 請船管PIC注意業管船舶安全，並提前做好防範措施",
+                    "wrap": True,
+                    "color": "Warning",
+                    "weight": "Bolder",
+                    "horizontalAlignment": "Center"
+                }
+            ]
+        })
+        
+        card = {
+            "type": "message",
+            "attachments": [{
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": {
+                    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                    "type": "AdaptiveCard",
+                    "version": "1.4",
+                    "body": body
+                }
+            }]
+        }
+        
+        return card
+    
+    def _create_port_container(self, assessment: RiskAssessment, style: str) -> Dict[str, Any]:
+        """建立單一港口的資訊容器"""
+        risk_emoji = self._get_risk_emoji(assessment.risk_level)
+        
+        header_section = {
+            "type": "ColumnSet",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [
+                        {
+                            "type": "TextBlock",
+                            "text": f"{risk_emoji} {assessment.port_name} ({assessment.port_code})",
+                            "weight": "Bolder",
+                            "size": "Large",
+                            "wrap": True
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": f"📍 {assessment.country}",
+                            "isSubtle": True,
+                            "spacing": "None",
+                            "size": "Small",
+                            "wrap": True
+                        }
+                    ]
+                }
+            ]
+        }
+
+        high_risk_count = len([p for p in assessment.risk_periods if p['risk_level'] >= 2])
+        period_summary = f"共 {len(assessment.risk_periods)} 個時段"
+        if high_risk_count > 0:
+            period_summary += f" ({high_risk_count} 個警告+)"
+
+        stats_section = {
+            "type": "Container",
+            "style": "emphasis",
+            "spacing": "Small",
+            "items": [
+                {
+                    "type": "FactSet",
+                    "spacing": "Small",
+                    "facts": [
+                        {"title": "💨 未來48Hrs最大風速", "value": f"**{assessment.max_wind_kts:.0f}** kts (Bf: {assessment.max_wind_bft})"},
+                        {"title": "🌬️ 未來48Hrs最大陣風", "value": f"**{assessment.max_gust_kts:.0f}** kts (Bf: {assessment.max_gust_bft})"},
+                        {"title": "🌊 未來48Hrs最大浪高", "value": f"**{assessment.max_wave:.1f}** m"},
+                        {"title": "⚠️ 風險因素", "value": ", ".join(assessment.risk_factors)},
+                        {"title": "🕐 時段統計", "value": period_summary}
+                    ]
+                }
+            ]
+        }
+
+        list_section_items = []
+        
+        if assessment.risk_periods:
+            list_section_items.append({
+                "type": "TextBlock",
+                "text": "📋 主要高風險時段 (Top5)",
+                "weight": "Bolder",
+                "size": "Small",
+                "color": "Accent",
+                "spacing": "Medium"
+            })
+
+            for period in assessment.risk_periods[:5]:
+                try:
+                    date_part = period['time'].split(' ')[0]
+                    time_part = period['time'].split(' ')[1]
+                    month_day = date_part.split('-')[1] + '/' + date_part.split('-')[2]
+                    time_str = f"{month_day} {time_part}"
+                except:
+                    time_str = period['time']
+
+                detail_text = (
+                    f"💨風速:{int(period['wind_speed_kts'])}kt(Bf:{period['wind_speed_bft']})  "
+                    f"🌬️陣風:{int(period['wind_gust_kts'])}kt(Bf:{period['wind_gust_bft']})  "
+                    f"🌊浪高:{period['wave_height']:.1f}m"
+                )
+
+                row = {
+                    "type": "ColumnSet",
+                    "spacing": "Small",
+                    "columns": [
+                        {
+                            "type": "Column",
+                            "width": "auto",
+                            "items": [{
+                                "type": "TextBlock",
+                                "text": f"🕒 {time_str}",
+                                "weight": "Bolder",
+                                "size": "Small",
+                                "color": "Attention" if period['risk_level'] >= 2 else "Default"
+                            }]
+                        },
+                        {
+                            "type": "Column",
+                            "width": "stretch",
+                            "items": [{
+                                "type": "TextBlock",
+                                "text": detail_text,
+                                "size": "Small",
+                                "isSubtle": True,
+                                "wrap": True
+                            }]
+                        }
+                    ]
+                }
+                list_section_items.append(row)
+
+        list_container = {
+            "type": "Container",
+            "spacing": "Small",
+            "items": list_section_items
+        }
+
+        return {
+            "type": "Container",
+            "spacing": "Medium",
+            "separator": True,
+            "items": [
+                header_section,
+                stats_section,
+                list_container
+            ]
+        }
     
     def _get_risk_emoji(self, risk_level: int) -> str:
         """取得風險等級對應的 emoji"""
@@ -803,61 +736,78 @@ class TeamsNotifier:
             2: '🟠',
             3: '🔴'
         }.get(risk_level, '⚪')
-        
+
+
 class GmailRelayNotifier:
     """
-    Gmail 接力發信器 (免費版解法)
-    功能：發送一封包含氣象報告的信給 'harry_chung@wanhai.com'
-    目的：觸發 Power Automate (Outlook Trigger) 自動轉發給船端
+    Gmail 接力發信器 (修正版 - Port 587 STARTTLS)
+    同時發送 JSON 和 HTML 格式，方便 Power Automate 解析
     """
     def __init__(self):
-        # 請確認 GitHub Secrets 有設定這些
-        self.user = os.getenv('MAIL_USER')     # 你的 Gmail
-        self.password = os.getenv('MAIL_PASSWORD') # Gmail 應用程式密碼
-        self.target = "harry_chung@wanhai.com" # 寄給你自己 (公司信箱)
-        self.subject_trigger = "GITHUB_TRIGGER_WEATHER_REPORT" # 暗號，要跟 Power Automate 設定的一樣
+        self.user = os.getenv('MAIL_USER')
+        self.password = os.getenv('MAIL_PASSWORD')
+        self.target = "harry_chung@wanhai.com"
+        self.subject_trigger = "GITHUB_TRIGGER_WEATHER_REPORT"
 
-    def send_trigger_email(self, report_text: str) -> bool:
+    def send_trigger_email(self, report_data: dict, report_html: str) -> bool:
+        """
+        發送觸發信件（同時包含 JSON 和 HTML）
+        
+        Args:
+            report_data: 報告數據字典（JSON 格式）
+            report_html: HTML 格式的報告
+        """
         if not self.user or not self.password:
             print("⚠️ 未設定 Gmail 帳密，無法發送信件")
             return False
 
-        msg = MIMEMultipart()
+        # 建立 multipart 郵件（同時包含純文字和 HTML）
+        msg = MIMEMultipart('alternative')
         msg['From'] = self.user
         msg['To'] = self.target
         msg['Subject'] = self.subject_trigger
         
-        # 信件內容：這裡的內容會被 Power Automate 原封不動轉寄出去
-        body = f"""
-各位長官好，
-
-這是自動化的每日氣象監控報告。
-(系統執行時間: {datetime.now().strftime('%Y-%m-%d %H:%M')})
-
-{report_text}
-
-------------------------------------------------
-此郵件由系統自動生成。
-"""
-        msg.attach(MIMEText(body, 'plain'))
+        # Part 1: 純文字版本（JSON 格式，方便 Power Automate 解析）
+        json_text = json.dumps(report_data, ensure_ascii=False, indent=2)
+        text_part = MIMEText(json_text, 'plain', 'utf-8')
+        
+        # Part 2: HTML 版本（美化顯示）
+        html_part = MIMEText(report_html, 'html', 'utf-8')
+        
+        msg.attach(text_part)
+        msg.attach(html_part)
 
         try:
-            print(f"📧 正在透過 Gmail 發送觸發信件給 {self.target}...")
-            server = smtplib.SMTP("smtp.gmail.com", 587)
+            print(f"📧 正在透過 Gmail (Port 587 STARTTLS) 發送報表給 {self.target}...")
+            
+            # ✅ 使用 Port 587 + STARTTLS（相容性最好）
+            server = smtplib.SMTP("smtp.gmail.com", 587, timeout=30)
             server.ehlo()
             server.starttls()
+            server.ehlo()
+            
+            print("🔑 正在登入...")
             server.login(self.user, self.password)
+            
+            print("📨 正在傳送資料...")
             server.sendmail(self.user, self.target, msg.as_string())
+            
             server.quit()
-            print("✅ 觸發信件發送成功！請檢查 Outlook 是否觸發 Power Automate。")
+            print("✅ 觸發信件發送成功！")
             return True
+            
+        except smtplib.SMTPAuthenticationError:
+            print("❌ Gmail 認證失敗，請檢查帳號密碼是否正確")
+            print("💡 提示：請確認已啟用「兩步驟驗證」並使用「應用程式密碼」")
+            return False
+        except smtplib.SMTPException as e:
+            print(f"❌ SMTP 錯誤: {e}")
+            return False
         except Exception as e:
             print(f"❌ Gmail 發送失敗: {e}")
+            traceback.print_exc()
             return False
 
-# 在主程式中呼叫：
-# notifier = GmailRelayNotifier()
-# notifier.send_trigger_email(report_text)
 
 class WeatherMonitorService:
     """氣象監控服務（主要執行類別）"""
@@ -877,6 +827,7 @@ class WeatherMonitorService:
         self.analyzer = WeatherRiskAnalyzer()
         self.notifier = TeamsNotifier(teams_webhook_url)
         self.db = WeatherDatabase()
+        self.email_notifier = GmailRelayNotifier()
         
         print(f"✅ 系統初始化完成，共載入 {len(self.crawler.port_list)} 個港口")
     
@@ -895,12 +846,25 @@ class WeatherMonitorService:
         risk_assessments = self._analyze_all_ports()
         
         # 步驟 3: 發送 Teams 通知
-        print("\n📢 步驟 3: 發送 Teams 通知...")
-        notification_sent = self.notifier.send_risk_alert(risk_assessments)
+        notification_sent = False
+        if self.notifier.webhook_url:
+            print("\n📢 步驟 3: 發送 Teams 通知...")
+            notification_sent = self.notifier.send_risk_alert(risk_assessments)
         
         # 步驟 4: 生成報告
-        print("\n📊 步驟 4: 生成執行報告...")
+        print("\n📊 步驟 4: 生成報告...")
         report = self._generate_report(download_stats, risk_assessments, notification_sent)
+        
+        # 步驟 5: 生成 HTML 報告並發送 Email
+        print("\n📧 步驟 5: 發送 Email 通知...")
+        report_html = self._generate_html_report(risk_assessments)
+        
+        try:
+            # ✅ 修正：同時傳入 JSON 和 HTML
+            self.email_notifier.send_trigger_email(report, report_html)
+        except Exception as e:
+            print(f"⚠️ 發信過程發生異常: {e}")
+            traceback.print_exc()
         
         print("\n" + "=" * 80)
         print("✅ 每日監控執行完成")
@@ -917,19 +881,15 @@ class WeatherMonitorService:
         
         for i, port_code in enumerate(self.crawler.port_list, 1):
             try:
-                # 從資料庫讀取最新資料
                 data = self.db.get_latest_content(port_code)
                 if not data:
                     continue
                 
                 content, issued_time, port_name = data
-                
-                # 取得港口資訊
                 port_info = self.crawler.get_port_info(port_code)
                 if not port_info:
                     continue
                 
-                # 分析風險
                 assessment = self.analyzer.analyze_port_risk(
                     port_code, port_info, content, issued_time
                 )
@@ -954,7 +914,6 @@ class WeatherMonitorService:
                         notification_sent: bool) -> Dict[str, Any]:
         """生成執行報告"""
         
-        # 統計風險等級分布
         risk_distribution = {
             'danger': sum(1 for r in risk_assessments if r.risk_level == 3),
             'warning': sum(1 for r in risk_assessments if r.risk_level == 2),
@@ -993,11 +952,10 @@ class WeatherMonitorService:
             },
             'notification': {
                 'sent': notification_sent,
-                'recipient': 'Microsoft Teams'
+                'recipient': 'Microsoft Teams & Email'
             }
         }
         
-        # 輸出報告摘要
         print("\n📋 執行報告摘要:")
         print(f"   下載成功: {download_stats['success']} 個港口")
         print(f"   下載略過: {download_stats['skip']} 個港口")
@@ -1009,6 +967,106 @@ class WeatherMonitorService:
         print(f"   Teams 通知: {'✅ 已發送' if notification_sent else '❌ 發送失敗'}")
         
         return report
+    
+    def _generate_html_report(self, assessments: List[RiskAssessment]) -> str:
+        """生成 HTML 格式的精美報告"""
+        if not assessments:
+            return """
+            <div style="font-family: Arial, sans-serif; color: #2E7D32; padding: 20px; border: 1px solid #4CAF50; background-color: #E8F5E9; border-radius: 5px;">
+                <h3>🟢 System Status: ALL CLEAR</h3>
+                <p>今日所有監控港口均處於安全範圍 (All ports are within safe limits).</p>
+            </div>
+            """
+            
+        risk_groups = {3: [], 2: [], 1: []}
+        for a in assessments:
+            risk_groups[a.risk_level].append(a)
+
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+        
+        html = f"""
+        <html>
+        <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #333; line-height: 1.6;">
+            <div style="background-color: #004B97; color: white; padding: 15px 20px; border-radius: 5px 5px 0 0;">
+                <h2 style="margin: 0; font-size: 20px;">⛴️ WHL Port Weather Risk Monitor</h2>
+                <p style="margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;">
+                    Generated by MarTech-FRM | Update: {now_str} (UTC+8)
+                </p>
+            </div>
+
+            <div style="background-color: #f8f9fa; border: 1px solid #ddd; border-top: none; padding: 15px; margin-bottom: 20px;">
+                <strong>📊 監控摘要 (Summary):</strong><br>
+                共監測到 <span style="color: #D9534F; font-weight: bold;">{len(assessments)}</span> 個港口有潛在氣象風險。
+                請 PIC (Person In Charge) 留意下列港口動態。
+            </div>
+        """
+
+        styles = {
+            3: {'color': '#D9534F', 'bg': '#F2DEDE', 'title': '🔴 DANGER (危險)', 'border': '#D9534F'},
+            2: {'color': '#F0AD4E', 'bg': '#FCF8E3', 'title': '🟠 WARNING (警告)', 'border': '#F0AD4E'},
+            1: {'color': '#5BC0DE', 'bg': '#D9EDF7', 'title': '🟡 CAUTION (注意)', 'border': '#5BC0DE'}
+        }
+
+        for level in [3, 2, 1]:
+            ports = risk_groups[level]
+            if not ports:
+                continue
+            
+            style = styles[level]
+            
+            html += f"""
+            <div style="margin-top: 20px; margin-bottom: 10px;">
+                <span style="background-color: {style['color']}; color: white; padding: 5px 10px; border-radius: 3px; font-weight: bold; font-size: 14px;">
+                    {style['title']}
+                </span>
+            </div>
+            
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #ddd;">
+                <thead>
+                    <tr style="background-color: {style['bg']}; color: #333; text-align: left;">
+                        <th style="padding: 10px; border: 1px solid #ddd; width: 25%;">Port Name</th>
+                        <th style="padding: 10px; border: 1px solid #ddd; width: 35%;">Max Conditions (48hrs)</th>
+                        <th style="padding: 10px; border: 1px solid #ddd;">Risk Factors & Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+            """
+            
+            for p in ports:
+                wind_style = "color: #D9534F; font-weight: bold;" if p.max_wind_kts >= 30 else ""
+                wave_style = "color: #D9534F; font-weight: bold;" if p.max_wave >= 3.0 else ""
+                
+                html += f"""
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 8px; border-left: 5px solid {style['border']};">
+                        <strong style="font-size: 14px;">{p.port_code}</strong><br>
+                        {p.port_name}<br>
+                        <span style="color: #666; font-size: 11px;">{p.country}</span>
+                    </td>
+                    <td style="padding: 8px;">
+                        Wind: <span style="{wind_style}">{p.max_wind_kts:.0f} kts</span> (Bf {p.max_wind_bft})<br>
+                        Gust: {p.max_gust_kts:.0f} kts (Bf {p.max_gust_bft})<br>
+                        Wave: <span style="{wave_style}">{p.max_wave:.1f} m</span>
+                    </td>
+                    <td style="padding: 8px;">
+                        <div style="margin-bottom: 4px;">⚠️ {', '.join(p.risk_factors)}</div>
+                        <div style="color: #666;">🕒 Max: {p.max_wind_time}</div>
+                    </td>
+                </tr>
+                """
+            
+            html += "</tbody></table>"
+
+        html += """
+            <div style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 10px; font-size: 11px; color: #999; text-align: center;">
+                Wan Hai Lines Ltd. | Safety & Quality Department<br>
+                Data Source: Weathernews Inc. (WNI) | Automated System
+            </div>
+        </body>
+        </html>
+        """
+        
+        return html
     
     def save_report_to_file(self, report: Dict[str, Any],
                            output_dir: str = 'reports') -> str:
@@ -1034,20 +1092,14 @@ def main():
     print("🌊 WNI 港口氣象自動監控系統")
     print("=" * 80)
     
-    # 檢查必要的環境變數
     if not AEDYN_USERNAME or not AEDYN_PASSWORD:
-        print("❌ 錯誤報告: 未設定 AEDYN_USERNAME 或 AEDYN_PASSWORD 環境變數")
-        print("\n請設定以下環境變數:")
-        print("  export AEDYN_USERNAME='your_username@example.com'")
-        print("  export AEDYN_PASSWORD='your_password'")
-        print("  export TEAMS_WEBHOOK_URL='https://outlook.office.com/webhook/...'")
+        print("❌ 錯誤: 未設定 AEDYN_USERNAME 或 AEDYN_PASSWORD")
         sys.exit(1)
     
     if not TEAMS_WEBHOOK_URL:
-        print("⚠️ 錯誤報告: 未設定 TEAMS_WEBHOOK_URL，將無法發送 Teams 通知")
+        print("⚠️ 警告: 未設定 TEAMS_WEBHOOK_URL，將無法發送 Teams 通知")
     
     try:
-        # 初始化監控服務
         service = WeatherMonitorService(
             username=AEDYN_USERNAME,
             password=AEDYN_PASSWORD,
@@ -1055,12 +1107,8 @@ def main():
             excel_path=EXCEL_FILE_PATH
         )
         
-        # 執行每日監控
+        # 執行每日監控（已包含發送 Email）
         report = service.run_daily_monitoring()
-        # 透過 Gmail 發送觸發信件
-        report_text = json.dumps(report, ensure_ascii=False, indent=2)
-        notifier = GmailRelayNotifier()
-        notifier.send_trigger_email(report_text)
         
         # 儲存報告
         report_file = service.save_report_to_file(report)
