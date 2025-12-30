@@ -106,7 +106,7 @@ class WeatherRecord:
 class WeatherParser:    
     """WNI 氣象資料解析器 (Enhanced Robustness)"""
     
-    LINE_PATTERN = re.compile(r'^\d{4}\s+\d{4}\s+\d{4}\s+\d{4}')
+    LINE_PATTERN = re.compile(r'^\s*\d{4}\s+\d{4}\s+\d{4}\s+\d{4}')
     WIND_BLOCK_KEY = "WIND kts"
 
     def parse_content(self, content: str) -> Tuple[str, List[WeatherRecord], List[str]]:
@@ -172,16 +172,11 @@ class WeatherParser:
                 # 處理跨年
                 if prev_mmdd and prev_mmdd > local_date and prev_mmdd.startswith("12") and local_date.startswith("01"):
                     current_year += 1
-                prev_mmdd = utc_datate
+                prev_mmdd = utc_date
                 
                  # 建立氣象記錄
                 dt_utc = datetime.strptime(f"{current_year}{utc_date}{utc_time}", "%Y%m%d%H%M")
                 dt_lct = datetime.strptime(f"{current_year}{local_date}{local_time}", "%Y%m%d%H%M")
-                def _safe_float(val_str):
-                    """安全轉換為浮點數（處理 * 符號）"""
-                    clean = val_str.replace('*', '')
-                    return float(clean) if clean else 0.0
-
                 # 建立氣象記錄
                 record = WeatherRecord(
                     time=dt_utc,
