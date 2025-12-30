@@ -302,7 +302,7 @@ class TeamsNotifier:
                                 "items": [
                                     {
                                         "type": "TextBlock",
-                                        "text": "✅ WHL 港口氣象監控系統 \n\n present by MarTech-FRM",
+                                        "text": "✅ WHL 港口氣象監控系統 \n\n present by MariTech-FRM",
                                         "weight": "Bolder",
                                         "size": "Medium",
                                         "color": "Good",
@@ -379,7 +379,7 @@ class TeamsNotifier:
                     },
                     {
                         "type": "TextBlock",
-                        "text": "present by MarTech-FRM",
+                        "text": "present by MariTech-FRM",
                         "size": "Small",
                         "isSubtle": True,
                         "spacing": "None"
@@ -936,7 +936,7 @@ class WeatherMonitorService:
             <div style="background-color: #004B97; color: white; padding: 20px; border-radius: 6px 6px 0 0;">
                 <h2 style="margin: 0; font-size: 22px; font-weight: bold; {font_style}">⛴️ WHL Port Weather Risk Monitor</h2>
                 <p style="margin: 8px 0 0 0; font-size: 13px; opacity: 0.9; {font_style}">
-                    Present by MarTech-FRM | Update: {now_str} (UTC+8)
+                    Present by Marine Technology Division - Fleet Risk Department | Update: {now_str} (UTC+8)
                 </p>
             </div>
 
@@ -1122,3 +1122,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
