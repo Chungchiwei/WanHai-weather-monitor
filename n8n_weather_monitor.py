@@ -935,9 +935,10 @@ class WeatherMonitorService:
         <body style="{font_style} color: #333; line-height: 1.5; background-color: #ffffff;">
             <div style="background-color: #004B97; color: white; padding: 20px; border-radius: 6px 6px 0 0;">
                 <h2 style="margin: 0; font-size: 22px; font-weight: bold; {font_style}">⛴️ WHL Port Weather Risk Monitor</h2>
+                <p style="margin: 10px 0 0 0; font-size: 15px; opacity: 0.9; {font_style}">
+                    Present by Marine Technology Division - Fleet Risk Department | </p>
                 <p style="margin: 8px 0 0 0; font-size: 13px; opacity: 0.9; {font_style}">
-                    Present by Marine Technology Division - Fleet Risk Department | Update: {now_str} (UTC+8)
-                </p>
+                    Last Update: {now_str} (UTC) </p> 
             </div>
 
             <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-top: none; padding: 15px; margin-bottom: 25px; border-radius: 0 0 6px 6px;">
