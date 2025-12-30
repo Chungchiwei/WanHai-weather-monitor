@@ -926,27 +926,47 @@ class WeatherMonitorService:
         risk_groups = {3: [], 2: [], 1: []}
         for a in assessments:
             risk_groups[a.risk_level].append(a)
+        utc_now = datetime.now(timezone.utc)
+        now_str_UTC = utc_now.strftime('%Y-%m-%d %H:%M')
+        lt_now = utc_now + timedelta(hours=8)
+        now_str_LT = lt_now.strftime('%Y-%m-%d %H:%M')
 
-        now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
-        
         # Email Header
         html = f"""
         <html>
-        <body style="{font_style} color: #333; line-height: 1.5; background-color: #ffffff;">
-            <div style="background-color: #004B97; color: white; padding: 20px; border-radius: 6px 6px 0 0;">
-                <h2 style="margin: 0; font-size: 22px; font-weight: bold; {font_style}">⛴️ WHL Port Weather Risk Monitor</h2>
-                <p style="margin: 10px 0 0 0; font-size: 15px; opacity: 0.9; {font_style}">
-                    Present by Marine Technology Division - Fleet Risk Department | </p>
-                <p style="margin: 8px 0 0 0; font-size: 13px; opacity: 0.9; {font_style}">
-                    Last Update: {now_str} (UTC) </p> 
+        <body style="margin: 0; padding: 0; background-color: #f4f4f4; {font_style}">
+            <div style="max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); font-family: 'Helvetica Neue', Arial, sans-serif;">
+        
+        <!-- 標題區：Wan Hai 藍色風格 -->
+        <div style="background-color: #004B97; color: white; padding: 24px 30px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <h2 style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.5px;">
+                    ⛴️ WHL Port Weather Risk Monitor
+                </h2>
+            </div>
+            <!-- 時間資訊：縮小並淡化，放在標題下方 -->
+            <div style="margin-top: 8px; font-size: 12px; color: #a3cbe8; font-weight: 500;">
+                📅 UPDATED: {now_str_LT} (TPE) <span style="opacity: 0.5;">|</span> {now_str_UTC} (UTC)
+            </div>
+        </div>
+
+            <div style="padding: 30px;">
+            
+            <!-- 風險摘要區塊：使用左側紅線強調 -->
+            <div style="background-color: #fff5f5; border-left: 5px solid #D9534F; padding: 20px; border-radius: 4px; margin-bottom: 20px;">
+                <h3 style="margin: 0 0 10px 0; font-size: 16px; color: #D9534F; font-weight: bold;">
+                    📊 未來 48Hrs 風險港口監控摘要
+                </h3>
+                <div style="font-size: 15px; color: #333; line-height: 1.6;">
+                    目前共有 <span style="font-size: 24px; font-weight: bold; color: #D9534F; vertical-align: middle; margin: 0 5px;">{len(assessments)}</span> 個港口具有潛在氣象風險。
+                </div>
             </div>
 
-            <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-top: none; padding: 15px; margin-bottom: 25px; border-radius: 0 0 6px 6px;">
-                <strong style="font-size: 15px; {font_style}">📊 未來48Hrs內風險港口監控摘要:</strong><br>
-                <div style="margin-top: 8px; font-size: 14px; {font_style}">
-                    共有 <span style="color: #D9534F; font-weight: bold; font-size: 16px;">{len(assessments)}</span> 個港口有潛在氣象風險。
-                    請 <span style="background-color: #fff3cd; padding: 2px 4px; border-radius: 3px;">船管PIC</span> 留意下列港口動態。
-                </div>
+            <!-- 操作指示 -->
+            <div style="font-size: 14px; color: #555; background-color: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid #eee;">
+                <span style="font-size: 16px;">👉</span> 
+                請 <span style="background-color: #004B97; color: white; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px;">船管 PIC</span> 
+                留意下列港口動態並採取預防措施。
             </div>
         """
 
@@ -1029,6 +1049,7 @@ class WeatherMonitorService:
         html += f"""
             <div style="margin-top: 40px; border-top: 1px solid #e5e7eb; padding-top: 20px; font-size: 12px; color: #9ca3af; text-align: center; {font_style}">
                 <p style="margin: 0;">Wan Hai Lines Ltd. | Marine Technology Division</p>
+                <p style="margin: 0;">Present by Fleet Risk Department</p>
                 <p style="margin: 5px 0 0 0;">Data Source: Weathernews Inc. (WNI) | Automated System</p>
             </div>
         </body>
@@ -1123,4 +1144,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
