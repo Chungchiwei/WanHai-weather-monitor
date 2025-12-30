@@ -7,6 +7,7 @@ N8N 自動化氣象監控腳本（基於 Streamlit App 架構）
 import os
 import sys
 import json
+from datetime import datetime, timezone, timedelta
 import requests
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
@@ -928,6 +929,7 @@ class WeatherMonitorService:
             risk_groups[a.risk_level].append(a)
         utc_now = datetime.now(timezone.utc)
         now_str_UTC = utc_now.strftime('%Y-%m-%d %H:%M')
+
         lt_now = utc_now + timedelta(hours=8)
         now_str_LT = lt_now.strftime('%Y-%m-%d %H:%M')
 
