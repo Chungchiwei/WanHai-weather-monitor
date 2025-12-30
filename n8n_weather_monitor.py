@@ -825,9 +825,9 @@ class WeatherMonitorService:
             auto_login=False
         )
         self.analyzer = WeatherRiskAnalyzer()
-        self.notifier = TeamsNotifier(teams_webhook_url)
+        self.notifier = TeamsNotifier(teams_webhook_url) # 負責 Teams (Adaptive Cards)
         self.db = WeatherDatabase()
-        self.email_notifier = GmailRelayNotifier()
+        self.email_notifier = GmailRelayNotifier()       # 負責 Email (HTML)
         
         print(f"✅ 系統初始化完成，共載入 {len(self.crawler.port_list)} 個港口")
     
@@ -845,23 +845,29 @@ class WeatherMonitorService:
         print("\n🔍 步驟 2: 分析港口風險...")
         risk_assessments = self._analyze_all_ports()
         
-        # 步驟 3: 發送 Teams 通知
+        # ==========================================
+        # 分流處理：這裡分別處理 Teams 和 Email
+        # ==========================================
+
+        # 步驟 3: 發送 Teams 通知 (使用 Adaptive Cards JSON)
         notification_sent = False
         if self.notifier.webhook_url:
-            print("\n📢 步驟 3: 發送 Teams 通知...")
+            print("\n📢 步驟 3: 發送 Teams 通知 (Adaptive Cards)...")
+            # TeamsNotifier 內部會呼叫 _create_adaptive_card 生成 JSON
             notification_sent = self.notifier.send_risk_alert(risk_assessments)
         
-        # 步驟 4: 生成報告
-        print("\n📊 步驟 4: 生成報告...")
-        report = self._generate_report(download_stats, risk_assessments, notification_sent)
+        # 步驟 4: 生成基礎數據報告 (JSON Data)
+        print("\n📊 步驟 4: 生成數據報告...")
+        report_data = self._generate_data_report(download_stats, risk_assessments, notification_sent)
         
-        # 步驟 5: 生成 HTML 報告並發送 Email
-        print("\n📧 步驟 5: 發送 Email 通知...")
+        # 步驟 5: 生成 HTML 報告並發送 Email (使用 HTML/CSS)
+        print("\n📧 步驟 5: 發送 Email 通知 (HTML)...")
+        # 這裡呼叫專門的 HTML 生成器
         report_html = self._generate_html_report(risk_assessments)
         
         try:
-            # ✅ 修正：同時傳入 JSON 和 HTML
-            self.email_notifier.send_trigger_email(report, report_html)
+            # 發送郵件：同時包含 JSON數據(給機器讀) 和 HTML(給人讀)
+            self.email_notifier.send_trigger_email(report_data, report_html)
         except Exception as e:
             print(f"⚠️ 發信過程發生異常: {e}")
             traceback.print_exc()
@@ -870,49 +876,12 @@ class WeatherMonitorService:
         print("✅ 每日監控執行完成")
         print("=" * 80)
         
-        return report
+        return report_data
     
-    def _analyze_all_ports(self) -> List[RiskAssessment]:
-        """分析所有港口的風險"""
-        risk_assessments = []
-        total_ports = len(self.crawler.port_list)
-        
-        print(f"開始分析 {total_ports} 個港口...")
-        
-        for i, port_code in enumerate(self.crawler.port_list, 1):
-            try:
-                data = self.db.get_latest_content(port_code)
-                if not data:
-                    continue
-                
-                content, issued_time, port_name = data
-                port_info = self.crawler.get_port_info(port_code)
-                if not port_info:
-                    continue
-                
-                assessment = self.analyzer.analyze_port_risk(
-                    port_code, port_info, content, issued_time
-                )
-                
-                if assessment:
-                    risk_assessments.append(assessment)
-                    risk_label = self.analyzer.get_risk_label(assessment.risk_level)
-                    print(f"   [{i}/{total_ports}] ⚠️ {port_code} ({assessment.port_name}): {risk_label}")
-                else:
-                    print(f"   [{i}/{total_ports}] ✅ {port_code}: 安全")
-                
-            except Exception as e:
-                print(f"   [{i}/{total_ports}] ❌ {port_code}: 分析錯誤 - {e}")
-                continue
-        
-        print(f"\n✅ 分析完成，發現 {len(risk_assessments)} 個需要關注的港口")
-        
-        return risk_assessments
-    
-    def _generate_report(self, download_stats: Dict[str, int],
+    def _generate_data_report(self, download_stats: Dict[str, int],
                         risk_assessments: List[RiskAssessment],
                         notification_sent: bool) -> Dict[str, Any]:
-        """生成執行報告"""
+        """生成純數據報告 (JSON 結構，不含 UI 格式)"""
         
         risk_distribution = {
             'danger': sum(1 for r in risk_assessments if r.risk_level == 3),
@@ -926,24 +895,7 @@ class WeatherMonitorService:
             'risk_analysis': {
                 'total_risk_ports': len(risk_assessments),
                 'risk_distribution': risk_distribution,
-                'top_risk_ports': [
-                    {
-                        'port_code': a.port_code,
-                        'port_name': a.port_name,
-                        'country': a.country,
-                        'risk_level': a.risk_level,
-                        'risk_label': self.analyzer.get_risk_label(a.risk_level),
-                        'max_wind_kts': a.max_wind_kts,
-                        'max_wind_bft': a.max_wind_bft,
-                        'max_wind_time': a.max_wind_time,
-                        'max_gust_kts': a.max_gust_kts,
-                        'max_gust_bft': a.max_gust_bft,
-                        'max_gust_time': a.max_gust_time,
-                        'max_wave': a.max_wave,
-                        'risk_factors': a.risk_factors,
-                        'risk_period_count': len(a.risk_periods)
-                    }
-                    for a in sorted(
+                'top_risk_ports': [a.to_dict() for a in sorted(
                         risk_assessments,
                         key=lambda x: (x.risk_level, x.max_wind_kts),
                         reverse=True
@@ -955,25 +907,18 @@ class WeatherMonitorService:
                 'recipient': 'Microsoft Teams & Email'
             }
         }
-        
-        print("\n📋 執行報告摘要:")
-        print(f"   下載成功: {download_stats['success']} 個港口")
-        print(f"   下載略過: {download_stats['skip']} 個港口")
-        print(f"   下載失敗: {download_stats['fail']} 個港口")
-        print(f"   風險港口: {len(risk_assessments)} 個")
-        print(f"     - 危險等級: {risk_distribution['danger']} 個")
-        print(f"     - 警告風險: {risk_distribution['warning']} 個")
-        print(f"     - 注意警戒: {risk_distribution['caution']} 個")
-        print(f"   Teams 通知: {'✅ 已發送' if notification_sent else '❌ 發送失敗'}")
-        
         return report
-    
+
     def _generate_html_report(self, assessments: List[RiskAssessment]) -> str:
-        """生成 HTML 格式的精美報告"""
+        """生成 HTML 格式的精美報告 (專供 Email 使用)"""
+        
+        # 定義字型堆疊：微軟正黑體 > Segoe UI > Arial
+        font_style = "font-family: 'Microsoft JhengHei', '微軟正黑體', 'Segoe UI', Arial, sans-serif;"
+        
         if not assessments:
-            return """
-            <div style="font-family: Arial, sans-serif; color: #2E7D32; padding: 20px; border: 1px solid #4CAF50; background-color: #E8F5E9; border-radius: 5px;">
-                <h3>🟢 System Status: ALL CLEAR</h3>
+            return f"""
+            <div style="{font_style} color: #2E7D32; padding: 20px; border: 1px solid #4CAF50; background-color: #E8F5E9; border-radius: 5px;">
+                <h3 style="margin-top: 0;">🟢 System Status: ALL CLEAR</h3>
                 <p>今日所有監控港口均處於安全範圍 (All ports are within safe limits).</p>
             </div>
             """
@@ -984,27 +929,31 @@ class WeatherMonitorService:
 
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
         
+        # Email Header
         html = f"""
         <html>
-        <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #333; line-height: 1.6;">
-            <div style="background-color: #004B97; color: white; padding: 15px 20px; border-radius: 5px 5px 0 0;">
-                <h2 style="margin: 0; font-size: 20px;">⛴️ WHL Port Weather Risk Monitor</h2>
-                <p style="margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;">
-                    Generated by MarTech-FRM | Update: {now_str} (UTC+8)
+        <body style="{font_style} color: #333; line-height: 1.5; background-color: #ffffff;">
+            <div style="background-color: #004B97; color: white; padding: 20px; border-radius: 6px 6px 0 0;">
+                <h2 style="margin: 0; font-size: 22px; font-weight: bold; {font_style}">⛴️ WHL Port Weather Risk Monitor</h2>
+                <p style="margin: 8px 0 0 0; font-size: 13px; opacity: 0.9; {font_style}">
+                    Present by MarTech-FRM | Update: {now_str} (UTC+8)
                 </p>
             </div>
 
-            <div style="background-color: #f8f9fa; border: 1px solid #ddd; border-top: none; padding: 15px; margin-bottom: 20px;">
-                <strong>📊 監控摘要 (Summary):</strong><br>
-                共監測到 <span style="color: #D9534F; font-weight: bold;">{len(assessments)}</span> 個港口有潛在氣象風險。
-                請 PIC (Person In Charge) 留意下列港口動態。
+            <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-top: none; padding: 15px; margin-bottom: 25px; border-radius: 0 0 6px 6px;">
+                <strong style="font-size: 15px; {font_style}">📊 未來48Hrs內風險港口監控摘要:</strong><br>
+                <div style="margin-top: 8px; font-size: 14px; {font_style}">
+                    共有 <span style="color: #D9534F; font-weight: bold; font-size: 16px;">{len(assessments)}</span> 個港口有潛在氣象風險。
+                    請 <span style="background-color: #fff3cd; padding: 2px 4px; border-radius: 3px;">船管PIC</span> 留意下列港口動態。
+                </div>
             </div>
         """
 
+        # 風險等級樣式定義 (Email 用 HTML/CSS)
         styles = {
-            3: {'color': '#D9534F', 'bg': '#F2DEDE', 'title': '🔴 DANGER (危險)', 'border': '#D9534F'},
-            2: {'color': '#F0AD4E', 'bg': '#FCF8E3', 'title': '🟠 WARNING (警告)', 'border': '#F0AD4E'},
-            1: {'color': '#5BC0DE', 'bg': '#D9EDF7', 'title': '🟡 CAUTION (注意)', 'border': '#5BC0DE'}
+            3: {'color': '#D9534F', 'bg': '#FEF2F2', 'title': '🔴 POTENTIAL DANGER PORT (條件: 風速 > 40 kts / 陣風 > 50 kts / 浪高 > 4.0 m)', 'border': '#D9534F', 'header_bg': '#FEE2E2'},
+            2: {'color': '#F59E0B', 'bg': '#FFFBEB', 'title': '🟠 POTENTIAL WARNING PORT (條件: 風速 > 30 kts / 陣風 > 40 kts / 浪高 > 2.5 m)', 'border': '#F59E0B', 'header_bg': '#FEF3C7'},
+            1: {'color': '#0EA5E9', 'bg': '#F0F9FF', 'title': '🟡 POTENTIAL CAUTION PORT (條件: 風速 > 25 kts / 陣風 > 30 kts / 浪高 > 2.0 m)', 'border': '#0EA5E9', 'header_bg': '#E0F2FE'}
         }
 
         for level in [3, 2, 1]:
@@ -1014,53 +963,72 @@ class WeatherMonitorService:
             
             style = styles[level]
             
+            # 該等級的標題
             html += f"""
-            <div style="margin-top: 20px; margin-bottom: 10px;">
-                <span style="background-color: {style['color']}; color: white; padding: 5px 10px; border-radius: 3px; font-weight: bold; font-size: 14px;">
+            <div style="margin-top: 25px; margin-bottom: 12px;">
+                <span style="background-color: {style['color']}; color: white; padding: 6px 12px; border-radius: 4px; font-weight: bold; font-size: 14px; {font_style}">
                     {style['title']}
                 </span>
             </div>
             
-            <table style="width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #ddd;">
+            <table style="width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;">
                 <thead>
-                    <tr style="background-color: {style['bg']}; color: #333; text-align: left;">
-                        <th style="padding: 10px; border: 1px solid #ddd; width: 25%;">Port Name</th>
-                        <th style="padding: 10px; border: 1px solid #ddd; width: 35%;">Max Conditions (48hrs)</th>
-                        <th style="padding: 10px; border: 1px solid #ddd;">Risk Factors & Time</th>
+                    <tr style="background-color: {style['header_bg']}; color: #4b5563; text-align: left;">
+                        <th style="padding: 12px 15px; border-bottom: 2px solid {style['border']}; width: 25%; {font_style}">港口名稱(Port Name)</th>
+                        <th style="padding: 12px 15px; border-bottom: 2px solid {style['border']}; width: 35%; {font_style}">潛在風險(Potential Crisis)</th>
+                        <th style="padding: 12px 15px; border-bottom: 2px solid {style['border']}; {font_style}">高風險時段(High-risk periods) & Time</th>
                     </tr>
                 </thead>
                 <tbody>
             """
             
-            for p in ports:
-                wind_style = "color: #D9534F; font-weight: bold;" if p.max_wind_kts >= 30 else ""
-                wave_style = "color: #D9534F; font-weight: bold;" if p.max_wave >= 3.0 else ""
+            for index, p in enumerate(ports):
+                # 表格斑馬紋
+                row_bg = "#ffffff" if index % 2 == 0 else "#f9fafb"
+                
+                # 數值強調樣式
+                wind_val_style = "color: #D9534F; font-weight: bold; font-size: 15px;" if p.max_wind_kts >= 30 else "font-weight: bold;"
+                wave_val_style = "color: #D9534F; font-weight: bold; font-size: 15px;" if p.max_wave >= 3.0 else "font-weight: bold;"
                 
                 html += f"""
-                <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 8px; border-left: 5px solid {style['border']};">
-                        <strong style="font-size: 14px;">{p.port_code}</strong><br>
-                        {p.port_name}<br>
-                        <span style="color: #666; font-size: 11px;">{p.country}</span>
+                <tr style="background-color: {row_bg};">
+                    <td style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb; vertical-align: top; {font_style}">
+                        <div style="font-size: 16px; font-weight: bold; color: #1f2937;">{p.port_code}</div>
+                        <div style="margin-top: 2px; color: #374151;">{p.port_name}</div>
+                        <div style="margin-top: 4px; color: #6b7280; font-size: 12px;">📍 {p.country}</div>
                     </td>
-                    <td style="padding: 8px;">
-                        Wind: <span style="{wind_style}">{p.max_wind_kts:.0f} kts</span> (Bf {p.max_wind_bft})<br>
-                        Gust: {p.max_gust_kts:.0f} kts (Bf {p.max_gust_bft})<br>
-                        Wave: <span style="{wave_style}">{p.max_wave:.1f} m</span>
+                    <td style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb; vertical-align: top; {font_style}">
+                        <div style="margin-bottom: 6px;">
+                            <span style="color: #6b7280; width: 45px; display: inline-block;">Wind:</span> 
+                            <span style="{wind_val_style}">{p.max_wind_kts:.0f} kts</span> <span style="font-size:12px; color:#666;">(Bf {p.max_wind_bft})</span>
+                        </div>
+                        <div style="margin-bottom: 6px;">
+                            <span style="color: #6b7280; width: 45px; display: inline-block;">Gust:</span> 
+                            <span style="font-weight: bold;">{p.max_gust_kts:.0f} kts</span> <span style="font-size:12px; color:#666;">(Bf {p.max_gust_bft})</span>
+                        </div>
+                        <div>
+                            <span style="color: #6b7280; width: 45px; display: inline-block;">Wave:</span> 
+                            <span style="{wave_val_style}">{p.max_wave:.1f} m</span>
+                        </div>
                     </td>
-                    <td style="padding: 8px;">
-                        <div style="margin-bottom: 4px;">⚠️ {', '.join(p.risk_factors)}</div>
-                        <div style="color: #666;">🕒 Max: {p.max_wind_time}</div>
+                    <td style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb; vertical-align: top; {font_style}">
+                        <div style="margin-bottom: 6px; color: #b91c1c; background-color: #fef2f2; display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 13px;">
+                            ⚠️ {', '.join(p.risk_factors)}
+                        </div>
+                        <div style="color: #4b5563; font-size: 13px; margin-top: 4px;">
+                            🕒 Time: <b>{p.max_wind_time}</b>
+                        </div>
                     </td>
                 </tr>
                 """
             
             html += "</tbody></table>"
 
-        html += """
-            <div style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 10px; font-size: 11px; color: #999; text-align: center;">
-                Wan Hai Lines Ltd. | Safety & Quality Department<br>
-                Data Source: Weathernews Inc. (WNI) | Automated System
+        # Footer
+        html += f"""
+            <div style="margin-top: 40px; border-top: 1px solid #e5e7eb; padding-top: 20px; font-size: 12px; color: #9ca3af; text-align: center; {font_style}">
+                <p style="margin: 0;">Wan Hai Lines Ltd. | Marine Technology Division</p>
+                <p style="margin: 5px 0 0 0;">Data Source: Weathernews Inc. (WNI) | Automated System</p>
             </div>
         </body>
         </html>
@@ -1068,20 +1036,41 @@ class WeatherMonitorService:
         
         return html
     
-    def save_report_to_file(self, report: Dict[str, Any],
-                           output_dir: str = 'reports') -> str:
-        """儲存報告到檔案"""
+    # _analyze_all_ports 方法保持不變
+    def _analyze_all_ports(self) -> List[RiskAssessment]:
+        # (這裡放原本的代碼，無需更動)
+        risk_assessments = []
+        total_ports = len(self.crawler.port_list)
+        print(f"開始分析 {total_ports} 個港口...")
+        for i, port_code in enumerate(self.crawler.port_list, 1):
+            try:
+                data = self.db.get_latest_content(port_code)
+                if not data: continue
+                content, issued_time, port_name = data
+                port_info = self.crawler.get_port_info(port_code)
+                if not port_info: continue
+                assessment = self.analyzer.analyze_port_risk(port_code, port_info, content, issued_time)
+                if assessment:
+                    risk_assessments.append(assessment)
+                    risk_label = self.analyzer.get_risk_label(assessment.risk_level)
+                    print(f"   [{i}/{total_ports}] ⚠️ {port_code} ({assessment.port_name}): {risk_label}")
+                else:
+                    print(f"   [{i}/{total_ports}] ✅ {port_code}: 安全")
+            except Exception as e:
+                print(f"   [{i}/{total_ports}] ❌ {port_code}: 分析錯誤 - {e}")
+                continue
+        print(f"\n✅ 分析完成，發現 {len(risk_assessments)} 個需要關注的港口")
+        return risk_assessments
+
+    def save_report_to_file(self, report: Dict[str, Any], output_dir: str = 'reports') -> str:
+        # (保持原樣)
         os.makedirs(output_dir, exist_ok=True)
-        
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"weather_monitor_report_{timestamp}.json"
         filepath = os.path.join(output_dir, filename)
-        
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(report, f, ensure_ascii=False, indent=2)
-        
         print(f"\n💾 報告已儲存至: {filepath}")
-        
         return filepath
 
 
