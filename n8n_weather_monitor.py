@@ -66,22 +66,28 @@ class RiskAssessment:
     port_code: str
     port_name: str
     country: str
-    risk_level: int  # 0=Safe, 1=Caution, 2=Warning, 3=Danger
+    risk_level: int
     risk_factors: List[str]
     max_wind_kts: float
     max_wind_bft: int
     max_gust_kts: float
     max_gust_bft: int
     max_wave: float
-    max_wind_time: str
-    max_gust_time: str
+    
+    # 🔴 修改這裡：明確區分 UTC 和 LCT 時間欄位
+    max_wind_time_utc: str
+    max_wind_time_lct: str
+    max_gust_time_utc: str
+    max_gust_time_lct: str
+    max_wave_time_utc: str
+    max_wave_time_lct: str
+    
     risk_periods: List[Dict[str, Any]]
     issued_time: str
     latitude: float
     longitude: float
     
     def to_dict(self) -> Dict[str, Any]:
-        """轉換為字典"""
         return asdict(self)
 
 
@@ -183,6 +189,7 @@ class WeatherRiskAnalyzer:
             
             max_wind_record = max(records, key=lambda r: r.wind_speed_kts)
             max_gust_record = max(records, key=lambda r: r.wind_gust_kts)
+            max_wave_record = max(records, key=lambda r: r.wave_height) # 抓出浪最高的那筆紀錄
             
             for record in records:
                 analyzed = cls.analyze_record(record)
@@ -231,8 +238,17 @@ class WeatherRiskAnalyzer:
                 max_gust_kts=max_gust_record.wind_gust_kts,
                 max_gust_bft=max_gust_record.wind_gust_bft,
                 max_wave=max_wave,
-                max_wind_time=max_wind_record.time.strftime('%Y-%m-%d %H:%M'),
-                max_gust_time=max_gust_record.time.strftime('%Y-%m-%d %H:%M'),
+                
+                # 🔴 修改這裡：填入 UTC 和 LCT 兩組時間
+                max_wind_time_utc=max_wind_record.time.strftime('%Y-%m-%d %H:%M'),
+                max_wind_time_lct=max_wind_record.lct_time.strftime('%Y-%m-%d %H:%M'),
+                
+                max_gust_time_utc=max_gust_record.time.strftime('%Y-%m-%d %H:%M'),
+                max_gust_time_lct=max_gust_record.lct_time.strftime('%Y-%m-%d %H:%M'),
+                
+                max_wave_time_utc=max_wave_record.time.strftime('%Y-%m-%d %H:%M'),
+                max_wave_time_lct=max_wave_record.lct_time.strftime('%Y-%m-%d %H:%M'),
+                
                 risk_periods=risk_periods,
                 issued_time=issued_time,
                 latitude=port_info.get('latitude', 0.0),
@@ -929,7 +945,6 @@ class WeatherMonitorService:
             risk_groups[a.risk_level].append(a)
         utc_now = datetime.now(timezone.utc)
         now_str_UTC = utc_now.strftime('%Y-%m-%d %H:%M')
-
         lt_now = utc_now + timedelta(hours=8)
         now_str_LT = lt_now.strftime('%Y-%m-%d %H:%M')
 
@@ -1006,13 +1021,22 @@ class WeatherMonitorService:
             """
             
             for index, p in enumerate(ports):
-                # 表格斑馬紋
                 row_bg = "#ffffff" if index % 2 == 0 else "#f9fafb"
-                
-                # 數值強調樣式
                 wind_val_style = "color: #D9534F; font-weight: bold; font-size: 15px;" if p.max_wind_kts >= 30 else "font-weight: bold;"
                 wave_val_style = "color: #D9534F; font-weight: bold; font-size: 15px;" if p.max_wave >= 3.0 else "font-weight: bold;"
                 
+                # 🟢 修正：在迴圈內處理時間字串
+                # 為了美觀，UTC 顯示完整日期時間，LCT 顯示時間即可 (或也顯示完整)
+                # 這裡假設 p.max_wind_time_utc 已經是 "YYYY-MM-DD HH:MM" 格式字串
+                
+                # 處理風的時間
+                w_utc = p.max_wind_time_utc[5:] # 取 MM-DD HH:MM
+                w_lct = p.max_wind_time_lct.split(' ')[1] # 取 HH:MM
+                
+                # 處理浪的時間
+                v_utc = p.max_wave_time_utc[5:] # 取 MM-DD HH:MM
+                v_lct = p.max_wave_time_lct.split(' ')[1] # 取 HH:MM
+
                 html += f"""
                 <tr style="background-color: {row_bg};">
                     <td style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb; vertical-align: top; {font_style}">
@@ -1038,8 +1062,17 @@ class WeatherMonitorService:
                         <div style="margin-bottom: 6px; color: #b91c1c; background-color: #fef2f2; display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 13px;">
                             ⚠️ {', '.join(p.risk_factors)}
                         </div>
-                        <div style="color: #4b5563; font-size: 13px; margin-top: 4px;">
-                            🕒 Time: <b>{p.max_wind_time}</b>
+                        
+                        <!-- 顯示最大風速時間 -->
+                        <div style="color: #4b5563; font-size: 13px; margin-top: 4px; line-height: 1.4;">
+                            <span style="display:inline-block; width:16px;">💨</span> 
+                            <b>{w_utc}</b> (UTC) <span style="color:#999">|</span> {w_lct} (LT)
+                        </div>
+                        
+                        <!-- 顯示最大浪高時間 -->
+                        <div style="color: #4b5563; font-size: 13px; margin-top: 4px; line-height: 1.4;">
+                            <span style="display:inline-block; width:16px;">🌊</span> 
+                            <b>{v_utc}</b> (UTC) <span style="color:#999">|</span> {v_lct} (LT)
                         </div>
                     </td>
                 </tr>

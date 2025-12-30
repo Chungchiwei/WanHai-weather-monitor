@@ -8,7 +8,8 @@ from constant import kts_to_bft, wind_dir_deg, HIGH_WIND_SPEED_kts, HIGH_WIND_SP
 @dataclass
 class WeatherRecord:
     """氣象記錄資料結構"""
-    time: datetime
+    time: datetime          # UTC 時間
+    lct_time: datetime      # 新增：LCT 當地時間
     wind_direction: str         # 風向 (例如: NNE)
     wind_speed_kts: float       # 風速 (knots)
     wind_gust_kts: float        # 陣風 (knots)
@@ -98,6 +99,7 @@ class WeatherRecord:
         """字串表示"""
         return (f"WeatherRecord(time={self.time.strftime('%Y-%m-%d %H:%M')}, "
                 f"wind={self.wind_direction} {self.wind_speed_kts:.1f}kts (gust {self.wind_gust_kts:.1f}kts), "
+                f"LCT={self.lct_time.strftime('%H:%M')}, "
                 f"wave={self.wave_direction} {self.wave_height:.1f}m)")
 
 
@@ -117,6 +119,9 @@ class WeatherParser:
         Returns:
             Tuple[港口名稱, 氣象記錄列表, 警告訊息列表]
         """
+        def _safe_float(val_str):
+            clean = val_str.replace('*', '')
+            return float(clean) if clean else 0.0
         lines = content.strip().split('\n')
         warnings = []
         records = []
@@ -159,16 +164,19 @@ class WeatherParser:
                     continue
                 
                 # 解析日期時間
+                utc_date = parts[0] # 修正拼字
+                utc_time = parts[1]
                 local_date = parts[2]
                 local_time = parts[3]
                 
                 # 處理跨年
                 if prev_mmdd and prev_mmdd > local_date and prev_mmdd.startswith("12") and local_date.startswith("01"):
                     current_year += 1
-                prev_mmdd = local_date
+                prev_mmdd = utc_datate
                 
-                dt = datetime.strptime(f"{current_year}{local_date}{local_time}", "%Y%m%d%H%M")
-                
+                 # 建立氣象記錄
+                dt_utc = datetime.strptime(f"{current_year}{utc_date}{utc_time}", "%Y%m%d%H%M")
+                dt_lct = datetime.strptime(f"{current_year}{local_date}{local_time}", "%Y%m%d%H%M")
                 def _safe_float(val_str):
                     """安全轉換為浮點數（處理 * 符號）"""
                     clean = val_str.replace('*', '')
@@ -176,9 +184,10 @@ class WeatherParser:
 
                 # 建立氣象記錄
                 record = WeatherRecord(
-                    time=dt,
+                    time=dt_utc,
+                    lct_time=dt_lct,
                     wind_direction=parts[4],
-                    wind_speed_kts=_safe_float(parts[5]),
+                    wind_speed_kts=_safe_float(parts[5]), # 使用定義好的 function
                     wind_gust_kts=_safe_float(parts[6]),
                     wave_direction=parts[7],
                     wave_height=_safe_float(parts[8]),
