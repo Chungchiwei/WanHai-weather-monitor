@@ -48,15 +48,15 @@ DB_FILE_PATH = os.getenv('DB_FILE_PATH', 'WNI_port_weather.db')
 
 # 風險閾值（與 Streamlit App 一致）
 RISK_THRESHOLDS = {
-    'wind_caution': 25,  # bf 5
-    'wind_warning': 30,  # bf 6
-    'wind_danger': 40,   # bf 8
-    'gust_caution': 35,  # bf 8
-    'gust_warning': 40,  # bf 9
-    'gust_danger': 50,   # bf 10
-    'wave_caution': 2.0,
-    'wave_warning': 2.5,
-    'wave_danger': 4.0,
+    'wind_caution': 22,  # bf 06
+    'wind_warning': 28,  # bf 07
+    'wind_danger': 34,   # bf 08
+    'gust_caution': 28,  # bf 07
+    'gust_warning': 34,  # bf 08
+    'gust_danger': 41,   # bf 09
+    'wave_caution': 2.5, # 2.5米
+    'wave_warning': 3.5, # 3.5米
+    'wave_danger': 4.0,  # 4.0米
 }
 
 
@@ -346,7 +346,7 @@ class TeamsNotifier:
                                     },
                                     {
                                         "type": "TextBlock",
-                                        "text": "未來 48 小時內，所有港口的風速、陣風和浪高均在安全範圍內。",
+                                        "text": "未來 48 小時內，所有港口的最大風速、最大陣風和最大浪高均在安全範圍內。",
                                         "wrap": True,
                                         "spacing": "Small",
                                         "isSubtle": True
@@ -430,7 +430,7 @@ class TeamsNotifier:
                 "width": "stretch",
                 "items": [{
                     "type": "TextBlock",
-                    "text": f"🔴 危險等級: {len(danger_ports)}個",
+                    "text": f"🔴 危險等級港口: {len(danger_ports)}個",
                     "weight": "Bolder",
                     "color": "Attention",
                     "size": "Medium",
@@ -444,7 +444,7 @@ class TeamsNotifier:
                 "width": "stretch",
                 "items": [{
                     "type": "TextBlock",
-                    "text": f"🟠 警告港口: {len(warning_ports)}個",
+                    "text": f"🟠 警告等級港口: {len(warning_ports)}個",
                     "weight": "Bolder",
                     "color": "Warning",
                     "size": "Medium",
@@ -458,7 +458,7 @@ class TeamsNotifier:
                 "width": "stretch",
                 "items": [{
                     "type": "TextBlock",
-                    "text": f"🟡 注意港口: {len(caution_ports)}個",
+                    "text": f"🟡 注意等級港口: {len(caution_ports)}個",
                     "weight": "Bolder",
                     "color": "Accent",
                     "size": "Medium",
@@ -475,7 +475,7 @@ class TeamsNotifier:
         else:
             summary_items.append({
                 "type": "TextBlock",
-                "text": "🟢 全線安全無風險",
+                "text": "🟢 所監控港口皆安全無風險",
                 "horizontalAlignment": "Center",
                 "color": "Good",
                 "weight": "Bolder"
@@ -501,7 +501,7 @@ class TeamsNotifier:
                     },
                     {
                         "type": "TextBlock",
-                        "text": "(條件: 風速 > 40 kts / 陣風 > 50 kts / 浪高 > 4.0 m)",
+                        "text": "(條件: 風速 > 8 級(34~40 Kts) / 陣風 > 9級(41~47 Kts) / 浪高 > 4.0 m ",
                         "size": "Small",
                         "isSubtle": True,
                         "horizontalAlignment": "Center",
@@ -532,7 +532,7 @@ class TeamsNotifier:
                     },
                     {
                         "type": "TextBlock",
-                        "text": "(條件: 風速 > 30 kts /  陣風 > 40 kts / 浪高 > 2.5 m)",
+                        "text": "(條件: 風速 > 7級(28~33 Kts) /  陣風 > 8級(34~40 Kts) / 浪高 > 3.5 m ",
                         "size": "Small",
                         "isSubtle": True,
                         "horizontalAlignment": "Center",
@@ -563,7 +563,7 @@ class TeamsNotifier:
                     },
                     {
                         "type": "TextBlock",
-                        "text": "(條件: 風速 > 25 kts /  陣風 > 35 kts / 浪高 > 2.0 m)",
+                        "text": "(條件: 風速 > 6級(22~27 kts) /  陣風 > 7級(28~33 Kts) / 浪高 > 2.5 m ",
                         "size": "Small",
                         "isSubtle": True,
                         "horizontalAlignment": "Center",
@@ -989,9 +989,9 @@ class WeatherMonitorService:
 
         # 風險等級樣式定義 (Email 用 HTML/CSS)
         styles = {
-            3: {'color': '#D9534F', 'bg': '#FEF2F2', 'title': '🔴 POTENTIAL DANGER PORT (條件: 風速 > 40 kts / 陣風 > 50 kts / 浪高 > 4.0 m)', 'border': '#D9534F', 'header_bg': '#FEE2E2'},
-            2: {'color': '#F59E0B', 'bg': '#FFFBEB', 'title': '🟠 POTENTIAL WARNING PORT (條件: 風速 > 30 kts / 陣風 > 40 kts / 浪高 > 2.5 m)', 'border': '#F59E0B', 'header_bg': '#FEF3C7'},
-            1: {'color': '#0EA5E9', 'bg': '#F0F9FF', 'title': '🟡 POTENTIAL CAUTION PORT (條件: 風速 > 25 kts / 陣風 > 30 kts / 浪高 > 2.0 m)', 'border': '#0EA5E9', 'header_bg': '#E0F2FE'}
+            3: {'color': '#D9534F', 'bg': '#FEF2F2', 'title': '🔴 POTENTIAL DANGER PORT (條件: 風速 > 8級 / 陣風 > 9級 / 浪高 > 4.0 m)', 'border': '#D9534F', 'header_bg': '#FEE2E2'},
+            2: {'color': '#F59E0B', 'bg': '#FFFBEB', 'title': '🟠 POTENTIAL WARNING PORT (條件: 風速 > 7級 / 陣風 > 8級 / 浪高 > 3.5 m)', 'border': '#F59E0B', 'header_bg': '#FEF3C7'},
+            1: {'color': '#0EA5E9', 'bg': '#F0F9FF', 'title': '🟡 POTENTIAL CAUTION PORT (條件: 風速 > 6級 / 陣風 > 7級 / 浪高 > 2.5 m)', 'border': '#0EA5E9', 'header_bg': '#E0F2FE'}
         }
 
         for level in [3, 2, 1]:
@@ -1025,7 +1025,7 @@ class WeatherMonitorService:
                 wind_val_style = "color: #D9534F; font-weight: bold; font-size: 15px;" if p.max_wind_kts >= 30 else "font-weight: bold;"
                 wave_val_style = "color: #D9534F; font-weight: bold; font-size: 15px;" if p.max_wave >= 3.0 else "font-weight: bold;"
                 
-                # 🟢 修正：在迴圈內處理時間字串
+                
                 # 為了美觀，UTC 顯示完整日期時間，LCT 顯示時間即可 (或也顯示完整)
                 # 這裡假設 p.max_wind_time_utc 已經是 "YYYY-MM-DD HH:MM" 格式字串
                 
@@ -1065,13 +1065,13 @@ class WeatherMonitorService:
                         
                         <!-- 顯示最大風速時間 -->
                         <div style="color: #4b5563; font-size: 13px; margin-top: 4px; line-height: 1.4;">
-                            <span style="display:inline-block; width:16px;">💨</span> 
+                            <span style="display:inline-block; width:16px;">💨預估最高風速發生時間:</span> 
                             <b>{w_utc}</b> (UTC) <span style="color:#999">|</span> {w_lct} (LT)
                         </div>
                         
                         <!-- 顯示最大浪高時間 -->
                         <div style="color: #4b5563; font-size: 13px; margin-top: 4px; line-height: 1.4;">
-                            <span style="display:inline-block; width:16px;">🌊</span> 
+                            <span style="display:inline-block; width:16px;">🌊預估最大浪高發生時間:</span> 
                             <b>{v_utc}</b> (UTC) <span style="color:#999">|</span> {v_lct} (LT)
                         </div>
                     </td>
@@ -1179,5 +1179,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
