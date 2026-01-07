@@ -166,15 +166,27 @@ class ChartGenerator:
             
             # 填充
             ax.fill_between(df['time'], df['wind_speed'], alpha=0.2, color='#1f77b4')
+            ax.fill_between(
+                            df['time'], 
+                            df['wind_speed'], 
+                            y2=0, # 設定底部，或者設為 caution_limit 只塗超出部分
+                            where=(df['wind_speed'] > RISK_THRESHOLDS['wind_caution']), # 條件：風速 > 閾值
+                            interpolate=True, # 重要：自動計算交界點，避免圖形斷裂
+                            color='#ff0ecb',  # 粉紅色 (你的色碼)
+                            alpha=0.3,        # 透明度建議調高一點，因為是疊加
+                            label='Risk Area'
+                        )
             
             # 閾值線
-            ax.axhline(RISK_THRESHOLDS['wind_caution'], color='#F59E0B', 
+            ax.axhline(RISK_THRESHOLDS['wind_caution'], color="#0AACEC", 
                       linestyle=':', linewidth=1.5, label=f'Caution ({RISK_THRESHOLDS["wind_caution"]}kts)')
-            ax.axhline(RISK_THRESHOLDS['wind_warning'], color='#D9534F', 
+            ax.axhline(RISK_THRESHOLDS['wind_warning'], color="#EC7E00", 
                       linestyle='--', linewidth=1.5, label=f'Warning ({RISK_THRESHOLDS["wind_warning"]}kts)')
+            ax.axhline(RISK_THRESHOLDS['wind_danger'], color="#F1145E", 
+                      linestyle=':', linewidth=1.5, label=f'Danger ({RISK_THRESHOLDS["wind_danger"]}kts)')
             
             # 標題與標籤
-            ax.set_title(f'{assessment.port_name} ({port_code}) - Wind Trend', 
+            ax.set_title(f'{assessment.port_name} ({port_code}) - 未來48Hrs 風力趨勢圖', 
                         fontsize=13, fontweight='bold', pad=15)
             ax.set_ylabel('Speed (knots)', fontsize=11)
             ax.set_xlabel('Date / Time (UTC)', fontsize=11)
@@ -226,9 +238,11 @@ class ChartGenerator:
                       linestyle=':', linewidth=1.5, label=f'Caution ({RISK_THRESHOLDS["wave_caution"]}m)')
             ax.axhline(RISK_THRESHOLDS['wave_warning'], color='#D9534F', 
                       linestyle='--', linewidth=1.5, label=f'Warning ({RISK_THRESHOLDS["wave_warning"]}m)')
+            ax.axhline(RISK_THRESHOLDS['wave_danger'], color='#C12E2A', 
+                      linestyle=':', linewidth=1.5, label=f'Danger ({RISK_THRESHOLDS["wave_danger"]}m)')    
             
             # 標題與標籤
-            ax.set_title(f'{assessment.port_name} ({port_code}) - Wave Trend', 
+            ax.set_title(f'{assessment.port_name} ({port_code}) - 未來48Hrs 浪高趨勢圖', 
                         fontsize=13, fontweight='bold', pad=15)
             ax.set_ylabel('Height (m)', fontsize=11)
             ax.set_xlabel('Date / Time (UTC)', fontsize=11)
@@ -760,7 +774,7 @@ class WeatherMonitorService:
         generated_charts = {}
         
         # 優先處理高風險港口
-        chart_targets = [r for r in assessments if r.risk_level >= 2]
+        chart_targets = [r for r in assessments if r.risk_level >= 0]
         
         # 如果高風險港口少，補充部分 Caution 港口
         if len(chart_targets) < 5:
