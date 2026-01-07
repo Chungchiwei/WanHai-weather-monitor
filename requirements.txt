@@ -1,11 +1,10 @@
-# requirements.txt
-streamlit>=1.28.0
-pandas>=2.0.0
-numpy>=1.24.0
-matplotlib>=3.7.0
-plotly>=5.14.0
-openpyxl>=3.1.0
+# Core Dependencies
 requests>=2.31.0
-urllib3>=2.0.0
-selenium
-webdriver-manager
+pandas>=2.0.0
+matplotlib>=3.7.0
+python-dotenv>=1.0.0
+
+# Optional Dependencies
+selenium>=4.15.0
+beautifulsoup4>=4.12.0
+openpyxl>=3.1.0
