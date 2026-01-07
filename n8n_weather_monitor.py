@@ -1,7 +1,8 @@
 # n8n_weather_monitor.py
 """
-N8N 自動化氣象監控腳本 (含圖表生成功能)
+N8N 自動化氣象監控腳本 (含圖表生成功能) - Base64 嵌入版
 用途：每天自動抓取港口天氣，分析高風險港口，生成趨勢圖，並發送到 Teams 與 Email
+修改重點：圖片改為 Base64 編碼直接嵌入 HTML，解決 Power Automate 轉寄掉圖問題。
 """
 
 import os
@@ -10,10 +11,12 @@ import json
 import traceback
 import sqlite3
 import smtplib
+import io  # 新增
+import base64 # 新增
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict, field
-import matplotlib.pyplot as plt
+
 # 第三方套件
 import requests
 import pandas as pd
@@ -24,11 +27,10 @@ import matplotlib.dates as mdates
 from dotenv import load_dotenv
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from email.mime.image import MIMEImage
+# from email.mime.image import MIMEImage # 已不需要
 
 # 載入環境變數
 load_dotenv()
-
 
 # ================= 自定義模組導入檢查 =================
 try:
@@ -100,24 +102,26 @@ class RiskAssessment:
     longitude: float
     
     raw_records: Optional[List[WeatherRecord]] = None
-    chart_cids: List[str] = field(default_factory=list)
+    # chart_cids 已移除，改用 Base64 列表
+    chart_base64_list: List[str] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
-        for key in ['raw_records', 'chart_cids']:
+        # 移除不適合轉 JSON 的欄位
+        for key in ['raw_records', 'chart_base64_list']:
             d.pop(key, None)
         return d
 
 
-# ================= 繪圖模組 =================
+# ================= 繪圖模組 (修改版) =================
 
 class ChartGenerator:
-    """圖表生成器"""
+    """圖表生成器 - 支援 Base64 輸出"""
     
     def __init__(self, output_dir: str = CHART_OUTPUT_DIR):
         self.output_dir = output_dir
         
-        # 清空舊圖表
+        # 清空舊圖表 (仍保留存檔功能以便除錯)
         if os.path.exists(self.output_dir):
             for f in os.listdir(self.output_dir):
                 if f.endswith('.png'):
@@ -136,7 +140,6 @@ class ChartGenerator:
             print("⚠️ 無法設定中文字體")
 
     def _prepare_dataframe(self, records: List[WeatherRecord]) -> pd.DataFrame:
-        """將 WeatherRecord 列表轉換為 DataFrame"""
         data = []
         for r in records:
             data.append({
@@ -147,8 +150,17 @@ class ChartGenerator:
             })
         return pd.DataFrame(data)
 
+    def _fig_to_base64(self, fig) -> str:
+        """將 Matplotlib Figure 轉為 Base64 字串"""
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', bbox_inches='tight')
+        buf.seek(0)
+        img_str = base64.b64encode(buf.read()).decode('utf-8')
+        buf.close()
+        return img_str
+
     def generate_wind_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
-        """繪製風速趨勢圖"""
+        """繪製風速趨勢圖，回傳 Base64 字串"""
         if not assessment.raw_records:
             return None
             
@@ -169,18 +181,18 @@ class ChartGenerator:
             ax.fill_between(
                             df['time'], 
                             df['wind_speed'], 
-                            y2=0, # 設定底部，或者設為 caution_limit 只塗超出部分
-                            where=(df['wind_speed'] >= RISK_THRESHOLDS['wind_caution']), # 條件：風速 > 閾值
-                            interpolate=True, # 重要：自動計算交界點，避免圖形斷裂
-                            color='#ff0ecb',  # 粉紅色 (你的色碼)
-                            alpha=0.3,        # 透明度建議調高一點，因為是疊加
+                            y2=0,
+                            where=(df['wind_speed'] >= RISK_THRESHOLDS['wind_caution']),
+                            interpolate=True,
+                            color='#ff0ecb',
+                            alpha=0.3,
                             label='Hight Risk period'
                         )                    
             # 閾值線
             ax.axhline(RISK_THRESHOLDS['wind_danger'], color="#F1145E", 
                       linestyle=':', linewidth=1.5, label=f'Danger ({RISK_THRESHOLDS["wind_danger"]}kts)')   
             ax.axhline(RISK_THRESHOLDS['wind_warning'], color="#EC7E00D8", 
-                      linestyle='--', linewidth=1.5, label=f'Warning ({RISK_THRESHOLDS["wind_warning"]}kts)')         
+                      linestyle='--', linewidth=1.5, label=f'Warning ({RISK_THRESHOLDS["wind_warning"]}kts)')        
             ax.axhline(RISK_THRESHOLDS['wind_caution'], color="#FFFB05DD", 
                       linestyle=':', linewidth=1.5, label=f'Caution ({RISK_THRESHOLDS["wind_caution"]}kts)')
             
@@ -198,13 +210,16 @@ class ChartGenerator:
             plt.yticks(fontsize=9)
             plt.tight_layout()
             
-            # 存檔
+            # 1. 存檔 (保留做為紀錄)
             filepath = os.path.join(self.output_dir, f"wind_{port_code}.png")
             plt.savefig(filepath, dpi=100, bbox_inches='tight')
-            plt.close(fig)
             
+            # 2. 轉 Base64 (用於 Email)
+            base64_str = self._fig_to_base64(fig)
+            
+            plt.close(fig)
             print(f"   ✅ 風速圖已生成: {filepath}")
-            return filepath
+            return base64_str
             
         except Exception as e:
             print(f"   ❌ 繪製風速圖失敗 {port_code}: {e}")
@@ -212,14 +227,13 @@ class ChartGenerator:
             return None
 
     def generate_wave_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
-        """繪製浪高趨勢圖"""
+        """繪製浪高趨勢圖，回傳 Base64 字串"""
         if not assessment.raw_records:
             return None
             
         try:
             df = self._prepare_dataframe(assessment.raw_records)
             
-            # 如果浪很小就不畫
             if df['wave_height'].max() < 1.0:
                 return None
 
@@ -233,13 +247,13 @@ class ChartGenerator:
             ax.fill_between(
                             df['time'], 
                             df['wave_height'], 
-                            y2=0, # 設定底部，或者設為 caution_limit 只塗超出部分
-                            where=(df['wave_height'] > RISK_THRESHOLDS['wave_caution']), # 條件：浪高 > 閾值
-                            interpolate=True, # 重要：自動計算交界點，避免圖形斷裂
-                            color='#ff0ecb',  # 粉紅色 (你的色碼)
-                            alpha=0.3,        # 透明度建議調高一點，因為是疊加
+                            y2=0,
+                            where=(df['wave_height'] > RISK_THRESHOLDS['wave_caution']),
+                            interpolate=True,
+                            color='#ff0ecb',
+                            alpha=0.3,
                             label='Risk Area'
-                        )           
+                        )          
             # 閾值線
             ax.axhline(RISK_THRESHOLDS['wave_caution'], color="#FCF700EF", 
                       linestyle=':', linewidth=1.5, label=f'Caution ({RISK_THRESHOLDS["wave_caution"]}m)')
@@ -248,27 +262,28 @@ class ChartGenerator:
             ax.axhline(RISK_THRESHOLDS['wave_danger'], color="#FC0505", 
                       linestyle=':', linewidth=1.5, label=f'Danger ({RISK_THRESHOLDS["wave_danger"]}m)')    
             
-            # 標題與標籤
             ax.set_title(f"{assessment.port_name} - Wave Height Trend (48 Hrs)", fontsize=14, fontweight='bold', pad=15)
             ax.set_ylabel('Height (m)', fontsize=11)
             ax.set_xlabel('Date / Time (UTC)', fontsize=11)
             ax.legend(loc='upper left', frameon=True, fontsize=9)
             ax.grid(True, alpha=0.3)
             
-            # 日期格式
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %Hh'))
             ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
             plt.xticks(rotation=15, ha='right', fontsize=9)
             plt.yticks(fontsize=9)
             plt.tight_layout()
             
-            # 存檔
+            # 1. 存檔
             filepath = os.path.join(self.output_dir, f"wave_{port_code}.png")
             plt.savefig(filepath, dpi=100, bbox_inches='tight')
-            plt.close(fig)
             
+            # 2. 轉 Base64
+            base64_str = self._fig_to_base64(fig)
+            
+            plt.close(fig)
             print(f"   ✅ 浪高圖已生成: {filepath}")
-            return filepath
+            return base64_str
             
         except Exception as e:
             print(f"   ❌ 繪製浪高圖失敗 {port_code}: {e}")
@@ -276,7 +291,7 @@ class ChartGenerator:
             return None
 
 
-# ================= 風險分析模組 =================
+# ================= 風險分析模組 (無變動) =================
 
 class WeatherRiskAnalyzer:
     """氣象風險分析器"""
@@ -422,7 +437,7 @@ class WeatherRiskAnalyzer:
             return None
 
 
-# ================= Teams 通知器 =================
+# ================= Teams 通知器 (無變動) =================
 
 class TeamsNotifier:
     """Teams 通知發送器"""
@@ -578,7 +593,7 @@ class TeamsNotifier:
         }
 
 
-# ================= Gmail 通知器 =================
+# ================= Gmail 通知器 (修改版) =================
 
 class GmailRelayNotifier:
     """Gmail 接力發信器"""
@@ -590,53 +605,27 @@ class GmailRelayNotifier:
         self.subject_trigger = TRIGGER_SUBJECT
 
     def send_trigger_email(self, report_data: dict, report_html: str, 
-                          images: Dict[str, str] = None) -> bool:
+                           images: Dict[str, str] = None) -> bool:
         """
         發送觸發信件
-        Args:
-            report_data: JSON 資料
-            report_html: HTML 報告
-            images: {'cid': 'file_path'} 例如 {'wind_KHH': 'charts/wind_KHH.png'}
+        注意：現在圖片已經內嵌在 report_html 的 Base64 中，不需要再用 attachments 處理。
         """
         if not self.user or not self.password:
             print("⚠️ 未設定 Gmail 帳密 (MAIL_USER / MAIL_PASSWORD)")
             return False
 
-        # Root: MIMEMultipart('related') 用於嵌入圖片
-        msg = MIMEMultipart('related')
+        # 改用 MIMEMultipart('alternative') 因為不需要 related (附件) 了
+        msg = MIMEMultipart('alternative')
         msg['From'] = self.user
         msg['To'] = self.target
         msg['Subject'] = self.subject_trigger
         
-        # Alternative 部分 (純文字 + HTML)
-        msg_alternative = MIMEMultipart('alternative')
-        msg.attach(msg_alternative)
-
         # 1. 純文字 (JSON)
         json_text = json.dumps(report_data, ensure_ascii=False, indent=2)
-        msg_alternative.attach(MIMEText(json_text, 'plain', 'utf-8'))
+        msg.attach(MIMEText(json_text, 'plain', 'utf-8'))
         
-        # 2. HTML
-        msg_alternative.attach(MIMEText(report_html, 'html', 'utf-8'))
-
-        # 3. 嵌入圖片
-        if images:
-            for cid, file_path in images.items():
-                if not os.path.exists(file_path):
-                    print(f"⚠️ 圖片檔案不存在: {file_path}")
-                    continue
-                    
-                try:
-                    with open(file_path, 'rb') as fp:
-                        img_data = fp.read()
-                        img = MIMEImage(img_data)
-                        img.add_header('Content-ID', f'<{cid}>')
-                        img.add_header('Content-Disposition', 'inline', 
-                                     filename=os.path.basename(file_path))
-                        msg.attach(img)
-                    print(f"   ✅ 圖片已附加: {cid} -> {file_path}")
-                except Exception as e:
-                    print(f"   ❌ 無法附加圖片 {file_path}: {e}")
+        # 2. HTML (內含 Base64 圖片)
+        msg.attach(MIMEText(report_html, 'html', 'utf-8'))
 
         try:
             print(f"📧 正在透過 Gmail 發送報表給 {self.target}...")
@@ -652,7 +641,7 @@ class GmailRelayNotifier:
             server.sendmail(self.user, self.target, msg.as_string())
             server.quit()
             
-            print(f"✅ Email 發送成功！(含 {len(images) if images else 0} 張圖表)")
+            print(f"✅ Email 發送成功！")
             return True
             
         except smtplib.SMTPAuthenticationError:
@@ -668,7 +657,7 @@ class GmailRelayNotifier:
             return False
 
 
-# ================= 主服務類別 =================
+# ================= 主服務類別 (修改版) =================
 
 class WeatherMonitorService:
     """氣象監控服務"""
@@ -703,7 +692,8 @@ class WeatherMonitorService:
         
         # 3. 生成圖表
         print(f"\n📈 步驟 3: 生成氣象趨勢圖 (針對 {len([r for r in risk_assessments if r.risk_level >= 2])} 個高風險港口)...")
-        generated_charts = self._generate_charts(risk_assessments)
+        # 修改：不再回傳 dict，而是直接更新 assessment 物件內部
+        self._generate_charts(risk_assessments)
         
         # 4. 發送 Teams 通知
         teams_sent = False
@@ -724,7 +714,7 @@ class WeatherMonitorService:
         email_sent = False
         try:
             email_sent = self.email_notifier.send_trigger_email(
-                report_data, report_html, generated_charts
+                report_data, report_html, None
             )
         except Exception as e:
             print(f"⚠️ 發信過程發生異常: {e}")
@@ -732,12 +722,10 @@ class WeatherMonitorService:
         
         report_data['email_sent'] = email_sent
         report_data['teams_sent'] = teams_sent
-        report_data['charts_generated'] = len(generated_charts)
         
         print("\n" + "=" * 80)
         print("✅ 每日監控執行完成")
         print(f"   - 風險港口: {len(risk_assessments)}")
-        print(f"   - 圖表生成: {len(generated_charts)}")
         print(f"   - Teams 通知: {'✅' if teams_sent else '❌'}")
         print(f"   - Email 發送: {'✅' if email_sent else '❌'}")
         print("=" * 80)
@@ -775,12 +763,11 @@ class WeatherMonitorService:
         assessments.sort(key=lambda x: x.risk_level, reverse=True)
         return assessments
     
-    def _generate_charts(self, assessments: List[RiskAssessment]) -> Dict[str, str]:
-        """生成圖表"""
-        generated_charts = {}
+    def _generate_charts(self, assessments: List[RiskAssessment]):
+        """生成圖表並將 Base64 存入 assessment"""
         
         # 優先處理高風險港口
-        chart_targets = [r for r in assessments if r.risk_level >= 0]
+        chart_targets = [r for r in assessments if r.risk_level >= 2]
         
         # 如果高風險港口少，補充部分 Caution 港口
         if len(chart_targets) < 5:
@@ -789,25 +776,19 @@ class WeatherMonitorService:
         
         for assessment in chart_targets:
             # 風速圖
-            wind_path = self.chart_generator.generate_wind_chart(
+            b64_wind = self.chart_generator.generate_wind_chart(
                 assessment, assessment.port_code
             )
-            if wind_path:
-                cid = f"wind_{assessment.port_code}"
-                generated_charts[cid] = wind_path
-                assessment.chart_cids.append(cid)
+            if b64_wind:
+                assessment.chart_base64_list.append(b64_wind)
             
             # 浪高圖 (只在有高浪風險時生成)
             if assessment.max_wave >= RISK_THRESHOLDS['wave_caution']:
-                wave_path = self.chart_generator.generate_wave_chart(
+                b64_wave = self.chart_generator.generate_wave_chart(
                     assessment, assessment.port_code
                 )
-                if wave_path:
-                    cid = f"wave_{assessment.port_code}"
-                    generated_charts[cid] = wave_path
-                    assessment.chart_cids.append(cid)
-        
-        return generated_charts
+                if b64_wave:
+                    assessment.chart_base64_list.append(b64_wave)
     
     def _generate_data_report(self, stats, assessments, teams_sent):
         """生成 JSON 報告"""
@@ -828,9 +809,8 @@ class WeatherMonitorService:
         }
     
     def _generate_html_report(self, assessments: List[RiskAssessment]) -> str:
-        """生成 HTML 格式的精美報告 (整合 File 1 美感與 File 2 功能)"""
+        """生成 HTML 格式的精美報告"""
         
-        # 定義字型堆疊：微軟正黑體 > Segoe UI > Arial
         font_style = "font-family: 'Microsoft JhengHei', '微軟正黑體', 'Segoe UI', Arial, sans-serif;"
         
         # 時間計算
@@ -852,7 +832,7 @@ class WeatherMonitorService:
         for a in assessments:
             risk_groups[a.risk_level].append(a)
 
-        # Email Header (完全套用 File 1 風格)
+        # Email Header
         html = f"""
         <html>
         <body style="margin: 0; padding: 0; background-color: #f4f4f4; {font_style}">
@@ -924,8 +904,6 @@ class WeatherMonitorService:
                 wind_val_style = "color: #D9534F; font-weight: bold; font-size: 15px;" if p.max_wind_kts >= 30 else "font-weight: bold;"
                 wave_val_style = "color: #D9534F; font-weight: bold; font-size: 15px;" if p.max_wave >= 3.0 else "font-weight: bold;"
                 
-                # 處理時間顯示
-                # 嘗試安全擷取 MM-DD HH:MM 格式，若格式不符則顯示原字串
                 try:
                     w_utc = p.max_wind_time_utc[5:] if len(p.max_wind_time_utc) > 5 else p.max_wind_time_utc
                     w_lct = p.max_wind_time_lct.split(' ')[1] if ' ' in p.max_wind_time_lct else p.max_wind_time_lct
@@ -938,12 +916,13 @@ class WeatherMonitorService:
                     g_utc, g_lct = p.max_gust_time_utc, p.max_gust_time_lct
                     v_utc, v_lct = p.max_wave_time_utc, p.max_wave_time_lct
 
-                # 準備圖表 HTML (若有圖表，將顯示在獨立的列)
+                # 準備圖表 HTML (使用 Base64)
                 chart_row = ""
-                if p.chart_cids:
+                if p.chart_base64_list:
                     chart_imgs = ""
-                    for cid in p.chart_cids:
-                        chart_imgs += f'<img src="cid:{cid}" style="max-width: 100%; height: auto; border: 1px solid #eee; border-radius: 4px; margin-top: 10px;">'
+                    for b64 in p.chart_base64_list:
+                        # 這裡使用 data:image/png;base64, 來直接顯示圖片
+                        chart_imgs += f'<img src="data:image/png;base64,{b64}" style="max-width: 100%; height: auto; border: 1px solid #eee; border-radius: 4px; margin-top: 10px;">'
                     
                     chart_row = f"""
                     <tr style="background-color: {row_bg};">
@@ -953,6 +932,7 @@ class WeatherMonitorService:
                         </td>
                     </tr>
                     """
+                
                 wind_style = "color: #D9534F; font-weight: 700;" if p.max_wind_kts >= 25 else "color: #333; font-weight: 600;"
                 gust_style = "color: #D9534F; font-weight: 700;" if p.max_gust_kts >= 35 else "color: #333; font-weight: 600;"
                 wave_style = "color: #D9534F; font-weight: 700;" if p.max_wave >= 3.0 else "color: #333; font-weight: 600;"
