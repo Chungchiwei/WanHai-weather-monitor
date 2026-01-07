@@ -808,164 +808,189 @@ class WeatherMonitorService:
         }
     
     def _generate_html_report(self, assessments: List[RiskAssessment]) -> str:
-        """生成 HTML 報告"""
+        """生成 HTML 格式的精美報告 (整合 File 1 美感與 File 2 功能)"""
+        
+        # 定義字型堆疊：微軟正黑體 > Segoe UI > Arial
         font_style = "font-family: 'Microsoft JhengHei', '微軟正黑體', 'Segoe UI', Arial, sans-serif;"
         
-        html = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WHL Port Weather Risk Report</title>
-</head>
-<body style="margin:0; padding:0; background-color:#f4f4f4; {font_style}">
-    <div style="max-width:800px; margin:20px auto; background-color:#ffffff; border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
-        
-        <!-- Header -->
-        <div style="background: linear-gradient(135deg, #004B97 0%, #0066CC 100%); color:white; padding:30px;">
-            <h2 style="margin:0; font-size:24px;">⛴️ WHL Port Weather Risk Monitor</h2>
-            <div style="margin-top:10px; font-size:13px; color:#B3D9FF;">
-                📅 Report Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC
-            </div>
-        </div>
-        
-        <!-- Content -->
-        <div style="padding:30px;">
-        """
-        
+        # 時間計算
+        utc_now = datetime.now(timezone.utc)
+        now_str_UTC = utc_now.strftime('%Y-%m-%d %H:%M')
+        lt_now = utc_now + timedelta(hours=8)
+        now_str_LT = lt_now.strftime('%Y-%m-%d %H:%M')
+
+        # 若無風險的顯示
         if not assessments:
-            html += """
-            <div style="background-color:#E8F5E9; border-left:5px solid #4CAF50; padding:20px; border-radius:5px;">
-                <h3 style="margin:0 0 10px 0; color:#2E7D32;">🟢 System Status: All Safe</h3>
-                <p style="margin:0; color:#555;">未來 48 小時內所有靠泊港口均處於安全範圍。</p>
-            </div>
-            """
-        else:
-            # 風險摘要
-            danger_count = len([a for a in assessments if a.risk_level == 3])
-            warning_count = len([a for a in assessments if a.risk_level == 2])
-            caution_count = len([a for a in assessments if a.risk_level == 1])
-            
-            html += f"""
-            <div style="background-color:#FFF3E0; border-left:5px solid #FF9800; padding:20px; margin-bottom:25px; border-radius:5px;">
-                <h3 style="margin:0 0 15px 0; color:#E65100;">📊 Risk Summary</h3>
-                <div style="display:flex; gap:15px; flex-wrap:wrap;">
-                    <div style="flex:1; min-width:150px; background:#FFEBEE; padding:15px; border-radius:5px; text-align:center;">
-                        <div style="font-size:28px; font-weight:bold; color:#D32F2F;">{danger_count}</div>
-                        <div style="font-size:12px; color:#666; margin-top:5px;">🔴 DANGER</div>
-                    </div>
-                    <div style="flex:1; min-width:150px; background:#FFF3E0; padding:15px; border-radius:5px; text-align:center;">
-                        <div style="font-size:28px; font-weight:bold; color:#F57C00;">{warning_count}</div>
-                        <div style="font-size:12px; color:#666; margin-top:5px;">🟠 WARNING</div>
-                    </div>
-                    <div style="flex:1; min-width:150px; background:#E3F2FD; padding:15px; border-radius:5px; text-align:center;">
-                        <div style="font-size:28px; font-weight:bold; color:#1976D2;">{caution_count}</div>
-                        <div style="font-size:12px; color:#666; margin-top:5px;">🟡 CAUTION</div>
-                    </div>
-                </div>
+            return f"""
+            <div style="{font_style} color: #2E7D32; padding: 20px; border: 1px solid #4CAF50; background-color: #E8F5E9; border-radius: 5px;">
+                <h3 style="margin-top: 0;">🟢 System Status: Safety</h3>
+                <p>未來48Hrs內所有靠泊港口均處於安全範圍 (All ports are within safe limits).</p>
             </div>
             """
             
-            # 風險分組
-            risk_groups = {3: [], 2: [], 1: []}
-            for a in assessments:
-                risk_groups[a.risk_level].append(a)
-            
-            styles = {
-                3: {'color': '#D32F2F', 'bg': '#FFEBEE', 'title': '🔴 DANGER PORTS', 'border': '#EF5350'},
-                2: {'color': '#F57C00', 'bg': '#FFF3E0', 'title': '🟠 WARNING PORTS', 'border': '#FF9800'},
-                1: {'color': '#1976D2', 'bg': '#E3F2FD', 'title': '🟡 CAUTION PORTS', 'border': '#42A5F5'}
-            }
-            
-            # 詳細列表
-            for level in [3, 2, 1]:
-                ports = risk_groups[level]
-                if not ports:
-                    continue
-                
-                style = styles[level]
-                
-                html += f"""
-                <div style="margin-top:30px;">
-                    <div style="background-color:{style['color']}; color:white; padding:10px 15px; border-radius:5px 5px 0 0; font-weight:bold; font-size:16px;">
-                        {style['title']} ({len(ports)})
-                    </div>
-                """
-                
-                for p in ports:
-                    # 圖表 HTML
-                    chart_html = ""
-                    if p.chart_cids:
-                        chart_html = '<div style="margin-top:15px; background:#f9f9f9; padding:10px; border-radius:5px;">'
-                        for cid in p.chart_cids:
-                            chart_html += f'<img src="cid:{cid}" style="width:100%; max-width:700px; height:auto; margin:5px 0; border:1px solid #ddd; border-radius:4px; display:block;">'
-                        chart_html += '</div>'
-                    
-                    html += f"""
-                    <div style="border:1px solid {style['border']}; border-top:none; padding:20px; background:white;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                            <div>
-                                <span style="font-size:18px; font-weight:bold; color:{style['color']};">{p.port_code}</span>
-                                <span style="font-size:16px; margin-left:10px;">{p.port_name}</span>
-                            </div>
-                            <span style="background-color:#f0f0f0; padding:5px 10px; border-radius:3px; font-size:12px; color:#666;">
-                                📍 {p.country}
-                            </span>
-                        </div>
-                        
-                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:15px; margin-bottom:15px;">
-                            <div style="background:#f8f9fa; padding:12px; border-radius:5px;">
-                                <div style="font-size:11px; color:#666; margin-bottom:5px;">💨 WIND SPEED</div>
-                                <div style="font-size:20px; font-weight:bold; color:{style['color']};">{p.max_wind_kts:.0f} kts</div>
-                                <div style="font-size:11px; color:#999;">Beaufort {p.max_wind_bft}</div>
-                            </div>
-                            <div style="background:#f8f9fa; padding:12px; border-radius:5px;">
-                                <div style="font-size:11px; color:#666; margin-bottom:5px;">💨 GUST</div>
-                                <div style="font-size:20px; font-weight:bold; color:{style['color']};">{p.max_gust_kts:.0f} kts</div>
-                                <div style="font-size:11px; color:#999;">Beaufort {p.max_gust_bft}</div>
-                            </div>
-                            <div style="background:#f8f9fa; padding:12px; border-radius:5px;">
-                                <div style="font-size:11px; color:#666; margin-bottom:5px;">🌊 WAVE HEIGHT</div>
-                                <div style="font-size:20px; font-weight:bold; color:#2196F3;">{p.max_wave:.1f} m</div>
-                                <div style="font-size:11px; color:#999;">Significant</div>
-                            </div>
-                        </div>
-                        
-                        <div style="background-color:{style['bg']}; padding:12px; border-radius:5px; border-left:3px solid {style['color']};">
-                            <div style="font-size:12px; font-weight:bold; color:{style['color']}; margin-bottom:5px;">⚠️ Risk Factors:</div>
-                            <div style="font-size:13px; color:#555;">{', '.join(p.risk_factors)}</div>
-                        </div>
-                        
-                        {chart_html}
-                        
-                        <div style="margin-top:15px; padding-top:10px; border-top:1px solid #eee; font-size:11px; color:#999;">
-                            <div>🕐 Max Wind Time: {p.max_wind_time_utc} UTC / {p.max_wind_time_lct} LCT</div>
-                            <div>📡 Forecast Issued: {p.issued_time}</div>
-                        </div>
-                    </div>
-                    """
-                
-                html += "</div>"  # 結束該風險等級區塊
+        risk_groups = {3: [], 2: [], 1: []}
+        for a in assessments:
+            risk_groups[a.risk_level].append(a)
+
+        # Email Header (完全套用 File 1 風格)
+        html = f"""
+        <html>
+        <body style="margin: 0; padding: 0; background-color: #f4f4f4; {font_style}">
+            <div style="max-width: 800px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
         
+            <div style="background-color: #004B97; color: white; padding: 24px 30px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <h2 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.5px;">
+                        ⛴️ WHL Port Weather Risk Monitor
+                    </h2>
+                </div>
+                <div style="margin-top: 8px; font-size: 13px; color: #a3cbe8; font-weight: 500;">
+                    📅 UPDATED: {now_str_LT} (TPE) <span style="opacity: 0.5;">|</span> {now_str_UTC} (UTC)
+                </div>
+            </div>
+
+            <div style="padding: 30px;">
+            
+                <div style="background-color: #fff5f5; border-left: 5px solid #D9534F; padding: 20px; border-radius: 4px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 10px 0; font-size: 16px; color: #D9534F; font-weight: bold;">
+                        📊 未來 48Hrs 風險港口監控摘要
+                    </h3>
+                    <div style="font-size: 15px; color: #333; line-height: 1.6;">
+                        目前共有 <span style="font-size: 24px; font-weight: bold; color: #D9534F; vertical-align: middle; margin: 0 5px;">{len(assessments)}</span> 個港口具有潛在氣象風險。
+                    </div>
+                </div>
+
+                <div style="font-size: 14px; color: #555; background-color: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid #eee;">
+                    <span style="font-size: 16px;">⚠️</span> 
+                    請船管 PIC留意下列港口動態並通知業管屬輪做好相關<span style="background-color: red; color: white; padding: 3px 0px; border-radius: 0px; font-weight: bold; font-size: 12px;">風險評估措施。</span> 
+                </div>
+        """
+
+        # 風險等級樣式定義
+        styles = {
+            3: {'color': '#D9534F', 'bg': '#FEF2F2', 'title': '🔴 POTENTIAL DANGER PORT (條件: 風速 > 8級 / 陣風 > 9級 / 浪高 > 4.0 m)', 'border': '#D9534F', 'header_bg': '#FEE2E2'},
+            2: {'color': '#F59E0B', 'bg': '#FFFBEB', 'title': '🟠 POTENTIAL WARNING PORT (條件: 風速 > 7級 / 陣風 > 8級 / 浪高 > 3.5 m)', 'border': '#F59E0B', 'header_bg': '#FEF3C7'},
+            1: {'color': '#0EA5E9', 'bg': '#F0F9FF', 'title': '🟡 POTENTIAL CAUTION PORT (條件: 風速 > 6級 / 陣風 > 7級 / 浪高 > 2.5 m)', 'border': '#0EA5E9', 'header_bg': '#E0F2FE'}
+        }
+
+        for level in [3, 2, 1]:
+            ports = risk_groups[level]
+            if not ports:
+                continue
+            
+            style = styles[level]
+            
+            # 該等級的標題
+            html += f"""
+            <div style="margin-top: 30px; margin-bottom: 12px;">
+                <span style="background-color: {style['color']}; color: white; padding: 6px 12px; border-radius: 4px; font-weight: bold; font-size: 14px; {font_style}">
+                    {style['title']}
+                </span>
+            </div>
+            
+            <table style="width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;">
+                <thead>
+                    <tr style="background-color: {style['header_bg']}; color: #4b5563; text-align: left;">
+                        <th style="padding: 12px 15px; border-bottom: 2px solid {style['border']}; width: 25%; {font_style}">港口名稱(Port Name)</th>
+                        <th style="padding: 12px 15px; border-bottom: 2px solid {style['border']}; width: 35%; {font_style}">潛在風險(Potential Crisis) (Met Data)</th>
+                        <th style="padding: 12px 15px; border-bottom: 2px solid {style['border']}; {font_style}">高風險時段(High-risk periods) & Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+            """
+            
+            for index, p in enumerate(ports):
+                row_bg = "#ffffff" if index % 2 == 0 else "#f9fafb"
+                wind_val_style = "color: #D9534F; font-weight: bold; font-size: 15px;" if p.max_wind_kts >= 30 else "font-weight: bold;"
+                wave_val_style = "color: #D9534F; font-weight: bold; font-size: 15px;" if p.max_wave >= 3.0 else "font-weight: bold;"
+                
+                # 處理時間顯示
+                # 嘗試安全擷取 MM-DD HH:MM 格式，若格式不符則顯示原字串
+                try:
+                    w_utc = p.max_wind_time_utc[5:] if len(p.max_wind_time_utc) > 5 else p.max_wind_time_utc
+                    w_lct = p.max_wind_time_lct.split(' ')[1] if ' ' in p.max_wind_time_lct else p.max_wind_time_lct
+                    g_utc = p.max_gust_time_utc[5:] if len(p.max_gust_time_utc) > 5 else p.max_gust_time_utc
+                    g_lct = p.max_gust_time_lct.split(' ')[1] if ' ' in p.max_gust_time_lct else p.max_gust_time_lct
+                    v_utc = p.max_wave_time_utc[5:] if len(p.max_wave_time_utc) > 5 else p.max_wave_time_utc
+                    v_lct = p.max_wave_time_lct.split(' ')[1] if ' ' in p.max_wave_time_lct else p.max_wave_time_lct
+                except:
+                    w_utc, w_lct = p.max_wind_time_utc, p.max_wind_time_lct
+                    g_utc, g_lct = p.max_gust_time_utc, p.max_gust_time_lct
+                    v_utc, v_lct = p.max_wave_time_utc, p.max_wave_time_lct
+
+                # 準備圖表 HTML (若有圖表，將顯示在獨立的列)
+                chart_row = ""
+                if p.chart_cids:
+                    chart_imgs = ""
+                    for cid in p.chart_cids:
+                        chart_imgs += f'<img src="cid:{cid}" style="max-width: 100%; height: auto; border: 1px solid #eee; border-radius: 4px; margin-top: 10px;">'
+                    
+                    chart_row = f"""
+                    <tr style="background-color: {row_bg};">
+                        <td colspan="3" style="padding: 0 15px 15px 15px; border-bottom: 1px solid #e5e7eb;">
+                            <div style="font-size: 20px; color: #666; margin-bottom: 10px;">📈 未來24Hrs風力趨勢圖:</div>
+                            {chart_imgs}
+                        </td>
+                    </tr>
+                    """
+
+                html += f"""
+                <tr style="background-color: {row_bg};">
+                    <td style="padding: 12px 15px; border-bottom: {('1px solid #e5e7eb' if not p.chart_cids else 'none')}; vertical-align: top; {font_style}">
+                        <div style="font-size: 16px; font-weight: bold; color: #1f2937;">{p.port_code}</div>
+                        <div style="margin-top: 2px; color: #374151;">{p.port_name}</div>
+                        <div style="margin-top: 4px; color: #6b7280; font-size: 12px;">📍 {p.country}</div>
+                        <div style="margin-top: 8px; font-size: 11px; color: #999;">📡 Issued: {p.issued_time}</div>
+                    </td>
+                    <td style="padding: 12px 15px; border-bottom: {('1px solid #e5e7eb' if not p.chart_cids else 'none')}; vertical-align: top; {font_style}">
+                        <div style="margin-bottom: 6px;">
+                            <span style="color: #6b7280; width: 45px; display: inline-block;">Wind:</span> 
+                            <span style="{wind_val_style}">{p.max_wind_kts:.0f} kts</span> <span style="font-size:12px; color:#666;">(Bf {p.max_wind_bft})</span>
+                        </div>
+                        <div style="margin-bottom: 6px;">
+                            <span style="color: #6b7280; width: 45px; display: inline-block;">Gust:</span> 
+                            <span style="font-weight: bold;">{p.max_gust_kts:.0f} kts</span> <span style="font-size:12px; color:#666;">(Bf {p.max_gust_bft})</span>
+                        </div>
+                        <div>
+                            <span style="color: #6b7280; width: 45px; display: inline-block;">Wave:</span> 
+                            <span style="{wave_val_style}">{p.max_wave:.1f} m</span>
+                        </div>
+                    </td>
+                    <td style="padding: 12px 15px; border-bottom: {('1px solid #e5e7eb' if not p.chart_cids else 'none')}; vertical-align: top; {font_style}">
+                        <div style="margin-bottom: 6px; color: #b91c1c; background-color: #fef2f2; display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 13px;">
+                            ⚠️ {', '.join(p.risk_factors)}
+                        </div>
+                        
+                        <div style="color: #4b5563; font-size: 13px; margin-top: 4px; line-height: 1.4;">
+                            <span style="display:inline-block; width:16px;">💨</span> 
+                            預估最高風速發生時間: <b>{w_utc}</b> (UTC) <span style="color:#999">/</span> {w_lct} (LT)
+                        </div>
+                        
+                        <div style="color: #4b5563; font-size: 13px; margin-top: 4px; line-height: 1.4;">
+                            <span style="display:inline-block; width:16px;">💨</span> 
+                            預估最高陣風發生時間: <b>{g_utc}</b> (UTC) <span style="color:#999">/</span> {g_lct} (LT)
+                        </div>
+                        
+                        <div style="color: #4b5563; font-size: 13px; margin-top: 4px; line-height: 1.4;">
+                            <span style="display:inline-block; width:16px;">🌊</span> 
+                           預估最大浪高發生時間: <b>{v_utc}</b> (UTC) <span style="color:#999">/</span> {v_lct} (LT)
+                        </div>
+                    </td>
+                </tr>
+                {chart_row}
+                """
+            
+            html += "</tbody></table>"
+
         # Footer
-        html += """
-            </div>
-            
-            <!-- Footer -->
-            <div style="background-color:#f8f9fa; padding:20px; text-align:center; border-top:1px solid #e0e0e0;">
-                <div style="font-size:12px; color:#666; margin-bottom:5px;">
-                    Wan Hai Lines Ltd. | Marine Technology Division
+        html += f"""
+                <div style="margin-top: 40px; border-top: 1px solid #e5e7eb; padding-top: 20px; font-size: 15px; color: #9ca3af; text-align: center; {font_style}">
+                    <p style="margin: 0;">Wan Hai Lines Ltd. | Marine Technology Division</p>
+                    <p style="margin: 0;color: #004B97; font-weight:bold;">Present by Fleet Risk Department</p>
+                    <p style="margin: 5px 0 0 0; font-size: 12px;">Data Source: Weathernews Inc. (WNI) | Automated System</p>
                 </div>
-                <div style="font-size:11px; color:#999;">
-                    Automated Weather Monitoring System | Powered by WNI Weathernews
-                </div>
-            </div>
-            
-        </div>
-    </div>
-</body>
-</html>
+            </div> </div> </body>
+        </html>
         """
         
         return html
