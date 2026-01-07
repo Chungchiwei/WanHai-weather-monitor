@@ -73,11 +73,6 @@ RISK_THRESHOLDS = {
     'wave_danger': 4.0,
 }
 
-# 7 設定字型為微軟正黑體 (Windows 內建)
-plt.rcParams['font.sans-serif'] = ['Microsoft JhengHei'] 
-# 解決負號 '-' 顯示成方塊的問題
-plt.rcParams['axes.unicode_minus'] = False
-
 @dataclass
 class RiskAssessment:
     """風險評估結果資料結構"""
@@ -179,19 +174,8 @@ class ChartGenerator:
                             interpolate=True, # 重要：自動計算交界點，避免圖形斷裂
                             color='#ff0ecb',  # 粉紅色 (你的色碼)
                             alpha=0.3,        # 透明度建議調高一點，因為是疊加
-                            label='Risk Area'
-                        )
-            ax.fill_between(
-                            df['time'], 
-                            df['wind_gust'], 
-                            y2=0, # 設定底部，或者設為 caution_limit 只塗超出部分
-                            where=(df['wind_gust'] > RISK_THRESHOLDS['gust_caution']), # 條件：風速 > 閾值
-                            interpolate=True, # 重要：自動計算交界點，避免圖形斷裂
-                            color='#ff0ecb',  # 粉紅色 (你的色碼)
-                            alpha=0.3,        # 透明度建議調高一點，因為是疊加
-                            label='Risk Area'
-                        )
-                        
+                            label='Hight Risk period'
+                        )                    
             # 閾值線
             ax.axhline(RISK_THRESHOLDS['wind_danger'], color="#F1145E", 
                       linestyle=':', linewidth=1.5, label=f'Danger ({RISK_THRESHOLDS["wind_danger"]}kts)')   
@@ -246,18 +230,26 @@ class ChartGenerator:
             ax.plot(df['time'], df['wave_height'], color='#2ca02c', 
                    label='Sig. Wave Height (m)', linewidth=2, marker='o', markersize=3)
             ax.fill_between(df['time'], df['wave_height'], alpha=0.2, color='#2ca02c')
-            
+            ax.fill_between(
+                            df['time'], 
+                            df['wave_height'], 
+                            y2=0, # 設定底部，或者設為 caution_limit 只塗超出部分
+                            where=(df['wave_height'] > RISK_THRESHOLDS['wave_caution']), # 條件：浪高 > 閾值
+                            interpolate=True, # 重要：自動計算交界點，避免圖形斷裂
+                            color='#ff0ecb',  # 粉紅色 (你的色碼)
+                            alpha=0.3,        # 透明度建議調高一點，因為是疊加
+                            label='Risk Area'
+                        )           
             # 閾值線
-            ax.axhline(RISK_THRESHOLDS['wave_caution'], color='#F59E0B', 
+            ax.axhline(RISK_THRESHOLDS['wave_caution'], color="#FCF700EF", 
                       linestyle=':', linewidth=1.5, label=f'Caution ({RISK_THRESHOLDS["wave_caution"]}m)')
-            ax.axhline(RISK_THRESHOLDS['wave_warning'], color='#D9534F', 
+            ax.axhline(RISK_THRESHOLDS['wave_warning'], color="#FC9A08", 
                       linestyle='--', linewidth=1.5, label=f'Warning ({RISK_THRESHOLDS["wave_warning"]}m)')
-            ax.axhline(RISK_THRESHOLDS['wave_danger'], color='#C12E2A', 
+            ax.axhline(RISK_THRESHOLDS['wave_danger'], color="#FC0505", 
                       linestyle=':', linewidth=1.5, label=f'Danger ({RISK_THRESHOLDS["wave_danger"]}m)')    
             
             # 標題與標籤
-            ax.set_title(f'{assessment.port_name} ({port_code}) - 未來48Hrs 浪高趨勢圖', 
-                        fontsize=13, fontweight='bold', pad=15)
+            ax.set_title(f"{assessment.port_name} - Wave Height Trend (48 Hrs)", fontsize=14, fontweight='bold', pad=15)
             ax.set_ylabel('Height (m)', fontsize=11)
             ax.set_xlabel('Date / Time (UTC)', fontsize=11)
             ax.legend(loc='upper left', frameon=True, fontsize=9)
@@ -956,7 +948,7 @@ class WeatherMonitorService:
                     chart_row = f"""
                     <tr style="background-color: {row_bg};">
                         <td colspan="3" style="padding: 0 15px 15px 15px; border-bottom: 1px solid #e5e7eb;">
-                            <div style="font-size: 20px; color: #666; margin-bottom: 10px;">📈 Wind Speed & Gust Trend (48 Hrs):</div>
+                            <div style="font-size: 20px; color: #666; margin-bottom: 10px;">Wind Speed & Gust Trend (48 Hrs):</div>
                             {chart_imgs}
                         </td>
                     </tr>
@@ -964,29 +956,32 @@ class WeatherMonitorService:
                 wind_style = "color: #D9534F; font-weight: 700;" if p.max_wind_kts >= 25 else "color: #333; font-weight: 600;"
                 gust_style = "color: #D9534F; font-weight: 700;" if p.max_gust_kts >= 35 else "color: #333; font-weight: 600;"
                 wave_style = "color: #D9534F; font-weight: 700;" if p.max_wave >= 3.0 else "color: #333; font-weight: 600;"
+                
                 html += f"""
-            <tr style="background-color: {row_bg}; border-bottom: 1px solid #e0e0e0;">
-                <td style="padding: 15px; vertical-align: top; width: 25%; {font_style}">
-                    <div style="font-size: 20px; font-weight: 800; color: #004B97; letter-spacing: 1px;">{p.port_code}</div>
-                    <div style="font-size: 14px; font-weight: 600; color: #444; margin-top: 4px;">{p.port_name}</div>
-                    <div style="margin-top: 8px; font-size: 12px; color: #888; display: flex; align-items: center;">
-                        <span style="margin-right: 8px;">📍 {p.country}</span>
+                    <tr style="background-color: {row_bg}; border-bottom: 1px solid #e0e0e0;">
+                    <td style="padding: 15px; vertical-align: top; width: 25%; {font_style}">
+                    <div style="font-size: 16px; font-weight: 800; color: #004B97; letter-spacing: 1px;">{p.port_code}</div>
+                    <div style="font-size: 12px; font-weight: 600; color: #444; margin-top: 4px;">{p.port_name}</div>
+                    <div style="margin-top: 0px; font-size: 10px; color: #888; display: flex; align-items: center;">
+                    <span style="margin-right: 8px;">📍 {p.country}</span>
                     </div>
-                    <div style="font-size: 11px; color: #aaa; margin-top: 4px;">📡 {p.issued_time}</div>
+                    <div style="font-size: 11px; color: #aaa; margin-top: 4px;">
+                        📡 {p.issued_time[4:6]}/{p.issued_time[6:8]} {p.issued_time[9:11]}:{p.issued_time[11:13]}(UTC)
+                    </div>
                 </td>
 
                 <td style="padding: 15px; vertical-align: top; width: 30%; {font_style}">
                     <table style="width: 100%; border-collapse: collapse;">
                         <tr>
-                            <td style="padding-bottom: 8px; color: #666; font-size: 13px; width: 50px;">Wind</td>
+                            <td style="padding-bottom: 8px; color: #666; font-size: 13px; width: 50px;">未來48Hrs最大風速</td>
                             <td style="font-size: 16px; {wind_style}">{p.max_wind_kts:.0f} <span style="font-size:12px; font-weight:normal; color:#666;">kts</span></td>
                         </tr>
                         <tr>
-                            <td style="padding-bottom: 8px; color: #666; font-size: 13px;">Gust</td>
+                            <td style="padding-bottom: 8px; color: #666; font-size: 13px;">未來48Hrs最大陣風</td>
                             <td style="font-size: 16px; {gust_style}">{p.max_gust_kts:.0f} <span style="font-size:12px; font-weight:normal; color:#666;">kts</span></td>
                         </tr>
                         <tr>
-                            <td style="color: #666; font-size: 13px;">Wave</td>
+                            <td style="color: #666; font-size: 13px;">未來48Hrs最大浪高</td>
                             <td style="font-size: 16px; {wave_style}">{p.max_wave:.1f} <span style="font-size:12px; font-weight:normal; color:#666;">m</span></td>
                         </tr>
                     </table>
@@ -995,22 +990,29 @@ class WeatherMonitorService:
                 <td style="padding: 15px; vertical-align: top; {font_style}">
                     <div style="margin-bottom: 10px;">
                          <span style="background-color: #FEF2F2; color: #D9534F; border: 1px solid #FCA5A5; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; display: inline-block;">
-                            ⚠️ {', '.join(p.risk_factors)}
+                            淺在危險因子: {', '.join(p.risk_factors)}
                         </span>
                     </div>
                     
                     <div style="background-color: #f8f9fa; border-radius: 6px; padding: 8px 12px; border: 1px solid #eee;">
                         
                         <div style="display: flex; align-items: center; margin-bottom: 6px; font-size: 13px;">
-                            <span style="font-size: 16px; margin-right: 8px;" title="Max Wind Time">💨</span>
+                            <span style="font-size: 16px; margin-right: 8px;" title="Max Wind Time">💨預估最大風速</span>
                             <div style="line-height: 1.2;">
                                 <div style="font-weight: bold; color: #333;">{w_lct} (LT)</div>
                                 <div style="font-size: 11px; color: #888;">{w_utc} (UTC)</div>
                             </div>
                         </div>
+                            <div style="display: flex; align-items: center; margin-bottom: 6px; font-size: 13px;">
+                            <span style="font-size: 16px; margin-right: 8px;" title="Max Gust Time">💨預估最大陣風</span>
+                            <div style="line-height: 1.2;">
+                                <div style="font-weight: bold; color: #333;">{g_lct} (LT)</div>
+                                <div style="font-size: 11px; color: #888;">{g_utc} (UTC)</div>
+                            </div>
+                        </div>
 
                         <div style="display: flex; align-items: center; font-size: 13px;">
-                            <span style="font-size: 16px; margin-right: 8px;" title="Max Wave Time">🌊</span>
+                            <span style="font-size: 16px; margin-right: 8px;" title="Max Wave Time">🌊預估最大浪高</span>
                             <div style="line-height: 1.2;">
                                 <div style="font-weight: bold; color: #333;">{v_lct} (LT)</div>
                                 <div style="font-size: 11px; color: #888;">{v_utc} (UTC)</div>
