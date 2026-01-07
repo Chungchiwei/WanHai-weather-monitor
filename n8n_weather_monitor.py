@@ -170,7 +170,7 @@ class ChartGenerator:
                             df['time'], 
                             df['wind_speed'], 
                             y2=0, # 設定底部，或者設為 caution_limit 只塗超出部分
-                            where=(df['wind_speed'] > RISK_THRESHOLDS['wind_caution']), # 條件：風速 > 閾值
+                            where=(df['wind_speed'] >= RISK_THRESHOLDS['wind_caution']), # 條件：風速 > 閾值
                             interpolate=True, # 重要：自動計算交界點，避免圖形斷裂
                             color='#ff0ecb',  # 粉紅色 (你的色碼)
                             alpha=0.3,        # 透明度建議調高一點，因為是疊加
