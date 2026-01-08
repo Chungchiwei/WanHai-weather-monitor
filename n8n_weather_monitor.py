@@ -1,8 +1,7 @@
 # n8n_weather_monitor.py
 """
-N8N 自動化氣象監控腳本 (含圖表生成功能) - Base64 嵌入版
+N8N 自動化氣象監控腳本 (含圖表生成功能)
 用途：每天自動抓取港口天氣，分析高風險港口，生成趨勢圖，並發送到 Teams 與 Email
-修改重點：圖片改為 Base64 編碼直接嵌入 HTML，解決 Power Automate 轉寄掉圖問題。
 """
 
 import os
@@ -11,12 +10,10 @@ import json
 import traceback
 import sqlite3
 import smtplib
-import io  # 新增
-import base64 # 新增
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict, field
-
+import matplotlib.pyplot as plt
 # 第三方套件
 import requests
 import pandas as pd
@@ -27,10 +24,11 @@ import matplotlib.dates as mdates
 from dotenv import load_dotenv
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-# from email.mime.image import MIMEImage # 已不需要
+from email.mime.image import MIMEImage
 
 # 載入環境變數
 load_dotenv()
+
 
 # ================= 自定義模組導入檢查 =================
 try:
@@ -75,6 +73,16 @@ RISK_THRESHOLDS = {
     'wave_danger': 4.0,
 }
 
+# 7.美化顏色
+COLORS = {
+    'wind': '#2563EB',      # 藍色 (風速)
+    'gust': '#DC2626',      # 紅色 (陣風)
+    'wave': '#0891B2',      # 青色 (浪高)
+    'danger': '#DC2626',    # 危險
+    'warning': '#F59E0B',   # 警告
+    'caution': '#FBBF24',   # 注意
+    'risk_area': '#FCA5A5'  # 風險區域
+}
 @dataclass
 class RiskAssessment:
     """風險評估結果資料結構"""
@@ -102,26 +110,24 @@ class RiskAssessment:
     longitude: float
     
     raw_records: Optional[List[WeatherRecord]] = None
-    # chart_cids 已移除，改用 Base64 列表
-    chart_base64_list: List[str] = field(default_factory=list)
+    chart_cids: List[str] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
-        # 移除不適合轉 JSON 的欄位
-        for key in ['raw_records', 'chart_base64_list']:
+        for key in ['raw_records', 'chart_cids']:
             d.pop(key, None)
         return d
 
 
-# ================= 繪圖模組 (修改版) =================
+# ================= 繪圖模組 =================
 
 class ChartGenerator:
-    """圖表生成器 - 支援 Base64 輸出"""
+    """圖表生成器"""
     
     def __init__(self, output_dir: str = CHART_OUTPUT_DIR):
         self.output_dir = output_dir
         
-        # 清空舊圖表 (仍保留存檔功能以便除錯)
+        # 清空舊圖表
         if os.path.exists(self.output_dir):
             for f in os.listdir(self.output_dir):
                 if f.endswith('.png'):
@@ -132,14 +138,28 @@ class ChartGenerator:
         
         os.makedirs(self.output_dir, exist_ok=True)
         
-        # 設定中文字體
+        # ✅ 修正：設定現代化中文字體
         try:
-            plt.rcParams['font.sans-serif'] = ['Microsoft JhengHei', 'Arial Unicode MS', 'DejaVu Sans', 'sans-serif']
-            plt.rcParams['axes.unicode_minus'] = False
-        except:
-            print("⚠️ 無法設定中文字體")
+            # Windows: 微軟正黑體 > 微軟雅黑
+            # macOS: PingFang TC > Heiti TC
+            # Linux: Noto Sans CJK TC
+            plt.rcParams['font.sans-serif'] = [
+                'Microsoft JhengHei',      # 微軟正黑體 (Windows)
+                'Microsoft YaHei',         # 微軟雅黑 (Windows 備用)
+                'PingFang TC',             # 蘋方-繁 (macOS)
+                'Heiti TC',                # 黑體-繁 (macOS 備用)
+                'Noto Sans CJK TC',        # 思源黑體 (Linux)
+                'Arial Unicode MS',        # 跨平台備用
+                'sans-serif'               # 系統預設
+            ]
+            plt.rcParams['axes.unicode_minus'] = False  # 修正負號顯示
+            plt.rcParams['font.size'] = 10              # 基礎字體大小
+            print("✅ 圖表字體設定完成")
+        except Exception as e:
+            print(f"⚠️ 字體設定警告: {e}")
 
     def _prepare_dataframe(self, records: List[WeatherRecord]) -> pd.DataFrame:
+        """將 WeatherRecord 列表轉換為 DataFrame"""
         data = []
         for r in records:
             data.append({
@@ -150,76 +170,73 @@ class ChartGenerator:
             })
         return pd.DataFrame(data)
 
-    def _fig_to_base64(self, fig) -> str:
-        """將 Matplotlib Figure 轉為 Base64 字串"""
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', bbox_inches='tight')
-        buf.seek(0)
-        img_str = base64.b64encode(buf.read()).decode('utf-8')
-        buf.close()
-        return img_str
-
     def generate_wind_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
-        """繪製風速趨勢圖，回傳 Base64 字串"""
+        """繪製風速趨勢圖"""
         if not assessment.raw_records:
             return None
             
         try:
             df = self._prepare_dataframe(assessment.raw_records)
             
-            plt.style.use('bmh')
-            fig, ax = plt.subplots(figsize=(10, 4.5))
+            # ✅ 使用更現代的風格
+            plt.style.use('seaborn-v0_8-darkgrid')  # 或 'bmh', 'ggplot'
+            fig, ax = plt.subplots(figsize=(12, 5))
             
-            # 繪製曲線
-            ax.plot(df['time'], df['wind_speed'], color='#1f77b4', 
-                   label='Wind Speed (kts)', linewidth=2, marker='o', markersize=3)
-            ax.plot(df['time'], df['wind_gust'], color='#ff7f0e', 
-                   linestyle='--', label='Gust (kts)', linewidth=1.5, marker='s', markersize=3)
+            # 繪製曲線 - 加粗線條
+            ax.plot(df['time'], df['wind_speed'], color='#2563EB', 
+                label='Wind Speed (kts)', linewidth=2.5, marker='o', markersize=4)
+            ax.plot(df['time'], df['wind_gust'], color='#DC2626', 
+                linestyle='--', label='Gust (kts)', linewidth=2, marker='s', markersize=4)
             
-            # 填充
-            ax.fill_between(df['time'], df['wind_speed'], alpha=0.2, color='#1f77b4')
+            # 填充區域
+            ax.fill_between(df['time'], df['wind_speed'], alpha=0.15, color='#2563EB')
             ax.fill_between(
-                            df['time'], 
-                            df['wind_speed'], 
-                            y2=0,
-                            where=(df['wind_speed'] >= RISK_THRESHOLDS['wind_caution']),
-                            interpolate=True,
-                            color='#ff0ecb',
-                            alpha=0.3,
-                            label='Hight Risk period'
-                        )                    
-            # 閾值線
-            ax.axhline(RISK_THRESHOLDS['wind_danger'], color="#F1145E", 
-                      linestyle=':', linewidth=1.5, label=f'Danger ({RISK_THRESHOLDS["wind_danger"]}kts)')   
-            ax.axhline(RISK_THRESHOLDS['wind_warning'], color="#EC7E00D8", 
-                      linestyle='--', linewidth=1.5, label=f'Warning ({RISK_THRESHOLDS["wind_warning"]}kts)')        
-            ax.axhline(RISK_THRESHOLDS['wind_caution'], color="#FFFB05DD", 
-                      linestyle=':', linewidth=1.5, label=f'Caution ({RISK_THRESHOLDS["wind_caution"]}kts)')
+                df['time'], 
+                df['wind_speed'], 
+                y2=0,
+                where=(df['wind_speed'] >= RISK_THRESHOLDS['wind_caution']),
+                interpolate=True,
+                color='#FCA5A5',
+                alpha=0.25,
+                label='High Risk Period'
+            )
             
-            # 標題與標籤
-            ax.set_title(f"{assessment.port_name} - Wind Speed & Gust Trend (48 Hrs)", fontsize=14, fontweight='bold', pad=15)
-            ax.set_ylabel('Speed (knots)', fontsize=11)
-            ax.set_xlabel('Date / Time (UTC)', fontsize=11)
-            ax.legend(loc='upper left', frameon=True, fontsize=9)
-            ax.grid(True, alpha=0.3)
+            # 閾值線 - 調整顏色和樣式
+            ax.axhline(RISK_THRESHOLDS['wind_danger'], color="#DC2626", 
+                    linestyle=':', linewidth=2, label=f'Danger ({RISK_THRESHOLDS["wind_danger"]} kts)', alpha=0.8)
+            ax.axhline(RISK_THRESHOLDS['wind_warning'], color="#F59E0B", 
+                    linestyle='--', linewidth=2, label=f'Warning ({RISK_THRESHOLDS["wind_warning"]} kts)', alpha=0.8)
+            ax.axhline(RISK_THRESHOLDS['wind_caution'], color="#FBBF24", 
+                    linestyle=':', linewidth=1.5, label=f'Caution ({RISK_THRESHOLDS["wind_caution"]} kts)', alpha=0.7)
+            
+            # ✅ 標題與標籤 - 使用更好的字體設定
+            ax.set_title(f"{assessment.port_name} ({port_code}) - Wind Speed & Gust Trend (48 Hrs)", 
+                        fontsize=15, fontweight='bold', pad=20, 
+                        fontfamily='Microsoft JhengHei')
+            ax.set_ylabel('Speed (knots)', fontsize=12, fontweight='600')
+            ax.set_xlabel('Date / Time (UTC)', fontsize=12, fontweight='600')
+            ax.legend(loc='upper left', frameon=True, fontsize=10, shadow=True, fancybox=True)
+            ax.grid(True, alpha=0.3, linestyle='--')
             
             # 日期格式
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %Hh'))
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
             ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
-            plt.xticks(rotation=15, ha='right', fontsize=9)
-            plt.yticks(fontsize=9)
+            plt.xticks(rotation=30, ha='right', fontsize=10)
+            plt.yticks(fontsize=10)
+            
+            # ✅ 設定 Y 軸範圍，讓圖表更美觀
+            y_max = max(df['wind_gust'].max(), df['wind_speed'].max()) * 1.1
+            ax.set_ylim(0, y_max)
+            
             plt.tight_layout()
             
-            # 1. 存檔 (保留做為紀錄)
+            # 存檔 - 提高 DPI
             filepath = os.path.join(self.output_dir, f"wind_{port_code}.png")
-            plt.savefig(filepath, dpi=100, bbox_inches='tight')
-            
-            # 2. 轉 Base64 (用於 Email)
-            base64_str = self._fig_to_base64(fig)
-            
+            plt.savefig(filepath, dpi=120, bbox_inches='tight', facecolor='white')
             plt.close(fig)
+            
             print(f"   ✅ 風速圖已生成: {filepath}")
-            return base64_str
+            return filepath
             
         except Exception as e:
             print(f"   ❌ 繪製風速圖失敗 {port_code}: {e}")
@@ -227,63 +244,71 @@ class ChartGenerator:
             return None
 
     def generate_wave_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
-        """繪製浪高趨勢圖，回傳 Base64 字串"""
+        """繪製浪高趨勢圖"""
         if not assessment.raw_records:
             return None
             
         try:
             df = self._prepare_dataframe(assessment.raw_records)
             
+            # 如果浪很小就不畫
             if df['wave_height'].max() < 1.0:
                 return None
 
-            plt.style.use('bmh')
-            fig, ax = plt.subplots(figsize=(10, 4.5))
+            plt.style.use('seaborn-v0_8-darkgrid')
+            fig, ax = plt.subplots(figsize=(12, 5))
             
             # 繪製曲線
-            ax.plot(df['time'], df['wave_height'], color='#2ca02c', 
-                   label='Sig. Wave Height (m)', linewidth=2, marker='o', markersize=3)
-            ax.fill_between(df['time'], df['wave_height'], alpha=0.2, color='#2ca02c')
+            ax.plot(df['time'], df['wave_height'], color='#0891B2', 
+                label='Sig. Wave Height (m)', linewidth=2.5, marker='o', markersize=4)
+            ax.fill_between(df['time'], df['wave_height'], alpha=0.15, color='#0891B2')
             ax.fill_between(
-                            df['time'], 
-                            df['wave_height'], 
-                            y2=0,
-                            where=(df['wave_height'] > RISK_THRESHOLDS['wave_caution']),
-                            interpolate=True,
-                            color='#ff0ecb',
-                            alpha=0.3,
-                            label='Risk Area'
-                        )          
+                df['time'], 
+                df['wave_height'], 
+                y2=0,
+                where=(df['wave_height'] >= RISK_THRESHOLDS['wave_caution']),
+                interpolate=True,
+                color='#FCA5A5',
+                alpha=0.25,
+                label='Risk Area'
+            )
+            
             # 閾值線
-            ax.axhline(RISK_THRESHOLDS['wave_caution'], color="#FCF700EF", 
-                      linestyle=':', linewidth=1.5, label=f'Caution ({RISK_THRESHOLDS["wave_caution"]}m)')
-            ax.axhline(RISK_THRESHOLDS['wave_warning'], color="#FC9A08", 
-                      linestyle='--', linewidth=1.5, label=f'Warning ({RISK_THRESHOLDS["wave_warning"]}m)')
-            ax.axhline(RISK_THRESHOLDS['wave_danger'], color="#FC0505", 
-                      linestyle=':', linewidth=1.5, label=f'Danger ({RISK_THRESHOLDS["wave_danger"]}m)')    
+            ax.axhline(RISK_THRESHOLDS['wave_danger'], color="#DC2626", 
+                    linestyle=':', linewidth=2, label=f'Danger ({RISK_THRESHOLDS["wave_danger"]} m)', alpha=0.8)
+            ax.axhline(RISK_THRESHOLDS['wave_warning'], color="#F59E0B", 
+                    linestyle='--', linewidth=2, label=f'Warning ({RISK_THRESHOLDS["wave_warning"]} m)', alpha=0.8)
+            ax.axhline(RISK_THRESHOLDS['wave_caution'], color="#FBBF24", 
+                    linestyle=':', linewidth=1.5, label=f'Caution ({RISK_THRESHOLDS["wave_caution"]} m)', alpha=0.7)
             
-            ax.set_title(f"{assessment.port_name} - Wave Height Trend (48 Hrs)", fontsize=14, fontweight='bold', pad=15)
-            ax.set_ylabel('Height (m)', fontsize=11)
-            ax.set_xlabel('Date / Time (UTC)', fontsize=11)
-            ax.legend(loc='upper left', frameon=True, fontsize=9)
-            ax.grid(True, alpha=0.3)
+            # ✅ 標題與標籤
+            ax.set_title(f"{assessment.port_name} ({port_code}) - Wave Height Trend (48 Hrs)", 
+                        fontsize=15, fontweight='bold', pad=20,
+                        fontfamily='Microsoft JhengHei')
+            ax.set_ylabel('Height (m)', fontsize=12, fontweight='600')
+            ax.set_xlabel('Date / Time (UTC)', fontsize=12, fontweight='600')
+            ax.legend(loc='upper left', frameon=True, fontsize=10, shadow=True, fancybox=True)
+            ax.grid(True, alpha=0.3, linestyle='--')
             
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %Hh'))
+            # 日期格式
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
             ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
-            plt.xticks(rotation=15, ha='right', fontsize=9)
-            plt.yticks(fontsize=9)
+            plt.xticks(rotation=30, ha='right', fontsize=10)
+            plt.yticks(fontsize=10)
+            
+            # ✅ 設定 Y 軸範圍
+            y_max = df['wave_height'].max() * 1.15
+            ax.set_ylim(0, y_max)
+            
             plt.tight_layout()
             
-            # 1. 存檔
+            # 存檔
             filepath = os.path.join(self.output_dir, f"wave_{port_code}.png")
-            plt.savefig(filepath, dpi=100, bbox_inches='tight')
-            
-            # 2. 轉 Base64
-            base64_str = self._fig_to_base64(fig)
-            
+            plt.savefig(filepath, dpi=120, bbox_inches='tight', facecolor='white')
             plt.close(fig)
+            
             print(f"   ✅ 浪高圖已生成: {filepath}")
-            return base64_str
+            return filepath
             
         except Exception as e:
             print(f"   ❌ 繪製浪高圖失敗 {port_code}: {e}")
@@ -291,7 +316,7 @@ class ChartGenerator:
             return None
 
 
-# ================= 風險分析模組 (無變動) =================
+# ================= 風險分析模組 =================
 
 class WeatherRiskAnalyzer:
     """氣象風險分析器"""
@@ -437,7 +462,7 @@ class WeatherRiskAnalyzer:
             return None
 
 
-# ================= Teams 通知器 (無變動) =================
+# ================= Teams 通知器 =================
 
 class TeamsNotifier:
     """Teams 通知發送器"""
@@ -508,76 +533,283 @@ class TeamsNotifier:
             return False
     
     def _create_adaptive_card(self, risk_assessments: List[RiskAssessment]) -> Dict[str, Any]:
-        """建立 Adaptive Card"""
+        """建立 Adaptive Card - 增強版（顯示所有港口 + 詳細資訊）"""
         
         # 風險分組
         danger_ports = [a for a in risk_assessments if a.risk_level == 3]
         warning_ports = [a for a in risk_assessments if a.risk_level == 2]
         caution_ports = [a for a in risk_assessments if a.risk_level == 1]
         
+        # 時間資訊
+        utc_now = datetime.now(timezone.utc)
+        now_str_utc = utc_now.strftime('%Y-%m-%d %H:%M')
+        lt_now = utc_now + timedelta(hours=8)
+        now_str_lt = lt_now.strftime('%Y-%m-%d %H:%M')
+        
+        # ===== Header =====
         body = [
             {
                 "type": "TextBlock",
-                "text": "⚠️ WHL 港口氣象風險警報",
+                "text": "⚠️ WHL Port Weather Risk Monitor",
                 "weight": "Bolder",
-                "size": "Large",
-                "color": "Attention"
+                "size": "ExtraLarge",
+                "color": "Attention",
+                "horizontalAlignment": "Center"
             },
             {
                 "type": "TextBlock",
-                "text": f"發現 {len(risk_assessments)} 個高風險港口",
+                "text": f"未來48小時氣象預警系統",
                 "isSubtle": True,
-                "spacing": "Small"
+                "spacing": "None",
+                "horizontalAlignment": "Center",
+                "size": "Small"
             },
             {
-                "type": "FactSet",
-                "facts": [
-                    {"title": "🔴 危險 (Danger)", "value": str(len(danger_ports))},
-                    {"title": "🟠 警告 (Warning)", "value": str(len(warning_ports))},
-                    {"title": "🟡 注意 (Caution)", "value": str(len(caution_ports))},
-                    {"title": "📅 更新時間", "value": datetime.now().strftime('%Y-%m-%d %H:%M')}
-                ],
-                "spacing": "Medium"
-            }
-        ]
-        
-        # 只顯示前 5 個最高風險港口
-        top_risks = sorted(risk_assessments, key=lambda x: x.risk_level, reverse=True)[:5]
-        
-        for port in top_risks:
-            risk_color = {3: "Attention", 2: "Warning", 1: "Good"}.get(port.risk_level, "Default")
-            risk_emoji = {3: "🔴", 2: "🟠", 1: "🟡"}.get(port.risk_level, "⚪")
-            
-            body.append({
-                "type": "Container",
-                "style": "emphasis",
-                "items": [
+                "type": "TextBlock",
+                "text": f"📅 更新時間: {now_str_lt} (TPE) | {now_str_utc} (UTC)",
+                "isSubtle": True,
+                "spacing": "Small",
+                "horizontalAlignment": "Center",
+                "size": "Small"
+            },
+            {
+                "type": "ColumnSet",
+                "columns": [
                     {
-                        "type": "TextBlock",
-                        "text": f"{risk_emoji} {port.port_code} - {port.port_name}",
-                        "weight": "Bolder",
-                        "color": risk_color
-                    },
-                    {
-                        "type": "FactSet",
-                        "facts": [
-                            {"title": "風速", "value": f"{port.max_wind_kts:.0f} kts (BF{port.max_wind_bft})"},
-                            {"title": "陣風", "value": f"{port.max_gust_kts:.0f} kts (BF{port.max_gust_bft})"},
-                            {"title": "浪高", "value": f"{port.max_wave:.1f} m"},
-                            {"title": "國家", "value": port.country}
+                        "type": "Column",
+                        "width": "stretch",
+                        "items": [
+                            {
+                                "type": "TextBlock",
+                                "text": f"**{len(risk_assessments)}**",
+                                "size": "ExtraLarge",
+                                "weight": "Bolder",
+                                "color": "Attention",
+                                "horizontalAlignment": "Center"
+                            },
+                            {
+                                "type": "TextBlock",
+                                "text": "風險港口總數",
+                                "isSubtle": True,
+                                "horizontalAlignment": "Center",
+                                "size": "Small",
+                                "spacing": "None"
+                            }
                         ]
                     }
                 ],
                 "spacing": "Medium"
-            })
+            },
+            {
+                "type": "FactSet",
+                "facts": [
+                    {"title": "🔴 危險 Danger", "value": f"**{len(danger_ports)}** 個港口"},
+                    {"title": "🟠 警告 Warning", "value": f"**{len(warning_ports)}** 個港口"},
+                    {"title": "🟡 注意 Caution", "value": f"**{len(caution_ports)}** 個港口"}
+                ],
+                "spacing": "Medium",
+                "separator": True
+            }
+        ]
         
-        if len(risk_assessments) > 5:
+        # ===== 依風險等級分組顯示 =====
+        risk_groups = [
+            (3, danger_ports, "🔴 危險等級港口 (DANGER)", "Attention"),
+            (2, warning_ports, "🟠 警告等級港口 (WARNING)", "Warning"),
+            (1, caution_ports, "🟡 注意等級港口 (CAUTION)", "Good")
+        ]
+        
+        for level, ports, title, color in risk_groups:
+            if not ports:
+                continue
+            
+            # 分組標題
             body.append({
                 "type": "TextBlock",
-                "text": f"... 及其他 {len(risk_assessments) - 5} 個港口 (詳見郵件報告)",
-                "isSubtle": True,
-                "spacing": "Small"
+                "text": title,
+                "weight": "Bolder",
+                "size": "Large",
+                "color": color,
+                "spacing": "Large",
+                "separator": True
             })
+            
+            # 顯示該等級的所有港口
+            for idx, port in enumerate(ports, 1):
+                # 格式化時間（只顯示日期和時間）
+                try:
+                    wind_time = port.max_wind_time_lct[5:16] if len(port.max_wind_time_lct) >= 16 else port.max_wind_time_lct
+                    gust_time = port.max_gust_time_lct[5:16] if len(port.max_gust_time_lct) >= 16 else port.max_gust_time_lct
+                    wave_time = port.max_wave_time_lct[5:16] if len(port.max_wave_time_lct) >= 16 else port.max_wave_time_lct
+                except:
+                    wind_time = port.max_wind_time_lct
+                    gust_time = port.max_gust_time_lct
+                    wave_time = port.max_wave_time_lct
+                
+                # 風險因子標籤
+                risk_factors_text = " | ".join(port.risk_factors) if port.risk_factors else "N/A"
+                
+                # 港口卡片
+                port_card = {
+                    "type": "Container",
+                    "style": "emphasis",
+                    "spacing": "Medium",
+                    "items": [
+                        # 港口名稱標題
+                        {
+                            "type": "ColumnSet",
+                            "columns": [
+                                {
+                                    "type": "Column",
+                                    "width": "stretch",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": f"**{idx}. {port.port_code} - {port.port_name}**",
+                                            "weight": "Bolder",
+                                            "size": "Medium",
+                                            "color": color
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Column",
+                                    "width": "auto",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": f"📍 {port.country}",
+                                            "isSubtle": True,
+                                            "horizontalAlignment": "Right"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        # 風險因子
+                        {
+                            "type": "TextBlock",
+                            "text": f"⚠️ **風險因子:** {risk_factors_text}",
+                            "wrap": True,
+                            "spacing": "Small",
+                            "color": "Attention",
+                            "size": "Small"
+                        },
+                        # 氣象數據 - 使用 ColumnSet 排版
+                        {
+                            "type": "ColumnSet",
+                            "columns": [
+                                {
+                                    "type": "Column",
+                                    "width": "stretch",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "💨 **最大風速**",
+                                            "weight": "Bolder",
+                                            "size": "Small"
+                                        },
+                                        {
+                                            "type": "TextBlock",
+                                            "text": f"{port.max_wind_kts:.0f} kts (BF{port.max_wind_bft})",
+                                            "spacing": "None",
+                                            "color": "Attention" if port.max_wind_kts >= 28 else "Default"
+                                        },
+                                        {
+                                            "type": "TextBlock",
+                                            "text": f"🕐 {wind_time} (LT)",
+                                            "isSubtle": True,
+                                            "size": "Small",
+                                            "spacing": "None"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Column",
+                                    "width": "stretch",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "💨 **最大陣風**",
+                                            "weight": "Bolder",
+                                            "size": "Small"
+                                        },
+                                        {
+                                            "type": "TextBlock",
+                                            "text": f"{port.max_gust_kts:.0f} kts (BF{port.max_gust_bft})",
+                                            "spacing": "None",
+                                            "color": "Attention" if port.max_gust_kts >= 34 else "Default"
+                                        },
+                                        {
+                                            "type": "TextBlock",
+                                            "text": f"🕐 {gust_time} (LT)",
+                                            "isSubtle": True,
+                                            "size": "Small",
+                                            "spacing": "None"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "Column",
+                                    "width": "stretch",
+                                    "items": [
+                                        {
+                                            "type": "TextBlock",
+                                            "text": "🌊 **最大浪高**",
+                                            "weight": "Bolder",
+                                            "size": "Small"
+                                        },
+                                        {
+                                            "type": "TextBlock",
+                                            "text": f"{port.max_wave:.1f} m",
+                                            "spacing": "None",
+                                            "color": "Attention" if port.max_wave >= 3.5 else "Default"
+                                        },
+                                        {
+                                            "type": "TextBlock",
+                                            "text": f"🕐 {wave_time} (LT)",
+                                            "isSubtle": True,
+                                            "size": "Small",
+                                            "spacing": "None"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "spacing": "Small"
+                        },
+                        # 發布時間
+                        {
+                            "type": "TextBlock",
+                            "text": f"📡 資料發布時間: {port.issued_time[4:6]}/{port.issued_time[6:8]} {port.issued_time[9:11]}:{port.issued_time[11:13]} (UTC)",
+                            "isSubtle": True,
+                            "size": "Small",
+                            "spacing": "Small"
+                        }
+                    ]
+                }
+                
+                body.append(port_card)
+        
+        # ===== Footer =====
+        body.extend([
+            {
+                "type": "TextBlock",
+                "text": "📧 Wan Hai Lines Ltd. | Marine Technology Division",
+                "isSubtle": True,
+                "horizontalAlignment": "Center",
+                "spacing": "Large",
+                "separator": True,
+                "size": "Small"
+            },
+            {
+                "type": "TextBlock",
+                "text": "Present by Fleet Risk Department",
+                "isSubtle": True,
+                "horizontalAlignment": "Center",
+                "spacing": "None",
+                "size": "Small"
+            }
+        ])
         
         return {
             "type": "message",
@@ -593,7 +825,7 @@ class TeamsNotifier:
         }
 
 
-# ================= Gmail 通知器 (修改版) =================
+# ================= Gmail 通知器 =================
 
 class GmailRelayNotifier:
     """Gmail 接力發信器"""
@@ -605,27 +837,53 @@ class GmailRelayNotifier:
         self.subject_trigger = TRIGGER_SUBJECT
 
     def send_trigger_email(self, report_data: dict, report_html: str, 
-                           images: Dict[str, str] = None) -> bool:
+                          images: Dict[str, str] = None) -> bool:
         """
         發送觸發信件
-        注意：現在圖片已經內嵌在 report_html 的 Base64 中，不需要再用 attachments 處理。
+        Args:
+            report_data: JSON 資料
+            report_html: HTML 報告
+            images: {'cid': 'file_path'} 例如 {'wind_KHH': 'charts/wind_KHH.png'}
         """
         if not self.user or not self.password:
             print("⚠️ 未設定 Gmail 帳密 (MAIL_USER / MAIL_PASSWORD)")
             return False
 
-        # 改用 MIMEMultipart('alternative') 因為不需要 related (附件) 了
-        msg = MIMEMultipart('alternative')
+        # Root: MIMEMultipart('related') 用於嵌入圖片
+        msg = MIMEMultipart('related')
         msg['From'] = self.user
         msg['To'] = self.target
         msg['Subject'] = self.subject_trigger
         
+        # Alternative 部分 (純文字 + HTML)
+        msg_alternative = MIMEMultipart('alternative')
+        msg.attach(msg_alternative)
+
         # 1. 純文字 (JSON)
         json_text = json.dumps(report_data, ensure_ascii=False, indent=2)
-        msg.attach(MIMEText(json_text, 'plain', 'utf-8'))
+        msg_alternative.attach(MIMEText(json_text, 'plain', 'utf-8'))
         
-        # 2. HTML (內含 Base64 圖片)
-        msg.attach(MIMEText(report_html, 'html', 'utf-8'))
+        # 2. HTML
+        msg_alternative.attach(MIMEText(report_html, 'html', 'utf-8'))
+
+        # 3. 嵌入圖片
+        if images:
+            for cid, file_path in images.items():
+                if not os.path.exists(file_path):
+                    print(f"⚠️ 圖片檔案不存在: {file_path}")
+                    continue
+                    
+                try:
+                    with open(file_path, 'rb') as fp:
+                        img_data = fp.read()
+                        img = MIMEImage(img_data)
+                        img.add_header('Content-ID', f'<{cid}>')
+                        img.add_header('Content-Disposition', 'inline', 
+                                     filename=os.path.basename(file_path))
+                        msg.attach(img)
+                    print(f"   ✅ 圖片已附加: {cid} -> {file_path}")
+                except Exception as e:
+                    print(f"   ❌ 無法附加圖片 {file_path}: {e}")
 
         try:
             print(f"📧 正在透過 Gmail 發送報表給 {self.target}...")
@@ -641,7 +899,7 @@ class GmailRelayNotifier:
             server.sendmail(self.user, self.target, msg.as_string())
             server.quit()
             
-            print(f"✅ Email 發送成功！")
+            print(f"✅ Email 發送成功！(含 {len(images) if images else 0} 張圖表)")
             return True
             
         except smtplib.SMTPAuthenticationError:
@@ -657,7 +915,7 @@ class GmailRelayNotifier:
             return False
 
 
-# ================= 主服務類別 (修改版) =================
+# ================= 主服務類別 =================
 
 class WeatherMonitorService:
     """氣象監控服務"""
@@ -691,9 +949,8 @@ class WeatherMonitorService:
         risk_assessments = self._analyze_all_ports()
         
         # 3. 生成圖表
-        print(f"\n📈 步驟 3: 生成氣象趨勢圖 (針對 {len([r for r in risk_assessments if r.risk_level >= 2])} 個高風險港口)...")
-        # 修改：不再回傳 dict，而是直接更新 assessment 物件內部
-        self._generate_charts(risk_assessments)
+        print(f"\n📈 步驟 3: 生成氣象趨勢圖 (針對 {len([r for r in risk_assessments if r.risk_level >= 0])} 個高風險港口)...")
+        generated_charts = self._generate_charts(risk_assessments)
         
         # 4. 發送 Teams 通知
         teams_sent = False
@@ -714,7 +971,7 @@ class WeatherMonitorService:
         email_sent = False
         try:
             email_sent = self.email_notifier.send_trigger_email(
-                report_data, report_html, None
+                report_data, report_html, generated_charts
             )
         except Exception as e:
             print(f"⚠️ 發信過程發生異常: {e}")
@@ -722,10 +979,12 @@ class WeatherMonitorService:
         
         report_data['email_sent'] = email_sent
         report_data['teams_sent'] = teams_sent
+        report_data['charts_generated'] = len(generated_charts)
         
         print("\n" + "=" * 80)
         print("✅ 每日監控執行完成")
         print(f"   - 風險港口: {len(risk_assessments)}")
+        print(f"   - 圖表生成: {len(generated_charts)}")
         print(f"   - Teams 通知: {'✅' if teams_sent else '❌'}")
         print(f"   - Email 發送: {'✅' if email_sent else '❌'}")
         print("=" * 80)
@@ -763,11 +1022,12 @@ class WeatherMonitorService:
         assessments.sort(key=lambda x: x.risk_level, reverse=True)
         return assessments
     
-    def _generate_charts(self, assessments: List[RiskAssessment]):
-        """生成圖表並將 Base64 存入 assessment"""
+    def _generate_charts(self, assessments: List[RiskAssessment]) -> Dict[str, str]:
+        """生成圖表"""
+        generated_charts = {}
         
         # 優先處理高風險港口
-        chart_targets = [r for r in assessments if r.risk_level >= 2]
+        chart_targets = [r for r in assessments if r.risk_level >= 0]
         
         # 如果高風險港口少，補充部分 Caution 港口
         if len(chart_targets) < 5:
@@ -776,19 +1036,25 @@ class WeatherMonitorService:
         
         for assessment in chart_targets:
             # 風速圖
-            b64_wind = self.chart_generator.generate_wind_chart(
+            wind_path = self.chart_generator.generate_wind_chart(
                 assessment, assessment.port_code
             )
-            if b64_wind:
-                assessment.chart_base64_list.append(b64_wind)
+            if wind_path:
+                cid = f"wind_{assessment.port_code}"
+                generated_charts[cid] = wind_path
+                assessment.chart_cids.append(cid)
             
             # 浪高圖 (只在有高浪風險時生成)
             if assessment.max_wave >= RISK_THRESHOLDS['wave_caution']:
-                b64_wave = self.chart_generator.generate_wave_chart(
+                wave_path = self.chart_generator.generate_wave_chart(
                     assessment, assessment.port_code
                 )
-                if b64_wave:
-                    assessment.chart_base64_list.append(b64_wave)
+                if wave_path:
+                    cid = f"wave_{assessment.port_code}"
+                    generated_charts[cid] = wave_path
+                    assessment.chart_cids.append(cid)
+        
+        return generated_charts
     
     def _generate_data_report(self, stats, assessments, teams_sent):
         """生成 JSON 報告"""
@@ -813,13 +1079,11 @@ class WeatherMonitorService:
         
         font_style = "font-family: 'Microsoft JhengHei', '微軟正黑體', 'Segoe UI', Arial, sans-serif;"
         
-        # 時間計算
         utc_now = datetime.now(timezone.utc)
         now_str_UTC = utc_now.strftime('%Y-%m-%d %H:%M')
         lt_now = utc_now + timedelta(hours=8)
         now_str_LT = lt_now.strftime('%Y-%m-%d %H:%M')
 
-        # 若無風險的顯示
         if not assessments:
             return f"""
             <div style="{font_style} color: #2E7D32; padding: 20px; border: 1px solid #4CAF50; background-color: #E8F5E9; border-radius: 5px;">
@@ -862,11 +1126,10 @@ class WeatherMonitorService:
 
                 <div style="font-size: 14px; color: #555; background-color: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid #eee;">
                     <span style="font-size: 16px;">⚠️</span> 
-                    請船管 PIC留意下列港口動態並通知業管屬輪做好相關<span style="background-color: red; color: white; padding: 3px 0px; border-radius: 0px; font-weight: bold; font-size: 12px;">風險評估措施。</span> 
+                    請船管 PIC留意下列港口動態並通知業管屬輪做好相關<span style="background-color: red; color: white; padding: 3px 6px; border-radius: 3px; font-weight: bold; font-size: 12px;">風險評估措施</span>。
                 </div>
         """
 
-        # 風險等級樣式定義
         styles = {
             3: {'color': '#D9534F', 'bg': '#FEF2F2', 'title': '🔴 POTENTIAL DANGER PORT (條件: 風速 > 8級 / 陣風 > 9級 / 浪高 > 4.0 m)', 'border': '#D9534F', 'header_bg': '#FEE2E2'},
             2: {'color': '#F59E0B', 'bg': '#FFFBEB', 'title': '🟠 POTENTIAL WARNING PORT (條件: 風速 > 7級 / 陣風 > 8級 / 浪高 > 3.5 m)', 'border': '#F59E0B', 'header_bg': '#FEF3C7'},
@@ -880,7 +1143,6 @@ class WeatherMonitorService:
             
             style = styles[level]
             
-            # 該等級的標題
             html += f"""
             <div style="margin-top: 30px; margin-bottom: 12px;">
                 <span style="background-color: {style['color']}; color: white; padding: 6px 12px; border-radius: 4px; font-weight: bold; font-size: 14px; {font_style}">
@@ -892,8 +1154,8 @@ class WeatherMonitorService:
                 <thead>
                     <tr style="background-color: {style['header_bg']}; color: #4b5563; text-align: left;">
                         <th style="padding: 12px 15px; border-bottom: 2px solid {style['border']}; width: 25%; {font_style}">港口名稱(Port Name)</th>
-                        <th style="padding: 12px 15px; border-bottom: 2px solid {style['border']}; width: 35%; {font_style}">潛在風險(Potential Crisis) (Met Data)</th>
-                        <th style="padding: 12px 15px; border-bottom: 2px solid {style['border']}; {font_style}">高風險時段(High-risk periods) & Time</th>
+                        <th style="padding: 12px 15px; border-bottom: 2px solid {style['border']}; width: 35%; {font_style}">潛在風險(Potential Crisis)</th>
+                        <th style="padding: 12px 15px; border-bottom: 2px solid {style['border']}; {font_style}">高風險時段(High-risk periods)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -901,33 +1163,32 @@ class WeatherMonitorService:
             
             for index, p in enumerate(ports):
                 row_bg = "#ffffff" if index % 2 == 0 else "#f9fafb"
-                wind_val_style = "color: #D9534F; font-weight: bold; font-size: 15px;" if p.max_wind_kts >= 30 else "font-weight: bold;"
-                wave_val_style = "color: #D9534F; font-weight: bold; font-size: 15px;" if p.max_wave >= 3.0 else "font-weight: bold;"
                 
+                # ✅ 修正：時間格式化邏輯放在 for 迴圈內
                 try:
-                    w_utc = p.max_wind_time_utc[5:] if len(p.max_wind_time_utc) > 5 else p.max_wind_time_utc
-                    w_lct = p.max_wind_time_lct.split(' ')[1] if ' ' in p.max_wind_time_lct else p.max_wind_time_lct
-                    g_utc = p.max_gust_time_utc[5:] if len(p.max_gust_time_utc) > 5 else p.max_gust_time_utc
-                    g_lct = p.max_gust_time_lct.split(' ')[1] if ' ' in p.max_gust_time_lct else p.max_gust_time_lct
-                    v_utc = p.max_wave_time_utc[5:] if len(p.max_wave_time_utc) > 5 else p.max_wave_time_utc
-                    v_lct = p.max_wave_time_lct.split(' ')[1] if ' ' in p.max_wave_time_lct else p.max_wave_time_lct
-                except:
+                    w_utc = p.max_wind_time_utc[5:16] if len(p.max_wind_time_utc) >= 16 else p.max_wind_time_utc
+                    w_lct = p.max_wind_time_lct[5:16] if len(p.max_wind_time_lct) >= 16 else p.max_wind_time_lct
+                    g_utc = p.max_gust_time_utc[5:16] if len(p.max_gust_time_utc) >= 16 else p.max_gust_time_utc
+                    g_lct = p.max_gust_time_lct[5:16] if len(p.max_gust_time_lct) >= 16 else p.max_gust_time_lct
+                    v_utc = p.max_wave_time_utc[5:16] if len(p.max_wave_time_utc) >= 16 else p.max_wave_time_utc
+                    v_lct = p.max_wave_time_lct[5:16] if len(p.max_wave_time_lct) >= 16 else p.max_wave_time_lct
+                except Exception as e:
+                    print(f"⚠️ 時間格式化警告 ({p.port_code}): {e}")
                     w_utc, w_lct = p.max_wind_time_utc, p.max_wind_time_lct
                     g_utc, g_lct = p.max_gust_time_utc, p.max_gust_time_lct
                     v_utc, v_lct = p.max_wave_time_utc, p.max_wave_time_lct
 
-                # 準備圖表 HTML (使用 Base64)
+                # ✅ 圖表 HTML
                 chart_row = ""
-                if p.chart_base64_list:
+                if p.chart_cids:
                     chart_imgs = ""
-                    for b64 in p.chart_base64_list:
-                        # 這裡使用 data:image/png;base64, 來直接顯示圖片
-                        chart_imgs += f'<img src="data:image/png;base64,{b64}" style="max-width: 100%; height: auto; border: 1px solid #eee; border-radius: 4px; margin-top: 10px;">'
+                    for cid in p.chart_cids:
+                        chart_imgs += f'<img src="cid:{cid}" style="max-width: 100%; height: auto; border: 1px solid #eee; border-radius: 4px; margin-top: 10px;">'
                     
                     chart_row = f"""
                     <tr style="background-color: {row_bg};">
                         <td colspan="3" style="padding: 0 15px 15px 15px; border-bottom: 1px solid #e5e7eb;">
-                            <div style="font-size: 20px; color: #666; margin-bottom: 10px;">Wind Speed & Gust Trend (48 Hrs):</div>
+                            <div style="font-size: 14px; color: #666; margin-bottom: 10px; font-weight: 600;">📈 Meteorological Trend Charts:</div>
                             {chart_imgs}
                         </td>
                     </tr>
@@ -969,8 +1230,8 @@ class WeatherMonitorService:
 
                 <td style="padding: 15px; vertical-align: top; {font_style}">
                     <div style="margin-bottom: 10px;">
-                         <span style="background-color: #FEF2F2; color: #D9534F; border: 1px solid #FCA5A5; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; display: inline-block;">
-                            淺在危險因子: {', '.join(p.risk_factors)}
+                        <span style="background-color: #FEF2F2; color: #D9534F; border: 1px solid #FCA5A5; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; display: inline-block;">
+                            潛在危險因子: {', '.join(p.risk_factors)}
                         </span>
                     </div>
                     
