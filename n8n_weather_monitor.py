@@ -162,19 +162,26 @@ class ChartGenerator:
     def generate_wind_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
         """繪製風速趨勢圖，回傳 Base64 字串"""
         if not assessment.raw_records:
+            print(f"      ⚠️ {port_code} 沒有原始資料記錄")
             return None
             
         try:
             df = self._prepare_dataframe(assessment.raw_records)
+            
+            if df.empty:
+                print(f"      ⚠️ {port_code} DataFrame 為空")
+                return None
+            
+            print(f"      📊 準備繪製 {port_code} 的風速圖 (資料點數: {len(df)})")
             
             plt.style.use('seaborn-v0_8-darkgrid')
             fig, ax = plt.subplots(figsize=(12, 5.5))
             
             # 繪製曲線 - 加粗並使用更鮮明的顏色
             ax.plot(df['time'], df['wind_speed'], color='#2563EB', 
-                   label='Wind Speed (kts)', linewidth=2.5, marker='o', markersize=4, zorder=3)
+                label='Wind Speed (kts)', linewidth=2.5, marker='o', markersize=4, zorder=3)
             ax.plot(df['time'], df['wind_gust'], color='#DC2626', 
-                   linestyle='--', label='Gust (kts)', linewidth=2, marker='s', markersize=3.5, zorder=3)
+                linestyle='--', label='Gust (kts)', linewidth=2, marker='s', markersize=3.5, zorder=3)
             
             # 填充
             ax.fill_between(df['time'], df['wind_speed'], alpha=0.15, color='#2563EB', zorder=1)
@@ -192,11 +199,11 @@ class ChartGenerator:
             
             # 閾值線 - 調整顏色和粗細
             ax.axhline(RISK_THRESHOLDS['wind_danger'], color="#DC2626", 
-                      linestyle=':', linewidth=2, label=f'Danger ({RISK_THRESHOLDS["wind_danger"]} kts)', zorder=2)   
+                    linestyle=':', linewidth=2, label=f'Danger ({RISK_THRESHOLDS["wind_danger"]} kts)', zorder=2)   
             ax.axhline(RISK_THRESHOLDS['wind_warning'], color="#F59E0B", 
-                      linestyle='--', linewidth=2, label=f'Warning ({RISK_THRESHOLDS["wind_warning"]} kts)', zorder=2)        
+                    linestyle='--', linewidth=2, label=f'Warning ({RISK_THRESHOLDS["wind_warning"]} kts)', zorder=2)        
             ax.axhline(RISK_THRESHOLDS['wind_caution'], color="#FCD34D", 
-                      linestyle=':', linewidth=1.8, label=f'Caution ({RISK_THRESHOLDS["wind_caution"]} kts)', zorder=2)
+                    linestyle=':', linewidth=1.8, label=f'Caution ({RISK_THRESHOLDS["wind_caution"]} kts)', zorder=2)
             
             # 標題與標籤 - 加大字體
             ax.set_title(f"{assessment.port_name} ({assessment.port_code}) - Wind Speed & Gust Trend (48 Hrs)", 
@@ -226,16 +233,17 @@ class ChartGenerator:
             # 1. 存檔 (保留做為紀錄)
             filepath = os.path.join(self.output_dir, f"wind_{port_code}.png")
             plt.savefig(filepath, dpi=120, bbox_inches='tight', facecolor='white')
+            print(f"      💾 圖片已存檔: {filepath}")
             
             # 2. 轉 Base64 (用於 Email)
             base64_str = self._fig_to_base64(fig)
+            print(f"      ✅ Base64 轉換成功 (長度: {len(base64_str)} 字元)")
             
             plt.close(fig)
-            print(f"   ✅ 風速圖已生成: {filepath}")
             return base64_str
             
         except Exception as e:
-            print(f"   ❌ 繪製風速圖失敗 {port_code}: {e}")
+            print(f"      ❌ 繪製風速圖失敗 {port_code}: {e}")
             traceback.print_exc()
             return None
 
@@ -725,7 +733,8 @@ class WeatherMonitorService:
         print(f"\n📈 步驟 3: 生成氣象趨勢圖 (針對 {len([r for r in risk_assessments if r.risk_level >= 2])} 個高風險港口)...")
         # 修改：不再回傳 dict，而是直接更新 assessment 物件內部
         self._generate_charts(risk_assessments)
-        
+        charts_generated = sum(1 for r in risk_assessments if r.chart_base64_list)
+        print(f"   ✅ 成功為 {charts_generated}/{len(risk_assessments)} 個港口生成圖表")
         # 4. 發送 Teams 通知
         teams_sent = False
         if self.notifier.webhook_url:
@@ -794,32 +803,45 @@ class WeatherMonitorService:
         assessments.sort(key=lambda x: x.risk_level, reverse=True)
         return assessments
     
-    def _generate_charts(self, assessments: List[RiskAssessment]):
-        """生成圖表並將 Base64 存入 assessment"""
+def _generate_charts(self, assessments: List[RiskAssessment]):
+    """生成圖表並將 Base64 存入 assessment"""
+    
+    if not assessments:
+        print("   ⚠️ 沒有風險港口需要生成圖表")
+        return
+    
+    # 🔧 修正：為所有風險港口生成圖表（不限制等級）
+    chart_targets = assessments[:20]  # 最多生成 20 個港口的圖表（避免郵件過大）
+    
+    print(f"   📊 準備為 {len(chart_targets)} 個港口生成圖表...")
+    
+    success_count = 0
+    for i, assessment in enumerate(chart_targets, 1):
+        print(f"   [{i}/{len(chart_targets)}] 正在處理 {assessment.port_code}...")
         
-        # 優先處理高風險港口
-        chart_targets = [r for r in assessments if r.risk_level >= 2]
+        # 風速圖
+        b64_wind = self.chart_generator.generate_wind_chart(
+            assessment, assessment.port_code
+        )
+        if b64_wind:
+            assessment.chart_base64_list.append(b64_wind)
+            success_count += 1
+            print(f"      ✅ 風速圖已生成 (Base64 長度: {len(b64_wind)} 字元)")
+        else:
+            print(f"      ❌ 風速圖生成失敗")
         
-        # 如果高風險港口少，補充部分 Caution 港口
-        if len(chart_targets) < 5:
-            cautions = [r for r in assessments if r.risk_level == 1]
-            chart_targets.extend(cautions[:(10 - len(chart_targets))])
-        
-        for assessment in chart_targets:
-            # 風速圖
-            b64_wind = self.chart_generator.generate_wind_chart(
+        # 浪高圖 (只在有高浪風險時生成)
+        if assessment.max_wave >= RISK_THRESHOLDS['wave_caution']:
+            b64_wave = self.chart_generator.generate_wave_chart(
                 assessment, assessment.port_code
             )
-            if b64_wind:
-                assessment.chart_base64_list.append(b64_wind)
-            
-            # 浪高圖 (只在有高浪風險時生成)
-            if assessment.max_wave >= RISK_THRESHOLDS['wave_caution']:
-                b64_wave = self.chart_generator.generate_wave_chart(
-                    assessment, assessment.port_code
-                )
-                if b64_wave:
-                    assessment.chart_base64_list.append(b64_wave)
+            if b64_wave:
+                assessment.chart_base64_list.append(b64_wave)
+                print(f"      ✅ 浪高圖已生成 (Base64 長度: {len(b64_wave)} 字元)")
+            else:
+                print(f"      ⚠️ 浪高圖生成失敗")
+    
+    print(f"   ✅ 圖表生成完成：{success_count}/{len(chart_targets)} 個港口成功")
     
     def _generate_data_report(self, stats, assessments, teams_sent):
         """生成 JSON 報告"""
@@ -1092,9 +1114,12 @@ class WeatherMonitorService:
                 
                 # 圖表列 - Base64 處理
                 if hasattr(p, 'chart_base64_list') and p.chart_base64_list:
+                    print(f"      📊 {p.port_code} 有 {len(p.chart_base64_list)} 張圖表")
                     chart_imgs = ""
                     for idx, b64 in enumerate(p.chart_base64_list):
                         b64_clean = b64.replace('\n', '').replace('\r', '').replace(' ', '')
+                        print(f"         圖表 {idx+1}: Base64 長度 = {len(b64_clean)}")
+                        
                         chart_imgs += f"""
                         <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 10px;">
                             <tr>
@@ -1107,6 +1132,17 @@ class WeatherMonitorService:
                             </tr>
                         </table>
                         """
+                    
+                    html += f"""
+                    <tr>
+                        <td colspan="3" style="padding: 15px; background-color: {row_bg}; border-bottom: 1px solid #eee;">
+                            <div style="font-weight: bold; color: #004B97; margin-bottom: 5px; font-size: 13px;">📊 Wind Trend Chart:</div>
+                            {chart_imgs}
+                        </td>
+                    </tr>
+                    """
+                else:
+                    print(f"      ⚠️ {p.port_code} 沒有圖表資料")
                     
                     html += f"""
                     <tr>
