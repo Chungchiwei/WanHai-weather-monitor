@@ -168,7 +168,7 @@ class ChartGenerator:
             print(f"      📊 準備繪製 {port_code} 的風速圖 (資料點數: {len(df)})")
             
             plt.style.use('seaborn-v0_8-darkgrid')
-            fig, ax = plt.subplots(figsize=(12, 5.5))
+            fig, ax = plt.subplots(figsize=(14, 6.5))
             
             # 繪製曲線 - 加粗並使用更鮮明的顏色
             ax.plot(df['time'], df['wind_speed'], color='#2563EB', 
@@ -252,7 +252,7 @@ class ChartGenerator:
                 return None
 
             plt.style.use('seaborn-v0_8-darkgrid')
-            fig, ax = plt.subplots(figsize=(12, 5.5))
+            fig, ax = plt.subplots(figsize=(14, 6.5))
             
             # 繪製曲線
             ax.plot(df['time'], df['wave_height'], color='#059669', 
