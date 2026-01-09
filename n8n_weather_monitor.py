@@ -957,6 +957,88 @@ class WeatherMonitorService:
                         </table>
         """
 
+        # ==================== 🆕 新增：風險港口總表 ====================
+        html += """
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F9FAFB; border: 2px solid #004B97; margin-bottom: 30px;">
+                            <tr>
+                                <td style="background-color: #004B97; padding: 12px;">
+                                    <div style="color: #ffffff; font-weight: bold; font-size: 16px;">
+                                        📋 風險港口總覽表 (Risk Ports Summary)
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0;">
+                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+        """
+        
+        # 定義風險等級樣式
+        summary_styles = {
+            3: {'emoji': '🔴', 'label': 'DANGER', 'color': '#D9534F', 'bg': '#FEF2F2'},
+            2: {'emoji': '🟠', 'label': 'WARNING', 'color': '#F59E0B', 'bg': '#FFFBEB'},
+            1: {'emoji': '🟡', 'label': 'CAUTION', 'color': '#0EA5E9', 'bg': '#F0F9FF'}
+        }
+        
+        # 生成各等級的港口列表
+        for level in [3, 2, 1]:
+            ports = risk_groups[level]
+            style = summary_styles[level]
+            
+            if ports:
+                port_codes = ', '.join([f"<strong>{p.port_code}</strong>" for p in ports])
+                html += f"""
+                                        <tr>
+                                            <td style="padding: 15px; border-bottom: 1px solid #E5E7EB; background-color: {style['bg']};">
+                                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                    <tr>
+                                                        <td width="180" valign="top">
+                                                            <div style="font-size: 14px; font-weight: bold; color: {style['color']};">
+                                                                {style['emoji']} {style['label']} ({len(ports)})
+                                                            </div>
+                                                        </td>
+                                                        <td style="font-size: 13px; color: #374151; line-height: 1.6;">
+                                                            {port_codes}
+                                                        </td>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                """
+            else:
+                html += f"""
+                                        <tr>
+                                            <td style="padding: 15px; border-bottom: 1px solid #E5E7EB; background-color: {style['bg']};">
+                                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                    <tr>
+                                                        <td width="180" valign="top">
+                                                            <div style="font-size: 14px; font-weight: bold; color: {style['color']};">
+                                                                {style['emoji']} {style['label']} (0)
+                                                            </div>
+                                                        </td>
+                                                        <td style="font-size: 13px; color: #9CA3AF; font-style: italic;">
+                                                            無港口
+                                                        </td>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                """
+        
+        html += """
+                                    </table>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 10px 15px; background-color: #FFFBEB; border-top: 1px solid #F59E0B;">
+                                    <div style="font-size: 11px; color: #92400E;">
+                                        💡 <strong>提示：</strong>點擊下方可查看各港口的詳細氣象數據與趨勢圖表
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+        """
+        # ==================== 總表結束 ====================
+
         # 風險等級樣式定義
         styles = {
             3: {
