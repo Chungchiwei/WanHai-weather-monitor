@@ -1141,7 +1141,22 @@ def _generate_charts(self, assessments: List[RiskAssessment]):
                         </td>
                     </tr>
                     """
-                else:
+                elif hasattr(p, 'chart_imgs') and p.chart_imgs:
+                    print(f"      📊 {p.port_code} 有 {len(p.chart_imgs)} 張圖表")
+                    chart_imgs = ""
+                    for idx, img in enumerate(p.chart_imgs):
+                        chart_imgs += f"""
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 10px;">
+                            <tr>
+                                <td align="center">
+                                    <img src="{img}" 
+                                        width="480" 
+                                        style="display:block; max-width: 100%; height: auto; border: 1px solid #ddd;" 
+                                        alt="Wind Trend Chart {idx+1}">
+                                </td>
+                            </tr>
+                        </table>
+                        """ 
                     print(f"      ⚠️ {p.port_code} 沒有圖表資料")
                     
                     html += f"""
