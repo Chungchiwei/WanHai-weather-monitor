@@ -982,7 +982,7 @@ class WeatherMonitorService:
                             </tr>
         """
         
-        # ==================== 風險等級分類內容（優化版：港口與風速分開） ====================
+        # ==================== 風險等級分類內容（Outlook 相容版） ====================
         level_styles = {
             3: {'emoji': '🔴', 'label_zh': '危險等級港口', 'label_en': 'DANGER PORTS', 'color': '#DC2626', 'bg': '#FEF2F2', 'border': '#DC2626'},
             2: {'emoji': '🟠', 'label_zh': '警告等級港口', 'label_en': 'WARNING PORTS', 'color': '#F59E0B', 'bg': '#FFFBEB', 'border': '#F59E0B'},
@@ -994,24 +994,40 @@ class WeatherMonitorService:
             style = level_styles[level]
             
             if ports:
-                # 生成港口代碼清單（港口與風速分開顯示）
-                port_items = []
-                for p in ports:
-                    max_val = max(p.max_wind_kts, p.max_gust_kts)
-                    port_items.append(f"""
-                        <div style="display:inline-block; background-color:#ffffff; padding:8px 12px; margin:4px; 
-                            border-radius:4px; border:2px solid {style['color']}; vertical-align:top; min-width:120px;">
-                            <div style="font-size:16px; font-weight:bold; color:{style['color']}; margin-bottom:4px; text-align:center;">
-                                {p.port_code}
-                            </div>
-                            <div style="font-size:11px; color:#666; text-align:center; margin-bottom:2px;">
-                                最大風速 Max Wind
-                            </div>
-                            <div style="font-size:18px; font-weight:bold; color:#333; text-align:center;">
-                                {max_val:.0f} <span style="font-size:12px; color:#666;">kts</span>
-                            </div>
-                        </div>
-                    """)
+                # 使用 Table 布局（每行 4 個港口）
+                port_rows_html = ""
+                for i in range(0, len(ports), 4):  # 每行 4 個
+                    row_ports = ports[i:i+4]
+                    port_cells = ""
+                    
+                    for p in row_ports:
+                        max_val = max(p.max_wind_kts, p.max_gust_kts)
+                        port_cells += f"""
+                            <td align="center" valign="top" style="padding:5px;">
+                                <table border="0" cellpadding="8" cellspacing="0" width="100%" style="background-color:#ffffff; border:2px solid {style['color']}; border-radius:4px;">
+                                    <tr>
+                                        <td align="center">
+                                            <div style="font-size:16px; font-weight:bold; color:{style['color']}; margin-bottom:4px;">
+                                                {p.port_code}
+                                            </div>
+                                            <div style="font-size:11px; color:#666; margin-bottom:2px;">
+                                                最大風速 Max Wind
+                                            </div>
+                                            <div style="font-size:18px; font-weight:bold; color:#333;">
+                                                {max_val:.0f} <span style="font-size:12px; color:#666;">kts</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        """
+                    
+                    # 如果不足 4 個，補空白格
+                    while len(row_ports) < 4:
+                        port_cells += '<td style="padding:5px;"></td>'
+                        row_ports.append(None)
+                    
+                    port_rows_html += f"<tr>{port_cells}</tr>"
                 
                 html += f"""
                             <tr>
@@ -1019,9 +1035,10 @@ class WeatherMonitorService:
                                     <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                         <tr style="background-color: {style['bg']};">
                                             <td style="padding: 15px; border-left: 5px solid {style['color']};">
+                                                <!-- 標題 -->
                                                 <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                                     <tr>
-                                                        <td colspan="2" style="padding-bottom:10px;">
+                                                        <td style="padding-bottom:10px;">
                                                             <div style="font-size: 17px; font-weight: bold; color: {style['color']}; margin-bottom: 3px;">
                                                                 {style['emoji']} {style['label_zh']}
                                                             </div>
@@ -1030,11 +1047,11 @@ class WeatherMonitorService:
                                                             </div>
                                                         </td>
                                                     </tr>
-                                                    <tr>
-                                                        <td style="font-size: 14px; line-height: 1.8;">
-                                                            {''.join(port_items)}
-                                                        </td>
-                                                    </tr>
+                                                </table>
+                                                
+                                                <!-- 港口卡片（使用 Table 布局）-->
+                                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                    {port_rows_html}
                                                 </table>
                                             </td>
                                         </tr>
@@ -1063,6 +1080,7 @@ class WeatherMonitorService:
                                 </td>
                             </tr>
                 """
+
         
         html += """
                         </table>
