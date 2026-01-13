@@ -850,7 +850,7 @@ class WeatherMonitorService:
         }
         
     def _generate_html_report(self, assessments: List[RiskAssessment]) -> str:
-        """生成 HTML 格式的精美報告 (總表版：一眼掃完所有港口)"""
+        """生成 HTML 格式的精美報告 (快速索引 + 總表 + 詳細資料)"""
         
         # 定義字型
         font_style = "font-family: 'Microsoft JhengHei', '微軟正黑體', 'Segoe UI', Arial, sans-serif;"
@@ -968,7 +968,97 @@ class WeatherMonitorService:
                             </tr>
                         </table>
 
-                        <!-- ========== 🔥 風險港口總表（核心重點！）========== -->
+                        <!-- ========== 🔥 風險等級分類表（新增！）========== -->
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 2px solid #004B97; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <tr>
+                                <td style="background-color: #004B97; padding: 12px;">
+                                    <div style="color: #ffffff; font-weight: bold; font-size: 16px;">
+                                        📋 風險等級快速索引 RISK LEVEL QUICK INDEX
+                                    </div>
+                                    <div style="color: #B3D9FF; font-size: 12px; margin-top: 2px;">
+                                        快速查看各等級港口清單 Quick view of ports by risk level
+                                    </div>
+                                </td>
+                            </tr>
+        """
+        
+        # ==================== 風險等級分類內容 ====================
+        level_styles = {
+            3: {'emoji': '🔴', 'label_zh': '危險等級港口', 'label_en': 'DANGER PORTS', 'color': '#DC2626', 'bg': '#FEF2F2', 'border': '#DC2626'},
+            2: {'emoji': '🟠', 'label_zh': '警告等級港口', 'label_en': 'WARNING PORTS', 'color': '#F59E0B', 'bg': '#FFFBEB', 'border': '#F59E0B'},
+            1: {'emoji': '🟡', 'label_zh': '注意等級港口', 'label_en': 'CAUTION PORTS', 'color': '#0EA5E9', 'bg': '#F0F9FF', 'border': '#0EA5E9'}
+        }
+        
+        for level in [3, 2, 1]:
+            ports = risk_groups[level]
+            style = level_styles[level]
+            
+            if ports:
+                # 生成港口代碼清單
+                port_codes = []
+                for p in ports:
+                    max_val = max(p.max_wind_kts, p.max_gust_kts)
+                    port_codes.append(
+                        f"<span style='display:inline-block; background-color:#ffffff; padding:6px 12px; margin:3px; "
+                        f"border-radius:4px; border:2px solid {style['color']}; white-space:nowrap;'>"
+                        f"<strong style='color:{style['color']}; font-size:15px;'>{p.port_code}</strong> "
+                        f"<span style='font-size:13px; color:#666;'>{max_val:.0f} kts</span>"
+                        f"</span>"
+                    )
+                
+                html += f"""
+                            <tr>
+                                <td style="padding: 0; border-bottom: 2px solid #E5E7EB;">
+                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                        <tr style="background-color: {style['bg']};">
+                                            <td style="padding: 12px 15px; border-left: 5px solid {style['color']};">
+                                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                    <tr>
+                                                        <td width="250" valign="top">
+                                                            <div style="font-size: 16px; font-weight: bold; color: {style['color']}; margin-bottom: 3px;">
+                                                                {style['emoji']} {style['label_zh']}
+                                                            </div>
+                                                            <div style="font-size: 12px; color: #666;">
+                                                                {style['label_en']} ({len(ports)} ports)
+                                                            </div>
+                                                        </td>
+                                                        <td style="font-size: 14px; line-height: 1.8; padding-left: 15px;">
+                                                            {''.join(port_codes)}
+                                                        </td>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                """
+            else:
+                html += f"""
+                            <tr>
+                                <td style="padding: 12px 15px; border-bottom: 2px solid #E5E7EB; background-color: {style['bg']}; border-left: 5px solid {style['color']};">
+                                    <table border="0" cellpadding="0" cellspacing="0">
+                                        <tr>
+                                            <td>
+                                                <span style="font-size: 15px; font-weight: bold; color: {style['color']};">
+                                                    {style['emoji']} {style['label_zh']} {style['label_en']}
+                                                </span>
+                                            </td>
+                                            <td style="padding-left: 15px;">
+                                                <span style="font-size: 12px; color: #9CA3AF; font-style: italic;">
+                                                    目前無此等級港口 No ports at this level
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                """
+        
+        html += """
+                        </table>
+
+                        <!-- ========== 🎯 風險港口總表 ========== -->
                         <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 2px solid #DC2626; margin-bottom: 25px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                             <tr>
                                 <td style="background-color: #DC2626; padding: 12px;">
@@ -976,10 +1066,10 @@ class WeatherMonitorService:
                                         <tr>
                                             <td>
                                                 <div style="color: #ffffff; font-weight: bold; font-size: 16px;">
-                                                    📋 風險港口總表 RISK PORTS SUMMARY TABLE
+                                                    📊 風險港口詳細總表 DETAILED RISK PORTS SUMMARY
                                                 </div>
                                                 <div style="color: #FFE4E6; font-size: 12px; margin-top: 2px;">
-                                                    請先確認您的靠泊港口是否在下表中 Please check if your port is in the table below
+                                                    完整氣象數據一覽表 Complete weather data overview
                                                 </div>
                                             </td>
                                         </tr>
@@ -1080,7 +1170,7 @@ class WeatherMonitorService:
                                             <td width="35" valign="top" style="font-size: 24px; line-height: 1;">👷</td>
                                             <td style="font-size: 14px; color: #78350F; line-height: 1.7;">
                                                 <strong style="color: #92400E; font-size: 15px;">
-                                                    ⚠️ 請各輪立即確認靠泊港口是否在上表中 Please check if your port is in the table above
+                                                    ⚠️ 請各輪立即確認靠泊港口是否在上表中 Please check if your port is in the tables above
                                                 </strong>
                                                 <div style="margin-top: 8px; font-size: 13px;">
                                                     ✅ 如您的港口<strong>在表中</strong>，請查看下方詳細氣象數據並做好風險評估<br>
