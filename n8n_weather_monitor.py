@@ -973,57 +973,66 @@ class WeatherMonitorService:
                             <tr>
                                 <td style="background-color: #004B97; padding: 12px;">
                                     <div style="color: #ffffff; font-weight: bold; font-size: 16px;">
-                                        📋 風險等級快速索引 RISK LEVEL QUICK INDEX
+                                        📋 未來48Hrs 小時風險港口總表 (48Hrs RISK LEVEL TABLE)
                                     </div>
                                     <div style="color: #B3D9FF; font-size: 12px; margin-top: 2px;">
-                                        快速查看各等級港口清單 Quick view of ports by risk level
+                                        請確認下方高風險港口 Please check below Hight Risk Level 
                                     </div>
                                 </td>
                             </tr>
         """
         
-        # ==================== 風險等級分類內容 ====================
+        # ==================== 風險等級分類內容（優化版：港口與風速分開） ====================
         level_styles = {
             3: {'emoji': '🔴', 'label_zh': '危險等級港口', 'label_en': 'DANGER PORTS', 'color': '#DC2626', 'bg': '#FEF2F2', 'border': '#DC2626'},
             2: {'emoji': '🟠', 'label_zh': '警告等級港口', 'label_en': 'WARNING PORTS', 'color': '#F59E0B', 'bg': '#FFFBEB', 'border': '#F59E0B'},
             1: {'emoji': '🟡', 'label_zh': '注意等級港口', 'label_en': 'CAUTION PORTS', 'color': '#0EA5E9', 'bg': '#F0F9FF', 'border': '#0EA5E9'}
         }
-        
+
         for level in [3, 2, 1]:
             ports = risk_groups[level]
             style = level_styles[level]
             
             if ports:
-                # 生成港口代碼清單
-                port_codes = []
+                # 生成港口代碼清單（港口與風速分開顯示）
+                port_items = []
                 for p in ports:
                     max_val = max(p.max_wind_kts, p.max_gust_kts)
-                    port_codes.append(
-                        f"<span style='display:inline-block; background-color:#ffffff; padding:6px 12px; margin:3px; "
-                        f"border-radius:4px; border:2px solid {style['color']}; white-space:nowrap;'>"
-                        f"<strong style='color:{style['color']}; font-size:15px;'>{p.port_code}</strong> "
-                        f"<span style='font-size:13px; color:#666;'>{max_val:.0f} kts</span>"
-                        f"</span>"
-                    )
+                    port_items.append(f"""
+                        <div style="display:inline-block; background-color:#ffffff; padding:8px 12px; margin:4px; 
+                            border-radius:4px; border:2px solid {style['color']}; vertical-align:top; min-width:120px;">
+                            <div style="font-size:16px; font-weight:bold; color:{style['color']}; margin-bottom:4px; text-align:center;">
+                                {p.port_code}
+                            </div>
+                            <div style="font-size:11px; color:#666; text-align:center; margin-bottom:2px;">
+                                最大風速 Max Wind
+                            </div>
+                            <div style="font-size:18px; font-weight:bold; color:#333; text-align:center;">
+                                {max_val:.0f} <span style="font-size:12px; color:#666;">kts</span>
+                            </div>
+                        </div>
+                    """)
                 
                 html += f"""
                             <tr>
                                 <td style="padding: 0; border-bottom: 2px solid #E5E7EB;">
                                     <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                         <tr style="background-color: {style['bg']};">
-                                            <td style="padding: 12px 15px; border-left: 5px solid {style['color']};">
+                                            <td style="padding: 15px; border-left: 5px solid {style['color']};">
                                                 <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                                     <tr>
-                                                        <td width="250" valign="top">
-                                                            <div style="font-size: 16px; font-weight: bold; color: {style['color']}; margin-bottom: 3px;">
+                                                        <td colspan="2" style="padding-bottom:10px;">
+                                                            <div style="font-size: 17px; font-weight: bold; color: {style['color']}; margin-bottom: 3px;">
                                                                 {style['emoji']} {style['label_zh']}
                                                             </div>
-                                                            <div style="font-size: 12px; color: #666;">
+                                                            <div style="font-size: 13px; color: #666;">
                                                                 {style['label_en']} ({len(ports)} ports)
                                                             </div>
                                                         </td>
-                                                        <td style="font-size: 14px; line-height: 1.8; padding-left: 15px;">
-                                                            {''.join(port_codes)}
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="font-size: 14px; line-height: 1.8;">
+                                                            {''.join(port_items)}
                                                         </td>
                                                     </tr>
                                                 </table>
@@ -1066,7 +1075,7 @@ class WeatherMonitorService:
                                         <tr>
                                             <td>
                                                 <div style="color: #ffffff; font-weight: bold; font-size: 16px;">
-                                                    📊 風險港口詳細總表 DETAILED RISK PORTS SUMMARY
+                                                    📊 詳細總表 DETAILED SUMMARY
                                                 </div>
                                                 <div style="color: #FFE4E6; font-size: 12px; margin-top: 2px;">
                                                     完整氣象數據一覽表 Complete weather data overview
@@ -1167,7 +1176,6 @@ class WeatherMonitorService:
                                 <td style="padding: 15px 18px;">
                                     <table border="0" cellpadding="0" cellspacing="0">
                                         <tr>
-                                            <td width="35" valign="top" style="font-size: 24px; line-height: 1;">👷</td>
                                             <td style="font-size: 14px; color: #78350F; line-height: 1.7;">
                                                 <strong style="color: #92400E; font-size: 15px;">
                                                     ⚠️ 請各輪立即確認靠泊港口是否在上表中 Please check if your port is in the tables above
@@ -1175,8 +1183,8 @@ class WeatherMonitorService:
                                                 <div style="margin-top: 8px; font-size: 13px;">
                                                     ✅ 如您的港口<strong>在表中</strong>，請查看下方詳細氣象數據並做好風險評估<br>
                                                     &nbsp;&nbsp;&nbsp;&nbsp;If your port is listed, please review the detailed weather data below<br>
-                                                    ✅ 如您的港口<strong>不在表中</strong>，無需採取額外措施，可忽略本郵件<br>
-                                                    &nbsp;&nbsp;&nbsp;&nbsp;If your port is NOT listed, no action required, you may ignore this email
+                                                    ✅ 如您的港口<strong>不在表中</strong>，可忽略本郵件<br>
+                                                    &nbsp;&nbsp;&nbsp;&nbsp;If your port is NOT listed, you may ignore this email
                                                 </div>
                                             </td>
                                         </tr>
