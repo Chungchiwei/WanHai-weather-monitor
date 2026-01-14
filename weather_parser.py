@@ -1,10 +1,10 @@
 # weather_parser.py
 import re
-from datetime import datetime
-from typing import List, Tuple, Dict, Any
+from datetime import datetime, timezone, timedelta  # ✅ 加上 timedelta
+from typing import List, Tuple, Dict, Any, Optional  # ✅ 確保有 Optional
 from dataclasses import dataclass
 from constant import kts_to_bft, wind_dir_deg, HIGH_WIND_SPEED_kts, HIGH_WIND_SPEED_Bft, HIGH_GUST_SPEED_kts, HIGH_GUST_SPEED_Bft, HIGH_WAVE_SIG
-
+import re
 @dataclass
 class WeatherRecord:
     """氣象記錄資料結構"""
