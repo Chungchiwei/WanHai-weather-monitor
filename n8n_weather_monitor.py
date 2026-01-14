@@ -4,8 +4,9 @@ import sys
 import json
 import traceback
 import smtplib
-import io  # 新增
-import base64 # 新增
+import io
+import base64
+import time
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict, field
@@ -14,7 +15,7 @@ from dataclasses import dataclass, asdict, field
 import requests
 import pandas as pd
 import matplotlib
-matplotlib.use('Agg')  # 非互動模式
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from dotenv import load_dotenv
@@ -38,22 +39,30 @@ except ImportError as e:
 AEDYN_USERNAME = os.getenv('AEDYN_USERNAME', 'harry_chung@wanhai.com')
 AEDYN_PASSWORD = os.getenv('AEDYN_PASSWORD', 'wanhai888')
 
-# 2. Gmail 接力發信用
-MAIL_USER = os.getenv('MAIL_USER')
-MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')
+# 2. 公司 SMTP 設定
+SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.office365.com')
+SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
+SMTP_USER = os.getenv('SMTP_USER', 'your_account@wanhai.com')
+SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
 
-# 3. 接力信件的目標與暗號
+# 3. Power Automate 觸發信箱
+PA_TRIGGER_EMAIL = os.getenv('PA_TRIGGER_EMAIL', 'whl.weather.bot@wanhai.com')
+PA_TRIGGER_SUBJECT_FLEET = "WHL_WEATHER_FLEET_REPORT"
+PA_TRIGGER_SUBJECT_PORT = "WHL_WEATHER_PORT_NOTIFICATION"
+PA_TRIGGER_SUBJECT_COUNTRY = "WHL_WEATHER_COUNTRY_SUMMARY"
+
+# 4. 船隊收件人
 TARGET_EMAIL = os.getenv('TARGET_EMAIL', 'harry_chung@wanhai.com')
-TRIGGER_SUBJECT = "GITHUB_TRIGGER_WEATHER_REPORT"
 
-# 4. Teams Webhook
+# 5. Teams Webhook
 TEAMS_WEBHOOK_URL = os.getenv('TEAMS_WEBHOOK_URL', '')
 
-# 5. 檔案路徑
+# 6. 檔案路徑
 EXCEL_FILE_PATH = os.getenv('EXCEL_FILE_PATH', 'WHL_all_ports_list.xlsx')
+PORT_AGENTS_DB_PATH = os.getenv('PORT_AGENTS_DB_PATH', 'port_agents.json')
 CHART_OUTPUT_DIR = 'charts'
 
-# 6. 風險閾值
+# 7. 風險閾值
 RISK_THRESHOLDS = {
     'wind_caution': 22,
     'wind_warning': 28,
@@ -65,6 +74,8 @@ RISK_THRESHOLDS = {
     'wave_warning': 3.5,
     'wave_danger': 4.0,
 }
+
+# ================= 資料結構 =================
 
 @dataclass
 class RiskAssessment:
@@ -100,7 +111,649 @@ class RiskAssessment:
         for key in ['raw_records', 'chart_base64_list']:
             d.pop(key, None)
         return d
-# ================= 繪圖模組 (修改版) =================
+
+# ================= 港口代理管理器 =================
+
+class PortAgentManager:
+    """港口代理信箱管理器（支援國家層級）"""
+    
+    def __init__(self, db_path: str = PORT_AGENTS_DB_PATH):
+        self.db_path = db_path
+        self.agents_data = self._load_agents_db()
+    
+    def _load_agents_db(self) -> Dict[str, Any]:
+        """載入代理資料庫"""
+        try:
+            if not os.path.exists(self.db_path):
+                print(f"⚠️ 警告: 找不到代理資料庫 {self.db_path}，將使用空資料庫")
+                return {"countries": {}}
+            
+            with open(self.db_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            total_ports = sum(len(country['ports']) for country in data.get('countries', {}).values())
+            print(f"✅ 已載入 {len(data.get('countries', {}))} 個國家，共 {total_ports} 個港口")
+            return data
+            
+        except Exception as e:
+            print(f"❌ 載入代理資料庫失敗: {e}")
+            return {"countries": {}}
+    
+    def get_country_code(self, port_code: str) -> Optional[str]:
+        """根據港口代碼取得國家代碼"""
+        for country_code, country_data in self.agents_data.get('countries', {}).items():
+            if port_code in country_data.get('ports', {}):
+                return country_code
+        return None
+    
+    def get_country_info(self, country_code: str) -> Optional[Dict[str, Any]]:
+        """取得國家資訊"""
+        return self.agents_data.get('countries', {}).get(country_code)
+    
+    def get_port_info(self, port_code: str) -> Optional[Dict[str, Any]]:
+        """取得港口資訊"""
+        country_code = self.get_country_code(port_code)
+        if not country_code:
+            return None
+        
+        country_data = self.get_country_info(country_code)
+        if not country_data:
+            return None
+        
+        port_info = country_data.get('ports', {}).get(port_code)
+        if port_info:
+            # 加入國家資訊
+            port_info['country_code'] = country_code
+            port_info['country_name'] = country_data.get('country_name', '')
+            port_info['country_name_en'] = country_data.get('country_name_en', '')
+        
+        return port_info
+    
+    def get_port_agent_emails(self, port_code: str) -> List[str]:
+        """取得港口代理信箱"""
+        port_info = self.get_port_info(port_code)
+        if not port_info:
+            return []
+        return port_info.get('agent_emails', [])
+    
+    def get_country_emails(self, country_code: str) -> List[str]:
+        """取得國家層級信箱"""
+        country_info = self.get_country_info(country_code)
+        if not country_info:
+            return []
+        return country_info.get('country_emails', [])
+    
+    def should_send_individual(self, port_code: str) -> bool:
+        """檢查是否要發送單一港口通知"""
+        port_info = self.get_port_info(port_code)
+        if not port_info:
+            return False
+        return port_info.get('send_individual', False) and len(port_info.get('agent_emails', [])) > 0
+    
+    def should_send_country_summary(self, country_code: str) -> bool:
+        """檢查是否要發送國家摘要"""
+        country_info = self.get_country_info(country_code)
+        if not country_info:
+            return False
+        return country_info.get('send_country_summary', False) and len(country_info.get('country_emails', [])) > 0
+    
+    def get_country_risk_ports(self, country_code: str, risk_assessments: List[RiskAssessment]) -> List[RiskAssessment]:
+        """取得該國家的所有風險港口"""
+        country_info = self.get_country_info(country_code)
+        if not country_info:
+            return []
+        
+        port_codes = set(country_info.get('ports', {}).keys())
+        return [a for a in risk_assessments if a.port_code in port_codes]
+    
+    def reload(self):
+        """重新載入代理資料庫"""
+        self.agents_data = self._load_agents_db()
+        print(f"🔄 代理資料庫已重新載入")
+
+# ================= 內部郵件發送器 =================
+
+class InternalEmailSender:
+    """使用公司 SMTP 發送內部郵件"""
+    
+    def __init__(self):
+        self.smtp_server = SMTP_SERVER
+        self.smtp_port = SMTP_PORT
+        self.smtp_user = SMTP_USER
+        self.smtp_password = SMTP_PASSWORD
+        self.pa_trigger_email = PA_TRIGGER_EMAIL
+    
+    def send_email(self, subject: str, body_html: str, 
+                   attachments: Optional[Dict[str, str]] = None) -> bool:
+        """發送郵件到 Power Automate 觸發信箱"""
+        
+        if not self.smtp_user or not self.smtp_password:
+            print("⚠️ 未設定 SMTP 帳密")
+            return False
+        
+        try:
+            msg = MIMEMultipart('mixed')
+            msg['From'] = self.smtp_user
+            msg['To'] = self.pa_trigger_email
+            msg['Subject'] = subject
+            msg['Date'] = datetime.now().strftime('%a, %d %b %Y %H:%M:%S +0800')
+            
+            # HTML 內容
+            msg_alternative = MIMEMultipart('alternative')
+            msg_alternative.attach(MIMEText(body_html, 'html', 'utf-8'))
+            msg.attach(msg_alternative)
+            
+            # 附件（JSON 資料）
+            if attachments:
+                for filename, content in attachments.items():
+                    attachment = MIMEText(content, 'plain', 'utf-8')
+                    attachment.add_header('Content-Disposition', 'attachment', 
+                                        filename=filename)
+                    msg.attach(attachment)
+            
+            print(f"📧 正在發送郵件到 {self.pa_trigger_email}...")
+            print(f"   主旨: {subject}")
+            
+            server = smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=30)
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(self.smtp_user, self.smtp_password)
+            server.sendmail(self.smtp_user, self.pa_trigger_email, msg.as_string())
+            server.quit()
+            
+            print(f"✅ 郵件發送成功")
+            return True
+            
+        except Exception as e:
+            print(f"❌ 郵件發送失敗: {e}")
+            traceback.print_exc()
+            return False
+
+# ================= Power Automate 觸發器 =================
+
+class PowerAutomateEmailTrigger:
+    """透過郵件觸發 Power Automate（支援國家層級通知）"""
+    
+    def __init__(self, agent_manager: Optional[PortAgentManager] = None):
+        self.email_sender = InternalEmailSender()
+        self.agent_manager = agent_manager or PortAgentManager()
+    
+    def send_fleet_report_trigger(self, report_data: dict, report_html: str,
+                                  risk_assessments: List[RiskAssessment]) -> bool:
+        """發送船隊報告觸發郵件（包含所有風險港口）"""
+        
+        json_data = json.dumps({
+            "trigger_type": "fleet_report",
+            "risk_count": len(risk_assessments),
+            "report_data": report_data,
+            "timestamp": datetime.now().isoformat(),
+            "target_email": TARGET_EMAIL
+        }, ensure_ascii=False, indent=2)
+        
+        attachments = {
+            "report_data.json": json_data
+        }
+        
+        return self.email_sender.send_email(
+            subject=PA_TRIGGER_SUBJECT_FLEET,
+            body_html=report_html,
+            attachments=attachments
+        )
+    
+    def send_port_notification_trigger(self, assessment: RiskAssessment,
+                                      single_port_html: str) -> bool:
+        """發送單一港口通知觸發郵件"""
+        
+        port_code = assessment.port_code
+        
+        if not self.agent_manager.should_send_individual(port_code):
+            return False
+        
+        port_info = self.agent_manager.get_port_info(port_code)
+        country_code = self.agent_manager.get_country_code(port_code)
+        
+        risk_label = {
+            3: "🔴 DANGER", 
+            2: "🟠 WARNING", 
+            1: "🟡 CAUTION"
+        }.get(assessment.risk_level, "⚪ INFO")
+        
+        json_data = json.dumps({
+            "trigger_type": "port_notification",
+            "port_code": port_code,
+            "port_name": assessment.port_name,
+            "country_code": country_code,
+            "agent_emails": port_info['agent_emails'],
+            "agent_name": port_info.get('agent_name', 'Port Agent'),
+            "risk_level": assessment.risk_level,
+            "risk_label": risk_label,
+            "max_wind_kts": assessment.max_wind_kts,
+            "max_gust_kts": assessment.max_gust_kts,
+            "max_wave": assessment.max_wave,
+            "timestamp": datetime.now().isoformat()
+        }, ensure_ascii=False, indent=2)
+        
+        attachments = {
+            f"{port_code}_port_data.json": json_data
+        }
+        
+        subject = f"{PA_TRIGGER_SUBJECT_PORT}_{port_code}"
+        
+        print(f"   📧 發送 {port_code} 單一港口通知")
+        print(f"      收件者: {', '.join(port_info['agent_emails'])}")
+        
+        return self.email_sender.send_email(
+            subject=subject,
+            body_html=single_port_html,
+            attachments=attachments
+        )
+    
+    def send_country_summary_trigger(self, country_code: str,
+                                    country_assessments: List[RiskAssessment],
+                                    country_summary_html: str) -> bool:
+        """發送國家摘要通知觸發郵件"""
+        
+        if not self.agent_manager.should_send_country_summary(country_code):
+            return False
+        
+        country_info = self.agent_manager.get_country_info(country_code)
+        
+        json_data = json.dumps({
+            "trigger_type": "country_summary",
+            "country_code": country_code,
+            "country_name": country_info['country_name'],
+            "country_name_en": country_info['country_name_en'],
+            "country_emails": country_info['country_emails'],
+            "risk_port_count": len(country_assessments),
+            "risk_ports": [a.port_code for a in country_assessments],
+            "timestamp": datetime.now().isoformat()
+        }, ensure_ascii=False, indent=2)
+        
+        attachments = {
+            f"{country_code}_country_summary.json": json_data
+        }
+        
+        subject = f"{PA_TRIGGER_SUBJECT_COUNTRY}_{country_code}"
+        
+        print(f"   📧 發送 {country_code} ({country_info['country_name']}) 國家摘要")
+        print(f"      收件者: {', '.join(country_info['country_emails'])}")
+        print(f"      包含港口: {', '.join([a.port_code for a in country_assessments])}")
+        
+        return self.email_sender.send_email(
+            subject=subject,
+            body_html=country_summary_html,
+            attachments=attachments
+        )
+    
+    def send_all_notifications(self, risk_assessments: List[RiskAssessment]) -> Dict[str, Any]:
+        """批次發送所有通知（港口 + 國家）"""
+        
+        results = {
+            'port_notifications': {},
+            'country_summaries': {}
+        }
+        
+        # 1. 發送單一港口通知
+        print(f"\n📧 步驟 1: 發送單一港口通知...")
+        port_count = 0
+        for assessment in risk_assessments:
+            if self.agent_manager.should_send_individual(assessment.port_code):
+                single_port_html = self._generate_single_port_html(assessment)
+                success = self.send_port_notification_trigger(assessment, single_port_html)
+                results['port_notifications'][assessment.port_code] = success
+                if success:
+                    port_count += 1
+                time.sleep(1)
+        
+        if results['port_notifications']:
+            print(f"   ✅ 單一港口通知: {port_count}/{len(results['port_notifications'])} 成功")
+        else:
+            print(f"   ⚠️ 沒有港口需要發送單一通知")
+        
+        # 2. 按國家分組
+        print(f"\n📧 步驟 2: 發送國家摘要通知...")
+        country_groups = {}
+        for assessment in risk_assessments:
+            country_code = self.agent_manager.get_country_code(assessment.port_code)
+            if country_code:
+                if country_code not in country_groups:
+                    country_groups[country_code] = []
+                country_groups[country_code].append(assessment)
+        
+        # 3. 發送國家摘要
+        country_count = 0
+        for country_code, assessments in country_groups.items():
+            if self.agent_manager.should_send_country_summary(country_code):
+                country_summary_html = self._generate_country_summary_html(country_code, assessments)
+                success = self.send_country_summary_trigger(country_code, assessments, country_summary_html)
+                results['country_summaries'][country_code] = success
+                if success:
+                    country_count += 1
+                time.sleep(1)
+        
+        if results['country_summaries']:
+            print(f"   ✅ 國家摘要通知: {country_count}/{len(results['country_summaries'])} 成功")
+        else:
+            print(f"   ⚠️ 沒有國家需要發送摘要通知")
+        
+        return results
+    
+    def _generate_single_port_html(self, assessment: RiskAssessment) -> str:
+        """為單一港口生成 HTML 報告"""
+        
+        font_style = "font-family: 'Microsoft JhengHei', '微軟正黑體', 'Segoe UI', Arial, sans-serif;"
+        
+        try:
+            from zoneinfo import ZoneInfo
+            taipei_tz = ZoneInfo('Asia/Taipei')
+        except ImportError:
+            taipei_tz = timezone(timedelta(hours=8))
+        
+        utc_now = datetime.now(timezone.utc)
+        tpe_now = utc_now.astimezone(taipei_tz)
+        now_str_TPE = f"{tpe_now.strftime('%Y-%m-%d %H:%M')} (TPE)"
+        
+        risk_styles = {
+            3: {'color': '#DC2626', 'bg': '#FEF2F2', 'label': '🔴 DANGER'},
+            2: {'color': '#F59E0B', 'bg': '#FFFBEB', 'label': '🟠 WARNING'},
+            1: {'color': '#0EA5E9', 'bg': '#F0F9FF', 'label': '🟡 CAUTION'}
+        }
+        
+        style = risk_styles.get(assessment.risk_level, risk_styles[1])
+        
+        # 圖表處理
+        chart_html = ""
+        if hasattr(assessment, 'chart_base64_list') and assessment.chart_base64_list:
+            for idx, b64 in enumerate(assessment.chart_base64_list):
+                b64_clean = b64.replace('\n', '').replace('\r', '').replace(' ', '')
+                chart_html += f"""
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 15px;">
+                    <tr>
+                        <td align="center">
+                            <img src="data:image/png;base64,{b64_clean}" 
+                                width="750" 
+                                style="display:block; max-width: 100%; height: auto; border: 1px solid #ddd;" 
+                                alt="Weather Chart {idx+1}">
+                        </td>
+                    </tr>
+                </table>
+                """
+        
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #F0F4F8; {font_style}">
+            <center>
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 900px; margin: 20px auto; background-color: #ffffff;">
+                
+                <tr>
+                    <td style="background-color: #004B97; padding: 20px;">
+                        <h1 style="margin: 0; font-size: 22px; color: #ffffff; font-weight: bold;">
+                            ⚠️ Port Weather Risk Alert
+                        </h1>
+                        <div style="margin-top: 3px; font-size: 13px; color: #B3D9FF;">
+                            48-Hour Weather Forecast | 未來 48 小時天氣預報
+                        </div>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="padding: 25px;">
+                        
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: {style['bg']}; border-left: 6px solid {style['color']}; margin-bottom: 20px;">
+                            <tr>
+                                <td style="padding: 20px;">
+                                    <div style="font-size: 32px; font-weight: bold; color: {style['color']}; margin-bottom: 10px;">
+                                        {style['label']} - {assessment.port_code}
+                                    </div>
+                                    <div style="font-size: 20px; color: #374151; margin-bottom: 5px;">
+                                        {assessment.port_name} | {assessment.country}
+                                    </div>
+                                    <div style="font-size: 14px; color: #6B7280; margin-top: 10px;">
+                                        📅 Issued: {now_str_TPE}
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 20px;">
+                            <tr>
+                                <td style="padding: 15px; background-color: #F9FAFB; border: 1px solid #E5E7EB;">
+                                    <table border="0" cellpadding="8" cellspacing="0" width="100%">
+                                        <tr>
+                                            <td width="50%" style="font-size: 14px; color: #6B7280;">
+                                                <strong style="color: #111827;">Max Wind Speed:</strong><br>
+                                                <span style="font-size: 24px; color: #DC2626; font-weight: bold;">{assessment.max_wind_kts:.0f} kts</span>
+                                                <span style="font-size: 14px; color: #6B7280;">(BF{assessment.max_wind_bft})</span><br>
+                                                <span style="font-size: 11px; color: #9CA3AF;">at {assessment.max_wind_time_utc}</span>
+                                            </td>
+                                            <td width="50%" style="font-size: 14px; color: #6B7280;">
+                                                <strong style="color: #111827;">Max Gust:</strong><br>
+                                                <span style="font-size: 24px; color: #DC2626; font-weight: bold;">{assessment.max_gust_kts:.0f} kts</span>
+                                                <span style="font-size: 14px; color: #6B7280;">(BF{assessment.max_gust_bft})</span><br>
+                                                <span style="font-size: 11px; color: #9CA3AF;">at {assessment.max_gust_time_utc}</span>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td colspan="2" style="font-size: 14px; color: #6B7280; padding-top: 10px;">
+                                                <strong style="color: #111827;">Max Wave Height:</strong><br>
+                                                <span style="font-size: 24px; color: #0EA5E9; font-weight: bold;">{assessment.max_wave:.1f} m</span><br>
+                                                <span style="font-size: 11px; color: #9CA3AF;">at {assessment.max_wave_time_utc}</span>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
+
+                        {chart_html}
+
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 20px; background-color: #FFFBEB; border-left: 4px solid #F59E0B;">
+                            <tr>
+                                <td style="padding: 15px; font-size: 13px; color: #78350F; line-height: 1.7;">
+                                    <strong>⚠️ Action Required:</strong><br>
+                                    • Please confirm latest port operation status<br>
+                                    • Prepare necessary safety measures<br>
+                                    • Monitor weather updates regularly<br>
+                                    • Coordinate with vessel master for berthing arrangements
+                                </td>
+                            </tr>
+                        </table>
+
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="background-color: #F8F9FA; padding: 20px; text-align: center; color: #9CA3AF; font-size: 12px; border-top: 1px solid #E5E7EB;">
+                        <p style="margin: 0 0 6px 0; font-size: 13px; color: #6B7280;">
+                            <strong>Wan Hai Lines Ltd. | 萬海航運股份有限公司</strong>
+                        </p>
+                        <p style="margin: 0; font-size: 11px; color: #D1D5DB;">
+                            Marine Technology Division | Automated Weather Monitoring System
+                        </p>
+                    </td>
+                </tr>
+            </table>
+            </center>
+        </body>
+        </html>
+        """
+        
+        return html
+    
+    def _generate_country_summary_html(self, country_code: str, 
+                                      assessments: List[RiskAssessment]) -> str:
+        """為國家生成摘要 HTML 報告"""
+        
+        font_style = "font-family: 'Microsoft JhengHei', '微軟正黑體', 'Segoe UI', Arial, sans-serif;"
+        
+        try:
+            from zoneinfo import ZoneInfo
+            taipei_tz = ZoneInfo('Asia/Taipei')
+        except ImportError:
+            taipei_tz = timezone(timedelta(hours=8))
+        
+        utc_now = datetime.now(timezone.utc)
+        tpe_now = utc_now.astimezone(taipei_tz)
+        now_str_TPE = f"{tpe_now.strftime('%Y-%m-%d %H:%M')} (TPE)"
+        
+        country_info = self.agent_manager.get_country_info(country_code)
+        country_name = country_info['country_name']
+        country_name_en = country_info['country_name_en']
+        
+        # 風險分組
+        danger_ports = [a for a in assessments if a.risk_level == 3]
+        warning_ports = [a for a in assessments if a.risk_level == 2]
+        caution_ports = [a for a in assessments if a.risk_level == 1]
+        
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #F0F4F8; {font_style}">
+            <center>
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 900px; margin: 20px auto; background-color: #ffffff;">
+                
+                <tr>
+                    <td style="background-color: #004B97; padding: 20px;">
+                        <h1 style="margin: 0; font-size: 22px; color: #ffffff; font-weight: bold;">
+                            ⚠️ {country_name} ({country_name_en}) 港口氣象風險摘要
+                        </h1>
+                        <h1 style="margin: 5px 0 0 0; font-size: 22px; color: #ffffff; font-weight: bold;">
+                            Weather Risk Summary
+                        </h1>
+                        <div style="margin-top: 8px; font-size: 13px; color: #B3D9FF;">
+                            48-Hour Weather Forecast | 未來 48 小時天氣預報
+                        </div>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="padding: 25px;">
+                        
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background: linear-gradient(135deg, #FEE2E2 0%, #FEF2F2 100%); border-left: 6px solid #DC2626; margin-bottom: 20px;">
+                            <tr>
+                                <td style="padding: 20px;">
+                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                        <tr>
+                                            <td width="60" valign="top" style="font-size: 36px;">⚠️</td>
+                                            <td valign="middle">
+                                                <div style="font-size: 24px; font-weight: bold; color: #DC2626; margin-bottom: 5px;">
+                                                    {country_name} 共 {len(assessments)} 個港口有氣象風險
+                                                </div>
+                                                <div style="font-size: 20px; font-weight: bold; color: #DC2626;">
+                                                    {len(assessments)} Ports with Weather Risks in {country_name_en}
+                                                </div>
+                                            </td>
+                                            <td align="right" valign="middle" width="220">
+                                                <table border="0" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px;">
+                                                    <tr>
+                                                        <td align="center" style="padding: 8px 10px;">
+                                                            <div style="font-size: 24px; font-weight: bold; color: #DC2626;">{len(danger_ports)}</div>
+                                                            <div style="font-size: 12px; color: #666;">🔴 DANGER</div>
+                                                        </td>
+                                                        <td align="center" style="padding: 8px 10px; border-left: 1px solid #E5E7EB;">
+                                                            <div style="font-size: 24px; font-weight: bold; color: #F59E0B;">{len(warning_ports)}</div>
+                                                            <div style="font-size: 12px; color: #666;">🟠 WARNING</div>
+                                                        </td>
+                                                        <td align="center" style="padding: 8px 10px; border-left: 1px solid #E5E7EB;">
+                                                            <div style="font-size: 24px; font-weight: bold; color: #0EA5E9;">{len(caution_ports)}</div>
+                                                            <div style="font-size: 12px; color: #666;">🟡 CAUTION</div>
+                                                        </td>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 2px solid #004B97; margin-bottom: 20px;">
+                            <tr>
+                                <td style="background-color: #004B97; padding: 12px; color: #ffffff; font-weight: bold; font-size: 16px;">
+                                    📋 風險港口列表 Risk Ports List
+                                </td>
+                            </tr>
+        """
+        
+        # 列出所有風險港口
+        for assessment in sorted(assessments, key=lambda x: x.risk_level, reverse=True):
+            risk_emoji = {3: "🔴", 2: "🟠", 1: "🟡"}.get(assessment.risk_level, "⚪")
+            risk_label = {3: "DANGER", 2: "WARNING", 1: "CAUTION"}.get(assessment.risk_level, "INFO")
+            risk_color = {3: "#DC2626", 2: "#F59E0B", 1: "#0EA5E9"}.get(assessment.risk_level, "#6B7280")
+            risk_bg = {3: "#FEF2F2", 2: "#FFFBEB", 1: "#F0F9FF"}.get(assessment.risk_level, "#F9FAFB")
+            
+            html += f"""
+                            <tr>
+                                <td style="padding: 15px; border-bottom: 1px solid #E5E7EB; background-color: {risk_bg};">
+                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                        <tr>
+                                            <td width="200" valign="top">
+                                                <div style="font-size: 18px; font-weight: bold; color: {risk_color};">
+                                                    {risk_emoji} {assessment.port_code} - {risk_label}
+                                                </div>
+                                                <div style="font-size: 14px; color: #666; margin-top: 3px;">
+                                                    {assessment.port_name}
+                                                </div>
+                                            </td>
+                                            <td style="font-size: 13px; color: #374151;">
+                                                <div style="margin-bottom: 3px;">💨 風速: <strong>{assessment.max_wind_kts:.0f} kts</strong> (BF{assessment.max_wind_bft})</div>
+                                                <div style="margin-bottom: 3px;">💨 陣風: <strong>{assessment.max_gust_kts:.0f} kts</strong> (BF{assessment.max_gust_bft})</div>
+                                                <div>🌊 浪高: <strong>{assessment.max_wave:.1f} m</strong></div>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+            """
+        
+        html += f"""
+                        </table>
+
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FFFBEB; border-left: 4px solid #F59E0B; margin-top: 20px;">
+                            <tr>
+                                <td style="padding: 15px; font-size: 13px; color: #78350F; line-height: 1.7;">
+                                    <strong>⚠️ Action Required:</strong><br>
+                                    • Please review weather conditions for all listed ports<br>
+                                    • Coordinate with local agents for latest updates<br>
+                                    • Prepare necessary safety measures<br>
+                                    • Monitor weather updates regularly
+                                </td>
+                            </tr>
+                        </table>
+
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="background-color: #F8F9FA; padding: 20px; text-align: center; color: #9CA3AF; font-size: 12px; border-top: 1px solid #E5E7EB;">
+                        <p style="margin: 0 0 6px 0; font-size: 13px; color: #6B7280;">
+                            <strong>Wan Hai Lines Ltd. | 萬海航運股份有限公司</strong>
+                        </p>
+                        <p style="margin: 0; font-size: 11px; color: #D1D5DB;">
+                            Marine Technology Division | Automated Weather Monitoring System
+                        </p>
+                        <p style="margin: 6px 0 0 0; font-size: 11px; color: #D1D5DB;">
+                            📅 {now_str_TPE}
+                        </p>
+                    </td>
+                </tr>
+            </table>
+            </center>
+        </body>
+        </html>
+        """
+        
+        return html
+
+# ================= 圖表生成器 =================
 
 class ChartGenerator:
     """圖表生成器 - 支援 Base64 輸出（高解析度版）"""
@@ -146,46 +799,25 @@ class ChartGenerator:
         return img_str
 
     def generate_wind_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
-        """繪製風速趨勢圖，回傳 Base64 字串（高解析度版）"""
+        """繪製風速趨勢圖，回傳 Base64 字串"""
         if not assessment.raw_records:
-            print(f"      ⚠️ {port_code} 沒有原始資料記錄")
             return None
             
         try:
             df = self._prepare_dataframe(assessment.raw_records)
-            
             if df.empty:
-                print(f"      ⚠️ {port_code} DataFrame 為空")
                 return None
             
-            print(f"      📊 準備繪製 {port_code} 的風速圖 (資料點數: {len(df)})")
-            
             plt.style.use('seaborn-v0_8-darkgrid')
-            
-            # 🔥 增加圖表尺寸
             fig, ax = plt.subplots(figsize=(18, 8))
             
-            # 繪製曲線 - 加粗線條
             ax.plot(df['time'], df['wind_speed'], color='#2563EB', 
                 label='Wind Speed (kts)', linewidth=3.5, marker='o', markersize=6, zorder=3)
             ax.plot(df['time'], df['wind_gust'], color='#DC2626', 
                 linestyle='--', label='Gust (kts)', linewidth=2.8, marker='s', markersize=5, zorder=3)
             
-            # 填充
             ax.fill_between(df['time'], df['wind_speed'], alpha=0.15, color='#2563EB', zorder=1)
-            ax.fill_between(
-                df['time'], 
-                df['wind_speed'], 
-                y2=0,
-                where=(df['wind_speed'] >= RISK_THRESHOLDS['wind_caution']),
-                interpolate=True,
-                color='#F59E0B',
-                alpha=0.25,
-                label='High Risk Period',
-                zorder=2
-            )                    
             
-            # 閾值線
             ax.axhline(RISK_THRESHOLDS['wind_danger'], color="#DC2626", 
                     linestyle=':', linewidth=2.5, label=f'Danger ({RISK_THRESHOLDS["wind_danger"]} kts)', zorder=2)   
             ax.axhline(RISK_THRESHOLDS['wind_warning'], color="#F59E0B", 
@@ -193,7 +825,6 @@ class ChartGenerator:
             ax.axhline(RISK_THRESHOLDS['wind_caution'], color="#FCD34D", 
                     linestyle=':', linewidth=2.2, label=f'Caution ({RISK_THRESHOLDS["wind_caution"]} kts)', zorder=2)
             
-            # 標題與標籤 - 加大字體
             ax.set_title(f"{assessment.port_name} ({assessment.port_code}) - Wind Speed & Gust Trend (48 Hrs)", 
                         fontsize=20, fontweight='bold', pad=25, color='#1F2937')
             ax.set_ylabel('Speed (knots)', fontsize=16, fontweight='600', color='#374151')
@@ -201,73 +832,48 @@ class ChartGenerator:
             ax.legend(loc='upper left', frameon=True, fontsize=13, shadow=True, fancybox=True)
             ax.grid(True, alpha=0.4, linestyle='--', linewidth=1)
             
-            # 設定背景顏色
             ax.set_facecolor('#F9FAFB')
             fig.patch.set_facecolor('white')
             
-            # 日期格式
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
             ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
             plt.xticks(rotation=30, ha='right', fontsize=12)
             plt.yticks(fontsize=12)
             
-            # 加入邊框
             for spine in ax.spines.values():
                 spine.set_edgecolor('#D1D5DB')
                 spine.set_linewidth(2)
             
             plt.tight_layout()
             
-            # 1. 存檔（高解析度）
             filepath = os.path.join(self.output_dir, f"wind_{port_code}.png")
             fig.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
-            print(f"      💾 圖片已存檔: {filepath}")
             
-            # 2. 轉 Base64（高解析度）
             base64_str = self._fig_to_base64(fig, dpi=150)
-            print(f"      ✅ Base64 轉換成功 (長度: {len(base64_str)} 字元)")
-            
             plt.close(fig)
             return base64_str
             
         except Exception as e:
             print(f"      ❌ 繪製風速圖失敗 {port_code}: {e}")
-            traceback.print_exc()
             return None
 
     def generate_wave_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
-        """繪製浪高趨勢圖，回傳 Base64 字串（高解析度版）"""
+        """繪製浪高趨勢圖，回傳 Base64 字串"""
         if not assessment.raw_records:
             return None
             
         try:
             df = self._prepare_dataframe(assessment.raw_records)
-            
             if df['wave_height'].max() < 1.0:
                 return None
 
             plt.style.use('seaborn-v0_8-darkgrid')
-            
-            # 🔥 增加圖表尺寸
             fig, ax = plt.subplots(figsize=(18, 8))
             
-            # 繪製曲線
             ax.plot(df['time'], df['wave_height'], color='#059669', 
                    label='Sig. Wave Height (m)', linewidth=3.5, marker='o', markersize=6, zorder=3)
             ax.fill_between(df['time'], df['wave_height'], alpha=0.15, color='#059669', zorder=1)
-            ax.fill_between(
-                df['time'], 
-                df['wave_height'], 
-                y2=0,
-                where=(df['wave_height'] > RISK_THRESHOLDS['wave_caution']),
-                interpolate=True,
-                color='#F59E0B',
-                alpha=0.25,
-                label='Risk Area',
-                zorder=2
-            )          
             
-            # 閾值線
             ax.axhline(RISK_THRESHOLDS['wave_caution'], color="#FCD34D", 
                       linestyle=':', linewidth=2.2, label=f'Caution ({RISK_THRESHOLDS["wave_caution"]} m)', zorder=2)
             ax.axhline(RISK_THRESHOLDS['wave_warning'], color="#F59E0B", 
@@ -296,24 +902,18 @@ class ChartGenerator:
             
             plt.tight_layout()
             
-            # 1. 存檔（高解析度）
             filepath = os.path.join(self.output_dir, f"wave_{port_code}.png")
             fig.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
             
-            # 2. 轉 Base64（高解析度）
             base64_str = self._fig_to_base64(fig, dpi=150)
-            
             plt.close(fig)
-            print(f"   ✅ 浪高圖已生成: {filepath}")
             return base64_str
             
         except Exception as e:
             print(f"   ❌ 繪製浪高圖失敗 {port_code}: {e}")
-            traceback.print_exc()
             return None
 
-
-# ================= 風險分析模組 (修正版) =================
+# ================= 風險分析模組 =================
 
 class WeatherRiskAnalyzer:
     """氣象風險分析器"""
@@ -339,7 +939,6 @@ class WeatherRiskAnalyzer:
         risks = []
         risk_level = 0
 
-        # 風速檢查
         if record.wind_speed_kts >= RISK_THRESHOLDS['wind_danger']:
             risks.append(f"⛔ 風速危險: {record.wind_speed_kts:.1f} kts")
             risk_level = max(risk_level, 3)
@@ -350,7 +949,6 @@ class WeatherRiskAnalyzer:
             risks.append(f"⚡ 風速注意: {record.wind_speed_kts:.1f} kts")
             risk_level = max(risk_level, 1)
 
-        # 陣風檢查
         if record.wind_gust_kts >= RISK_THRESHOLDS['gust_danger']:
             risks.append(f"⛔ 陣風危險: {record.wind_gust_kts:.1f} kts")
             risk_level = max(risk_level, 3)
@@ -361,7 +959,6 @@ class WeatherRiskAnalyzer:
             risks.append(f"⚡ 陣風注意: {record.wind_gust_kts:.1f} kts")
             risk_level = max(risk_level, 1)
 
-        # 浪高檢查
         if record.wave_height >= RISK_THRESHOLDS['wave_danger']:
             risks.append(f"⛔ 浪高危險: {record.wave_height:.1f} m")
             risk_level = max(risk_level, 3)
@@ -399,11 +996,8 @@ class WeatherRiskAnalyzer:
             risk_periods = []
             max_level = 0
             
-            # 找出風速最大的那一筆記錄
             max_wind_record = max(records, key=lambda r: r.wind_speed_kts)
-            # 找出陣風最大的那一筆記錄
             max_gust_record = max(records, key=lambda r: r.wind_gust_kts)
-            # 浪高最大的記錄
             max_wave_record = max(records, key=lambda r: r.wave_height)
             
             for record in records:
@@ -432,10 +1026,6 @@ class WeatherRiskAnalyzer:
             if max_wave_record.wave_height >= RISK_THRESHOLDS['wave_caution']:
                 risk_factors.append(f"浪高 {max_wave_record.wave_height:.1f} m")
             
-            # ✅ 計算 LCT 時區偏移（用於顯示）
-            lct_offset_hours = int(max_wind_record.lct_time.utcoffset().total_seconds() / 3600)
-            lct_offset_str = f"UTC{lct_offset_hours:+d}"
-            
             return RiskAssessment(
                 port_code=port_code,
                 port_name=port_info.get('port_name', port_name),
@@ -448,12 +1038,10 @@ class WeatherRiskAnalyzer:
                 max_gust_bft=max_wind_record.wind_gust_bft,
                 max_wave=max_wave_record.wave_height,
                 
-                # ✅ 格式：MM/DD 08:00 (UTC)
                 max_wind_time_utc=f"{max_wind_record.time.strftime('%m/%d %H:%M')} (UTC)",
                 max_gust_time_utc=f"{max_gust_record.time.strftime('%m/%d %H:%M')} (UTC)",
                 max_wave_time_utc=f"{max_wave_record.time.strftime('%m/%d %H:%M')} (UTC)",
                 
-                # ✅ 格式：08:00 (LT) 或 08:00 (UTC+8)
                 max_wind_time_lct=f"{max_wind_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
                 max_gust_time_lct=f"{max_gust_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
                 max_wave_time_lct=f"{max_wave_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
@@ -470,8 +1058,7 @@ class WeatherRiskAnalyzer:
             traceback.print_exc()
             return None
 
-
-# ================= Teams 通知器 (無變動) =================
+# ================= Teams 通知器 =================
 
 class TeamsNotifier:
     """Teams 通知發送器"""
@@ -500,12 +1087,11 @@ class TeamsNotifier:
                 print("✅ Teams 通知發送成功")
                 return True
             else:
-                print(f"❌ Teams 通知發送失敗: {response.status_code} - {response.text}")
+                print(f"❌ Teams 通知發送失敗: {response.status_code}")
                 return False
                 
         except Exception as e:
             print(f"❌ 發送 Teams 通知時發生錯誤: {e}")
-            traceback.print_exc()
             return False
     
     def _send_all_safe_notification(self) -> bool:
@@ -542,9 +1128,6 @@ class TeamsNotifier:
             return False
     
     def _create_adaptive_card(self, risk_assessments: List[RiskAssessment]) -> Dict[str, Any]:
-        """建立 Adaptive Card"""
-        
-        # 風險分組
         danger_ports = [a for a in risk_assessments if a.risk_level == 3]
         warning_ports = [a for a in risk_assessments if a.risk_level == 2]
         caution_ports = [a for a in risk_assessments if a.risk_level == 1]
@@ -565,51 +1148,60 @@ class TeamsNotifier:
             },
             {
                 "type": "FactSet",
-                "facts": [
-                    {"title": "🔴 危險 (Danger)", "value": str(len(danger_ports))},
-                    {"title": "🟠 警告 (Warning)", "value": str(len(warning_ports))},
-                    {"title": "🟡 注意 (Caution)", "value": str(len(caution_ports))},
-                    {"title": "📅 更新時間", "value": datetime.now().strftime('%Y-%m-%d %H:%M')}
+                "facts": [                    
+                    {"title": "🔴 危險", "value": str(len(danger_ports))},
+                    {"title": "🟠 警告", "value": str(len(warning_ports))},
+                    {"title": "🟡 注意", "value": str(len(caution_ports))}
                 ],
                 "spacing": "Medium"
             }
         ]
         
-        # 只顯示前 5 個最高風險港口
-        top_risks = sorted(risk_assessments, key=lambda x: x.risk_level, reverse=True)[:5]
-        
-        for port in top_risks:
-            risk_color = {3: "Attention", 2: "Warning", 1: "Good"}.get(port.risk_level, "Default")
-            risk_emoji = {3: "🔴", 2: "🟠", 1: "🟡"}.get(port.risk_level, "⚪")
+        # 加入各港口詳細資訊
+        for assessment in sorted(risk_assessments, key=lambda x: x.risk_level, reverse=True):
+            risk_emoji = {3: "🔴", 2: "🟠", 1: "🟡"}.get(assessment.risk_level, "⚪")
+            risk_color = {3: "Attention", 2: "Warning", 1: "Accent"}.get(assessment.risk_level, "Default")
             
             body.append({
                 "type": "Container",
                 "style": "emphasis",
                 "items": [
                     {
-                        "type": "TextBlock",
-                        "text": f"{risk_emoji} {port.port_code} - {port.port_name}",
-                        "weight": "Bolder",
-                        "color": risk_color
-                    },
-                    {
-                        "type": "FactSet",
-                        "facts": [
-                            {"title": "風速", "value": f"{port.max_wind_kts:.0f} kts (BF{port.max_wind_bft})"},
-                            {"title": "陣風", "value": f"{port.max_gust_kts:.0f} kts (BF{port.max_gust_bft})"},
-                            {"title": "浪高", "value": f"{port.max_wave:.1f} m"},
-                            {"title": "國家", "value": port.country}
+                        "type": "ColumnSet",
+                        "columns": [
+                            {
+                                "type": "Column",
+                                "width": "auto",
+                                "items": [
+                                    {
+                                        "type": "TextBlock",
+                                        "text": risk_emoji,
+                                        "size": "Large"
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "Column",
+                                "width": "stretch",
+                                "items": [
+                                    {
+                                        "type": "TextBlock",
+                                        "text": f"{assessment.port_code} - {assessment.port_name}",
+                                        "weight": "Bolder",
+                                        "color": risk_color
+                                    },
+                                    {
+                                        "type": "TextBlock",
+                                        "text": f"風速: {assessment.max_wind_kts:.0f} kts (BF{assessment.max_wind_bft}) | 陣風: {assessment.max_gust_kts:.0f} kts | 浪高: {assessment.max_wave:.1f} m",
+                                        "size": "Small",
+                                        "isSubtle": True,
+                                        "wrap": True
+                                    }
+                                ]
+                            }
                         ]
                     }
                 ],
-                "spacing": "Medium"
-            })
-        
-        if len(risk_assessments) > 5:
-            body.append({
-                "type": "TextBlock",
-                "text": f"... 及其他 {len(risk_assessments) - 5} 個港口 (詳見郵件報告)",
-                "isSubtle": True,
                 "spacing": "Small"
             })
         
@@ -626,89 +1218,253 @@ class TeamsNotifier:
             }]
         }
 
-
-# ================= Gmail 通知器 (無變動) =================
-
-class GmailRelayNotifier:
-    """Gmail 接力發信器"""
-    
-    def __init__(self):
-        self.user = MAIL_USER
-        self.password = MAIL_PASSWORD
-        self.target = TARGET_EMAIL
-        self.subject_trigger = TRIGGER_SUBJECT
-
-    def send_trigger_email(self, report_data: dict, report_html: str, 
-                           images: Dict[str, str] = None) -> bool:
-        """
-        發送觸發信件
-        注意：現在圖片已經內嵌在 report_html 的 Base64 中，不需要再用 attachments 處理。
-        """
-        if not self.user or not self.password:
-            print("⚠️ 未設定 Gmail 帳密 (MAIL_USER / MAIL_PASSWORD)")
-            return False
-
-        # 改用 MIMEMultipart('alternative') 因為不需要 related (附件) 了
-        msg = MIMEMultipart('alternative')
-        msg['From'] = self.user
-        msg['To'] = self.target
-        msg['Subject'] = self.subject_trigger
-        
-        # 1. 純文字 (JSON)
-        json_text = json.dumps(report_data, ensure_ascii=False, indent=2)
-        msg.attach(MIMEText(json_text, 'plain', 'utf-8'))
-        
-        # 2. HTML (內含 Base64 圖片)
-        msg.attach(MIMEText(report_html, 'html', 'utf-8'))
-
-        try:
-            print(f"📧 正在透過 Gmail 發送報表給 {self.target}...")
-            server = smtplib.SMTP("smtp.gmail.com", 587, timeout=30)
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            
-            print("   🔑 正在登入...")
-            server.login(self.user, self.password)
-            
-            print("   📨 正在傳送...")
-            server.sendmail(self.user, self.target, msg.as_string())
-            server.quit()
-            
-            print(f"✅ Email 發送成功！")
-            return True
-            
-        except smtplib.SMTPAuthenticationError:
-            print("❌ Gmail 認證失敗！請檢查:")
-            print("   1. MAIL_USER 是否正確")
-            print("   2. MAIL_PASSWORD 是否為「應用程式密碼」(非一般密碼)")
-            print("   3. Google 帳戶是否已啟用「兩步驟驗證」")
-            return False
-            
-        except Exception as e:
-            print(f"❌ Gmail 發送失敗: {e}")
-            traceback.print_exc()
-            return False
-
-
-# ================= 主服務類別 (修改版) =================
+# ================= 主服務 =================
 
 class WeatherMonitorService:
-    """氣象監控服務"""
+    """氣象監控主服務"""
     
-    def __init__(self, username: str, password: str,
-                 teams_webhook_url: str = '',
-                 excel_path: str = EXCEL_FILE_PATH):
-        
-        print("🔧 正在初始化氣象監控服務...")
-        self.crawler = PortWeatherCrawler(username, password, excel_path, auto_login=False)
+    def __init__(self):
+        self.crawler = PortWeatherCrawler(AEDYN_USERNAME, AEDYN_PASSWORD)
         self.analyzer = WeatherRiskAnalyzer()
-        self.notifier = TeamsNotifier(teams_webhook_url)
-        self.db = WeatherDatabase()
-        self.email_notifier = GmailRelayNotifier()
-        self.chart_generator = ChartGenerator()
+        self.chart_gen = ChartGenerator()
+        self.notifier = TeamsNotifier(TEAMS_WEBHOOK_URL)
+        self.agent_manager = PortAgentManager()
+        self.pa_trigger = PowerAutomateEmailTrigger(self.agent_manager)
+    
+    def _analyze_all_ports(self) -> List[RiskAssessment]:
+        """分析所有港口的風險"""
+        risk_assessments = []
         
-        print(f"✅ 系統初始化完成，共載入 {len(self.crawler.port_list)} 個港口")
+        for port_code, port_info in self.crawler.ports_data.items():
+            content = self.crawler.db.get_latest_content(port_code)
+            if not content:
+                continue
+            
+            issued_time = self.crawler.db.get_latest_issued_time(port_code)
+            assessment = self.analyzer.analyze_port_risk(
+                port_code, port_info, content, issued_time
+            )
+            
+            if assessment:
+                risk_assessments.append(assessment)
+                risk_label = self.analyzer.get_risk_label(assessment.risk_level)
+                print(f"   [{len(risk_assessments)}/{len(self.crawler.ports_data)}] ⚠️ {port_code}: {risk_label}")
+        
+        return risk_assessments
+    
+    def _generate_charts(self, risk_assessments: List[RiskAssessment]):
+        """為風險港口生成圖表"""
+        if not risk_assessments:
+            print("   ℹ️ 沒有風險港口需要生成圖表")
+            return
+        
+        print(f"   📊 準備為 {len(risk_assessments)} 個港口生成圖表...")
+        
+        for i, assessment in enumerate(risk_assessments, 1):
+            print(f"   [{i}/{len(risk_assessments)}] 正在處理 {assessment.port_code}...")
+            
+            wind_b64 = self.chart_gen.generate_wind_chart(assessment, assessment.port_code)
+            if wind_b64:
+                assessment.chart_base64_list.append(wind_b64)
+                print(f"      ✅ 風速圖已生成")
+            
+            wave_b64 = self.chart_gen.generate_wave_chart(assessment, assessment.port_code)
+            if wave_b64:
+                assessment.chart_base64_list.append(wave_b64)
+                print(f"      ✅ 浪高圖已生成")
+        
+        success_count = sum(1 for a in risk_assessments if a.chart_base64_list)
+        print(f"   ✅ 圖表生成完成：{success_count}/{len(risk_assessments)} 個港口成功")
+    
+    def _generate_data_report(self, download_stats: Dict, 
+                             risk_assessments: List[RiskAssessment],
+                             teams_sent: bool) -> Dict[str, Any]:
+        """生成數據報告"""
+        return {
+            'execution_time': datetime.now().isoformat(),
+            'download_stats': download_stats,
+            'risk_summary': {
+                'total_risk_ports': len(risk_assessments),
+                'danger_count': len([a for a in risk_assessments if a.risk_level == 3]),
+                'warning_count': len([a for a in risk_assessments if a.risk_level == 2]),
+                'caution_count': len([a for a in risk_assessments if a.risk_level == 1])
+            },
+            'risk_ports': [a.to_dict() for a in risk_assessments],
+            'teams_notification_sent': teams_sent
+        }
+    
+    def _generate_html_report(self, risk_assessments: List[RiskAssessment]) -> str:
+        """生成船隊 HTML 報告（包含所有風險港口）"""
+        
+        font_style = "font-family: 'Microsoft JhengHei', '微軟正黑體', 'Segoe UI', Arial, sans-serif;"
+        
+        try:
+            from zoneinfo import ZoneInfo
+            taipei_tz = ZoneInfo('Asia/Taipei')
+        except ImportError:
+            taipei_tz = timezone(timedelta(hours=8))
+        
+        utc_now = datetime.now(timezone.utc)
+        tpe_now = utc_now.astimezone(taipei_tz)
+        now_str_TPE = f"{tpe_now.strftime('%Y-%m-%d %H:%M')} (TPE)"
+        
+        danger_ports = [a for a in risk_assessments if a.risk_level == 3]
+        warning_ports = [a for a in risk_assessments if a.risk_level == 2]
+        caution_ports = [a for a in risk_assessments if a.risk_level == 1]
+        
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #F0F4F8; {font_style}">
+            <center>
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 900px; margin: 20px auto; background-color: #ffffff;">
+                
+                <tr>
+                    <td style="background-color: #004B97; padding: 20px;">
+                        <h1 style="margin: 0; font-size: 24px; color: #ffffff; font-weight: bold;">
+                            ⚠️ WHL 港口氣象風險報告
+                        </h1>
+                        <h1 style="margin: 5px 0 0 0; font-size: 24px; color: #ffffff; font-weight: bold;">
+                            Port Weather Risk Report
+                        </h1>
+                        <div style="margin-top: 8px; font-size: 13px; color: #B3D9FF;">
+                            48-Hour Weather Forecast | 未來 48 小時天氣預報
+                        </div>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="padding: 25px;">
+                        
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background: linear-gradient(135deg, #FEE2E2 0%, #FEF2F2 100%); border-left: 6px solid #DC2626; margin-bottom: 20px;">
+                            <tr>
+                                <td style="padding: 20px;">
+                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                        <tr>
+                                            <td width="60" valign="top" style="font-size: 36px;">⚠️</td>
+                                            <td valign="middle">
+                                                <div style="font-size: 26px; font-weight: bold; color: #DC2626; margin-bottom: 5px;">
+                                                    共 {len(risk_assessments)} 個港口有氣象風險
+                                                </div>
+                                                <div style="font-size: 22px; font-weight: bold; color: #DC2626;">
+                                                    {len(risk_assessments)} Ports with Weather Risks
+                                                </div>
+                                            </td>
+                                            <td align="right" valign="middle" width="220">
+                                                <table border="0" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px;">
+                                                    <tr>
+                                                        <td align="center" style="padding: 8px 10px;">
+                                                            <div style="font-size: 26px; font-weight: bold; color: #DC2626;">{len(danger_ports)}</div>
+                                                            <div style="font-size: 12px; color: #666;">🔴 DANGER</div>
+                                                        </td>
+                                                        <td align="center" style="padding: 8px 10px; border-left: 1px solid #E5E7EB;">
+                                                            <div style="font-size: 26px; font-weight: bold; color: #F59E0B;">{len(warning_ports)}</div>
+                                                            <div style="font-size: 12px; color: #666;">🟠 WARNING</div>
+                                                        </td>
+                                                        <td align="center" style="padding: 8px 10px; border-left: 1px solid #E5E7EB;">
+                                                            <div style="font-size: 26px; font-weight: bold; color: #0EA5E9;">{len(caution_ports)}</div>
+                                                            <div style="font-size: 12px; color: #666;">🟡 CAUTION</div>
+                                                        </td>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
+        """
+        
+        # 按風險等級分組顯示
+        for level, level_name, level_emoji, level_color in [
+            (3, "DANGER 危險", "🔴", "#DC2626"),
+            (2, "WARNING 警告", "🟠", "#F59E0B"),
+            (1, "CAUTION 注意", "🟡", "#0EA5E9")
+        ]:
+            level_ports = [a for a in risk_assessments if a.risk_level == level]
+            if not level_ports:
+                continue
+            
+            html += f"""
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 2px solid {level_color}; margin-bottom: 20px;">
+                            <tr>
+                                <td style="background-color: {level_color}; padding: 12px; color: #ffffff; font-weight: bold; font-size: 16px;">
+                                    {level_emoji} {level_name} ({len(level_ports)} 個港口)
+                                </td>
+                            </tr>
+            """
+            
+            for assessment in level_ports:
+                html += f"""
+                            <tr>
+                                <td style="padding: 15px; border-bottom: 1px solid #E5E7EB;">
+                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                        <tr>
+                                            <td width="200" valign="top">
+                                                <div style="font-size: 18px; font-weight: bold; color: {level_color};">
+                                                    {assessment.port_code}
+                                                </div>
+                                                <div style="font-size: 14px; color: #666; margin-top: 3px;">
+                                                    {assessment.port_name}
+                                                </div>
+                                                <div style="font-size: 12px; color: #999; margin-top: 2px;">
+                                                    {assessment.country}
+                                                </div>
+                                            </td>
+                                            <td style="font-size: 13px; color: #374151;">
+                                                <div style="margin-bottom: 3px;">💨 風速: <strong>{assessment.max_wind_kts:.0f} kts</strong> (BF{assessment.max_wind_bft})</div>
+                                                <div style="margin-bottom: 3px;">💨 陣風: <strong>{assessment.max_gust_kts:.0f} kts</strong> (BF{assessment.max_gust_bft})</div>
+                                                <div>🌊 浪高: <strong>{assessment.max_wave:.1f} m</strong></div>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                """
+            
+            html += """
+                        </table>
+            """
+        
+        html += f"""
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FFFBEB; border-left: 4px solid #F59E0B; margin-top: 20px;">
+                            <tr>
+                                <td style="padding: 15px; font-size: 13px; color: #78350F; line-height: 1.7;">
+                                    <strong>⚠️ Action Required:</strong><br>
+                                    • Please review all risk ports and coordinate with local agents<br>
+                                    • Monitor weather updates regularly<br>
+                                    • Prepare necessary safety measures<br>
+                                    • Individual port notifications have been sent to respective agents
+                                </td>
+                            </tr>
+                        </table>
+
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="background-color: #F8F9FA; padding: 20px; text-align: center; color: #9CA3AF; font-size: 12px; border-top: 1px solid #E5E7EB;">
+                        <p style="margin: 0 0 6px 0; font-size: 13px; color: #6B7280;">
+                            <strong>Wan Hai Lines Ltd. | 萬海航運股份有限公司</strong>
+                        </p>
+                        <p style="margin: 0; font-size: 11px; color: #D1D5DB;">
+                            Marine Technology Division | Automated Weather Monitoring System
+                        </p>
+                        <p style="margin: 6px 0 0 0; font-size: 11px; color: #D1D5DB;">
+                            📅 {now_str_TPE}
+                        </p>
+                    </td>
+                </tr>
+            </table>
+            </center>
+        </body>
+        </html>
+        """
+        
+        return html
     
     def run_daily_monitoring(self) -> Dict[str, Any]:
         """執行每日監控"""
@@ -721,16 +1477,14 @@ class WeatherMonitorService:
         download_stats = self.crawler.fetch_all_ports()
         
         # 2. 分析風險
-        print("\n🔍 步驟 2: 分析港口風險...")
+        print(f"\n🔍 步驟 2: 分析港口風險...")
         risk_assessments = self._analyze_all_ports()
         
         # 3. 生成圖表
-        print(f"\n📈 步驟 3: 生成氣象趨勢圖 (針對 {len([r for r in risk_assessments if r.risk_level >= 2])} 個高風險港口)...")
-        # 修改：不再回傳 dict，而是直接更新 assessment 物件內部
+        print(f"\n📈 步驟 3: 生成氣象趨勢圖...")
         self._generate_charts(risk_assessments)
-        charts_generated = sum(1 for r in risk_assessments if r.chart_base64_list)
-        print(f"   ✅ 成功為 {charts_generated}/{len(risk_assessments)} 個港口生成圖表")
-        # 4. 發送 Teams 通知
+        
+        # 4. Teams 通知
         teams_sent = False
         if self.notifier.webhook_url:
             print("\n📢 步驟 4: 發送 Teams 通知...")
@@ -742,614 +1496,53 @@ class WeatherMonitorService:
         print("\n📊 步驟 5: 生成數據報告...")
         report_data = self._generate_data_report(download_stats, risk_assessments, teams_sent)
         
-        # 6. 發送 Email
-        print("\n📧 步驟 6: 發送 Email 通知...")
+        # 6. 發送船隊報告
+        print("\n📧 步驟 6: 發送船隊報告觸發郵件...")
+        print(f"   - 包含所有 {len(risk_assessments)} 個風險港口")
         report_html = self._generate_html_report(risk_assessments)
+        fleet_email_sent = self.pa_trigger.send_fleet_report_trigger(
+            report_data, report_html, risk_assessments
+        )
         
-        email_sent = False
-        try:
-            email_sent = self.email_notifier.send_trigger_email(
-                report_data, report_html, None
-            )
-        except Exception as e:
-            print(f"⚠️ 發信過程發生異常: {e}")
-            traceback.print_exc()
+        # 7. 發送港口 + 國家通知
+        print("\n📧 步驟 7: 發送港口與國家通知觸發郵件...")
+        notification_results = self.pa_trigger.send_all_notifications(risk_assessments)
         
-        report_data['email_sent'] = email_sent
+        report_data['fleet_email_sent'] = fleet_email_sent
         report_data['teams_sent'] = teams_sent
+        report_data['notification_results'] = notification_results
         
         print("\n" + "=" * 80)
         print("✅ 每日監控執行完成")
-        print(f"   - 風險港口: {len(risk_assessments)}")
+        print(f"   - 總風險港口: {len(risk_assessments)}")
         print(f"   - Teams 通知: {'✅' if teams_sent else '❌'}")
-        print(f"   - Email 發送: {'✅' if email_sent else '❌'}")
+        print(f"   - 船隊報告: {'✅' if fleet_email_sent else '❌'}")
+        print(f"   - 單一港口通知: {sum(1 for v in notification_results['port_notifications'].values() if v)}/{len(notification_results['port_notifications'])} 成功")
+        print(f"   - 國家摘要通知: {sum(1 for v in notification_results['country_summaries'].values() if v)}/{len(notification_results['country_summaries'])} 成功")
         print("=" * 80)
         
         return report_data
-    
-    def _analyze_all_ports(self) -> List[RiskAssessment]:
-        """分析所有港口"""
-        assessments = []
-        total = len(self.crawler.port_list)
-        
-        for i, port_code in enumerate(self.crawler.port_list, 1):
-            try:
-                data = self.db.get_latest_content(port_code)
-                if not data:
-                    continue
-                
-                content, issued, name = data
-                info = self.crawler.get_port_info(port_code)
-                if not info:
-                    continue
-                
-                res = self.analyzer.analyze_port_risk(port_code, info, content, issued)
-                
-                if res:
-                    assessments.append(res)
-                    print(f"   [{i}/{total}] ⚠️ {port_code}: {self.analyzer.get_risk_label(res.risk_level)}")
-                else:
-                    print(f"   [{i}/{total}] ✅ {port_code}: 安全")
-                    
-            except Exception as e:
-                print(f"   [{i}/{total}] ❌ {port_code}: {e}")
-        
-        # 依風險等級排序
-        assessments.sort(key=lambda x: x.risk_level, reverse=True)
-        return assessments
-    
-    def _generate_charts(self, assessments: List[RiskAssessment]):
-        """生成圖表並將 Base64 存入 assessment"""
-        
-        if not assessments:
-            print("   ⚠️ 沒有風險港口需要生成圖表")
-            return
-        
-        # 🔧 修正：為所有風險港口生成圖表（不限制等級）
-        chart_targets = assessments[:20]  # 最多生成 20 個港口的圖表（避免郵件過大）
-        
-        print(f"   📊 準備為 {len(chart_targets)} 個港口生成圖表...")
-        
-        success_count = 0
-        for i, assessment in enumerate(chart_targets, 1):
-            print(f"   [{i}/{len(chart_targets)}] 正在處理 {assessment.port_code}...")
-            
-            # 風速圖
-            b64_wind = self.chart_generator.generate_wind_chart(
-                assessment, assessment.port_code
-            )
-            if b64_wind:
-                assessment.chart_base64_list.append(b64_wind)
-                success_count += 1
-                print(f"      ✅ 風速圖已生成 (Base64 長度: {len(b64_wind)} 字元)")
-            else:
-                print(f"      ❌ 風速圖生成失敗")
-            
-            # 浪高圖 (只在有高浪風險時生成)
-            if assessment.max_wave >= RISK_THRESHOLDS['wave_caution']:
-                b64_wave = self.chart_generator.generate_wave_chart(
-                    assessment, assessment.port_code
-                )
-                if b64_wave:
-                    assessment.chart_base64_list.append(b64_wave)
-                    print(f"      ✅ 浪高圖已生成 (Base64 長度: {len(b64_wave)} 字元)")
-                else:
-                    print(f"      ⚠️ 浪高圖生成失敗")
-        
-        print(f"   ✅ 圖表生成完成：{success_count}/{len(chart_targets)} 個港口成功")
-        
-    def _generate_data_report(self, stats, assessments, teams_sent):
-        """生成 JSON 報告"""
-        return {
-            "timestamp": datetime.now().isoformat(),
-            "summary": {
-                "total_ports_checked": stats.get('total', 0),
-                "risk_ports_found": len(assessments),
-                "danger_count": len([a for a in assessments if a.risk_level == 3]),
-                "warning_count": len([a for a in assessments if a.risk_level == 2]),
-                "caution_count": len([a for a in assessments if a.risk_level == 1]),
-            },
-            "download_stats": stats,
-            "risk_assessments": [a.to_dict() for a in assessments],
-            "notifications": {
-                "teams_sent": teams_sent
-            }
-        }
-        
-    def _generate_html_report(self, assessments: List[RiskAssessment]) -> str:
-        """生成 HTML 格式的精美報告 (通知屬輪版本)"""
-        
-        # ==================== 輔助函數定義區 ====================
-        def format_time_display(time_str):
-            """格式化時間顯示：移除時區標記但保留完整日期時間"""
-            if not time_str:
-                return "N/A"
-            try:
-                # 移除 (UTC) 或 (LT) 標記
-                if '(' in time_str:
-                    return time_str.split('(')[0].strip()
-                return time_str
-            except:
-                return time_str
-        
-        # ==================== 初始化設定 ====================
-        # 定義字型
-        font_style = "font-family: 'Microsoft JhengHei', '微軟正黑體', 'Segoe UI', Arial, sans-serif;"
-        
-        # ✅ 時間計算（使用正確的時區處理）
-        try:
-            from zoneinfo import ZoneInfo
-            taipei_tz = ZoneInfo('Asia/Taipei')
-        except ImportError:
-            taipei_tz = timezone(timedelta(hours=8))
-        
-        utc_now = datetime.now(timezone.utc)
-        tpe_now = utc_now.astimezone(taipei_tz)
-        
-        now_str_TPE = f"{tpe_now.strftime('%Y-%m-%d %H:%M')} (TPE)"
-        now_str_UTC = f"{utc_now.strftime('%Y-%m-%d %H:%M')} (UTC)"
 
-        # ==================== 無風險情況 ====================
-        if not assessments:
-            return f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-            </head>
-            <body style="margin: 0; padding: 20px; background-color: #F0F4F8; {font_style}">
-                <div style="max-width: 900px; margin: 0 auto; background-color: #E8F5E9; padding: 40px; border-left: 8px solid #4CAF50; border-radius: 4px; text-align: center;">
-                    <div style="font-size: 48px; margin-bottom: 15px;">✅</div>
-                    <h2 style="margin: 0 0 10px 0; font-size: 28px; color: #2E7D32;">
-                        所有港口安全 All Ports Safe
-                    </h2>
-                    <p style="margin: 0; font-size: 18px; color: #1B5E20; line-height: 1.8;">
-                        未來 48 小時內所有靠泊港口均處於安全範圍<br>
-                        All ports are within safe limits for the next 48 hours.
-                    </p>
-                    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #A5D6A7; font-size: 13px; color: #558B2F;">
-                        📅 最後更新時間 Last Updated: {now_str_TPE}
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
-            
-        # ==================== 風險分組 ====================
-        risk_groups = {3: [], 2: [], 1: []}
-        for a in assessments:
-            risk_groups[a.risk_level].append(a)
-
-        # ==================== HTML 開始 ====================
-        html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-        </head>
-        <body style="margin: 0; padding: 0; background-color: #F0F4F8; {font_style}">
-            <center>
-            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 900px; margin: 20px auto; background-color: #ffffff;">
-                
-                <!-- ========== Header ========== -->
-                <tr>
-                    <td style="background-color: #004B97; padding: 20px;">
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                            <tr>
-                                <td align="left" valign="middle">
-                                    <h1 style="margin: 0; font-size: 22px; color: #ffffff; font-weight: bold;">
-                                        ⛴️ WHL 港口氣象風險通知
-                                    </h1>
-                                    <h1 style="margin: 0; font-size: 22px; color: #ffffff; font-weight: bold;">
-                                        WHL Port Weather Risk Notification
-                                    </h1>
-                                    <div style="margin-top: 3px; font-size: 13px; color: #B3D9FF;">
-                                        未來 48 小時天氣預報 48-Hour Weather Forecast
-                                    </div>
-                                </td>
-                                <td align="right" valign="bottom" style="font-size: 11px; color: #D6EBFF;">
-                                    <div style="font-weight: bold; color: #ffffff; font-size: 12px;">📅 {now_str_TPE}</div>
-                                    <div style="margin-top: 2px;">{now_str_UTC}</div>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-
-                <tr>
-                    <td style="padding: 25px;">
-                        
-                        <!-- ========== 風險統計摘要 ========== -->
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background: linear-gradient(135deg, #FEE2E2 0%, #FEF2F2 100%); border-left: 6px solid #DC2626; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(220, 38, 38, 0.15);">
-                            <tr>
-                                <td style="padding: 20px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="60" valign="top" style="font-size: 36px; line-height: 1;">⚠️</td>
-                                            <td valign="middle">
-                                                <div style="font-size: 28px; font-weight: bold; color: #DC2626; margin-bottom: 3px; line-height: 1.2;">
-                                                    未來48 Hrs內{len(assessments)} 個港口有氣象風險
-                                                </div>
-                                                <div style="font-size: 28px; font-weight: bold; color: #DC2626; margin-bottom: 3px; line-height: 1.2;">
-                                                    48 Hrs {len(assessments)} Ports with Weather Risks
-                                                </div>
-                                                <div style="font-size: 14px; color: #991B1B; font-weight: 600; margin-top: 8px;">
-                                                    請各屬輪留意下列港口的氣象狀況，並做好相關應對措施
-                                                </div>
-                                                <div style="font-size: 14px; color: #991B1B; font-weight: 600;">
-                                                    Please pay attention to weather conditions at the following ports
-                                                </div>
-                                            </td>
-                                            <td align="right" valign="middle" width="280">
-                                                <table border="0" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.1);">
-                                                    <tr>
-                                                        <td align="center" style="padding: 8px 10px;">
-                                                            <div style="font-size: 24px; font-weight: bold; color: #DC2626; line-height: 1;">{len(risk_groups[3])}</div>
-                                                            <div style="font-size: 14px; color: #666; margin-top: 3px;">🔴 危險 DANGER</div>
-                                                        </td>
-                                                        <td align="center" style="padding: 8px 10px; border-left: 1px solid #E5E7EB;">
-                                                            <div style="font-size: 24px; font-weight: bold; color: #F59E0B; line-height: 1;">{len(risk_groups[2])}</div>
-                                                            <div style="font-size: 14px; color: #666; margin-top: 3px;">🟠 警告 WARNING</div>
-                                                        </td>
-                                                        <td align="center" style="padding: 8px 10px; border-left: 1px solid #E5E7EB;">
-                                                            <div style="font-size: 24px; font-weight: bold; color: #0EA5E9; line-height: 1;">{len(risk_groups[1])}</div>
-                                                            <div style="font-size: 14px; color: #666; margin-top: 3px;">🟡 注意 CAUTION</div>
-                                                        </td>
-                                                    </tr>
-                                                </table>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-                        </table>
-                        
-                        <!-- ========== 風險港口總表 ========== -->
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 2px solid #004B97; margin-bottom: 25px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                            <tr>
-                                <td style="background-color: #004B97; padding: 12px;">
-                                    <div style="color: #ffffff; font-weight: bold; font-size: 16px;">
-                                        📋 風險港口列表 Risk Ports List
-                                    </div>
-                                    <div style="color: #B3D9FF; font-size: 12px; margin-top: 2px;">
-                                        請確認您的靠泊港口 Please check your berthing port
-                                    </div>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style="padding: 0;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-        """
-        
-        # ==================== 風險港口列表 ====================
-        summary_styles = {
-            3: {'emoji': '🔴', 'label': 'DANGER', 'color': '#DC2626', 'bg': '#FEF2F2'},
-            2: {'emoji': '🟠', 'label': 'WARNING', 'color': '#F59E0B', 'bg': '#FFFBEB'},
-            1: {'emoji': '🟡', 'label': 'CAUTION', 'color': '#0EA5E9', 'bg': '#F0F9FF'}
-        }
-        
-        for level in [3, 2, 1]:
-            ports = risk_groups[level]
-            style = summary_styles[level]
-            
-            if ports:
-                port_codes = ', '.join([f"<strong>{p.port_code}</strong>" for p in ports])
-                html += f"""
-                                        <tr>
-                                            <td style="padding: 15px; border-bottom: 1px solid #E5E7EB; background-color: {style['bg']};">
-                                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                                    <tr>
-                                                        <td width="180" valign="top">
-                                                            <div style="font-size: 16px; font-weight: bold; color: {style['color']};">
-                                                                {style['emoji']} {style['label']} ({len(ports)} 個港口)
-                                                            </div>
-                                                        </td>
-                                                        <td style="font-size: 14px; color: #374151; line-height: 1.6;">
-                                                            {port_codes}
-                                                        </td>
-                                                    </tr>
-                                                </table>
-                                            </td>
-                                        </tr>
-                """
-        
-        html += """
-                                    </table>
-                                </td>
-                            </tr>
-                        </table>
-
-                        <!-- ========== 行動指引 ========== -->
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FFFBEB; border-left: 4px solid #F59E0B; margin-bottom: 25px;">
-                            <tr>
-                                <td style="padding: 15px 18px;">
-                                    <table border="0" cellpadding="0" cellspacing="0">
-                                        <tr>
-                                            <td style="font-size: 14px; color: #78350F; line-height: 1.7;">
-                                                <div style="margin-top: 8px; font-size: 13px;">
-                                                    ✅ 請確認您的靠泊港口是否在上述風險港口列表中<br>
-                                                    &nbsp;&nbsp;&nbsp;&nbsp;Please check if your berthing port is listed above<br><br>
-                                                    ✅ 如您的港口在列表中，請查看下方詳細氣象數據並提前做好相關應對措施<br>
-                                                    &nbsp;&nbsp;&nbsp;&nbsp;If your port is listed, please review the weather data below and prepare accordingly<br><br>
-                                                    ✅ 請與當地代理確認最新港口天氣與作業狀況<br>
-                                                    &nbsp;&nbsp;&nbsp;&nbsp;Please confirm latest port operation status with local agent
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-                        </table>
-
-                        <!-- ========== 分隔線 ========== -->
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 25px 0;">
-                            <tr>
-                                <td style="border-top: 3px dashed #D1D5DB; padding: 15px 0; text-align: center;">
-                                    <div style="font-size: 14px; color: #6B7280; font-weight: 600;">
-                                        ⬇️ 以下為各港口詳細氣象數據 ⬇️
-                                    </div>
-                                    <div style="font-size: 12px; color: #9CA3AF; margin-top: 4px;">
-                                        Detailed Weather Data for Each Port
-                                    </div>
-                                </td>
-                            </tr>
-                        </table>
-        """
-
-        # ==================== 詳細港口資料區 ====================
-        styles_detail = {
-            3: {
-                'color': '#DC2626', 
-                'bg': '#FEF2F2', 
-                'title_zh': '🔴 危險等級港口', 
-                'title_en': 'DANGER LEVEL PORTS',
-                'border': '#DC2626', 
-                'header_bg': '#FEE2E2', 
-                'desc': '條件 Criteria: 風速 Wind > 34 kts / 陣風 Gust > 41 kts / 浪高 Wave > 4.0 m'
-            },
-            2: {
-                'color': '#F59E0B', 
-                'bg': '#FFFBEB', 
-                'title_zh': '🟠 警告等級港口', 
-                'title_en': 'WARNING LEVEL PORTS',
-                'border': '#F59E0B', 
-                'header_bg': '#FEF3C7', 
-                'desc': '條件 Criteria: 風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m'
-            },
-            1: {
-                'color': '#0EA5E9', 
-                'bg': '#F0F9FF', 
-                'title_zh': '🟡 注意等級港口', 
-                'title_en': 'CAUTION LEVEL PORTS',
-                'border': '#0EA5E9', 
-                'header_bg': '#E0F2FE', 
-                'desc': '條件 Criteria: 風速 Wind > 22 kts / 陣風 Gust > 28 kts / 浪高 Wave > 2.5 m'
-            }
-        }
-
-        # 遍歷每個風險等級
-        for level in [3, 2, 1]:
-            ports = risk_groups[level]
-            if not ports:
-                continue
-            
-            style = styles_detail[level]
-            
-            # 該等級的標題區塊
-            html += f"""
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px;">
-                            <tr>
-                                <td style="background-color: {style['color']}; color: white; padding: 10px 15px; font-weight: bold; font-size: 15px;">
-                                    {style['title_zh']} {style['title_en']}
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style="font-size: 11px; color: #666; padding: 5px 0 8px 0;">
-                                    {style['desc']}
-                                </td>
-                            </tr>
-                        </table>
-                        
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 1px solid #E5E7EB; margin-bottom: 30px;">
-                            <tr style="background-color: {style['header_bg']}; font-size: 12px; color: #666;">
-                                <th align="left" style="padding: 10px; border-bottom: 2px solid {style['border']}; width: 18%; font-weight: 600;">港口資訊<br>Port Info</th>
-                                <th align="left" style="padding: 10px; border-bottom: 2px solid {style['border']}; width: 25%; font-weight: 600;">未來 48 Hrs 氣象數據<br>48-Hr Weather Data</th>
-                                <th align="left" style="padding: 10px; border-bottom: 2px solid {style['border']}; width: 57%; font-weight: 600;">高風險時段<br>High Risk Period</th>
-                            </tr>
-            """
-            
-            # 遍歷該等級的每個港口
-            for index, p in enumerate(ports):
-                row_bg = "#FFFFFF" if index % 2 == 0 else "#FAFBFC"
-                
-                # 數值樣式判斷
-                wind_style = "color: #DC2626; font-weight: bold;" if p.max_wind_kts >= 28 else "color: #333;"
-                gust_style = "color: #DC2626; font-weight: bold;" if p.max_gust_kts >= 34 else "color: #333;"
-                wave_style = "color: #DC2626; font-weight: bold;" if p.max_wave >= 3.5 else "color: #333;"
-                
-                # ✅ 使用外層定義的 format_time_display 函數
-                w_utc = format_time_display(p.max_wind_time_utc)
-                w_lct = format_time_display(p.max_wind_time_lct)
-                g_utc = format_time_display(p.max_gust_time_utc)
-                g_lct = format_time_display(p.max_gust_time_lct)
-                v_utc = format_time_display(p.max_wave_time_utc)
-                v_lct = format_time_display(p.max_wave_time_lct)
-                
-                # 主要資料列
-                html += f"""
-                            <tr style="background-color: {row_bg};">
-                                <td valign="top" style="padding: 12px; border-bottom: 1px solid #eee; font-size: 13px;">
-                                    <div style="font-size: 18px; font-weight: bold; color: #004B97; margin-bottom: 4px;">{p.port_code}</div>
-                                    <div style="font-size: 12px; color: #666; margin-bottom: 3px;">{p.port_name}</div>
-                                    <div style="font-size: 11px; color: #999;">📍 {p.country}</div>
-                                </td>
-
-                                <td valign="top" style="padding: 12px; border-bottom: 1px solid #eee; font-size: 13px;">
-                                    <div style="margin-bottom: 4px;">
-                                        <span style="color: #666; font-size: 11px;">風速 Wind</span>
-                                        <span style="{wind_style} font-size: 16px; margin-left: 5px;">💨 {p.max_wind_kts:.0f} kts</span>
-                                    </div>
-                                    <div style="margin-bottom: 4px;">
-                                        <span style="color: #666; font-size: 11px;">陣風 Gust</span>
-                                        <span style="{gust_style} font-size: 16px; margin-left: 5px;">💨 {p.max_gust_kts:.0f} kts</span>
-                                    </div>
-                                    <div>
-                                        <span style="color: #666; font-size: 11px;">浪高 Wave</span>
-                                        <span style="{wave_style} font-size: 16px; margin-left: 5px;">🌊 {p.max_wave:.1f} m</span>
-                                    </div>
-                                </td>
-
-                                <td valign="top" style="padding: 12px; border-bottom: 1px solid #eee; font-size: 12px; color: #555;">
-                                    <div style="margin-bottom: 8px;">
-                                        <span style="background-color: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; font-size: 11px; padding: 3px 8px; border-radius: 3px;">
-                                            {', '.join(p.risk_factors[:2])}
-                                        </span>
-                                    </div>
-                                    <table border="0" cellpadding="3" cellspacing="0" width="100%" style="font-size: 10px;">
-                                        <tr>
-                                            <td style="color: #666; width: 35%;">最大風速:</td>
-                                            <td>
-                                                <strong style="color: #333;">{w_utc} (UTC)</strong><br>
-                                                <strong style="color: #333;">{w_lct} (LT)</strong>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td style="color: #666;">最大陣風:</td>
-                                            <td>
-                                                <strong style="color: #333;">{g_utc} (UTC)</strong><br>
-                                                <strong style="color: #333;">{g_lct} (LT)</strong>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td style="color: #666;">最大浪高:</td>
-                                            <td>
-                                                <strong style="color: #333;">{v_utc} (UTC)</strong><br>
-                                                <strong style="color: #333;">{v_lct} (LT)</strong>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-                """
-                
-                # 圖表列處理
-                if hasattr(p, 'chart_base64_list') and p.chart_base64_list:
-                    chart_imgs = ""
-                    for idx, b64 in enumerate(p.chart_base64_list):
-                        b64_clean = b64.replace('\n', '').replace('\r', '').replace(' ', '')
-                        chart_imgs += f"""
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 10px;">
-                                <tr>
-                                    <td align="center">
-                                        <img src="data:image/png;base64,{b64_clean}" 
-                                            width="750" 
-                                            style="display:block; max-width: 100%; height: auto; border: 1px solid #ddd;" 
-                                            alt="Chart {idx+1}">
-                                    </td>
-                                </tr>
-                            </table>
-                        """
-                    
-                    html += f"""
-                            <tr>
-                                <td colspan="3" style="padding: 15px; background-color: {row_bg}; border-bottom: 1px solid #eee;">
-                                    <div style="font-size: 13px; color: #666; margin-bottom: 8px; font-weight: 600;">
-                                        📈 風速趨勢圖表 Wind Trend Chart:
-                                    </div>
-                                    {chart_imgs}
-                                </td>
-                            </tr>
-                    """
-            
-            html += "</table>"  # 結束該風險等級的表格
-
-        # ==================== Footer ====================
-        html += f"""
-                    </td>
-                </tr>
-                <tr>
-                    <td style="background-color: #F8F9FA; padding: 20px; text-align: center; color: #9CA3AF; font-size: 12px; border-top: 1px solid #E5E7EB;">
-                        <p style="margin: 0 0 6px 0; font-size: 13px; color: #6B7280;">
-                            <strong>萬海航運股份有限公司 Wan Hai Lines Ltd.</strong>
-                        </p>
-                        <p style="margin: 0 0 6px 0;">
-                            Marine Technology Division | Fleet Risk Department
-                        </p>
-                        <p style="margin: 0; font-size: 11px; color: #D1D5DB;">
-                            資料來源 Data Source: Weathernews Inc. (WNI) | 自動化系統 Automated System
-                        </p>
-                    </td>
-                </tr>
-            </table>
-            </center>
-        </body>
-        </html>
-        """
-        
-        return html
-    
-    def save_report_to_file(self, report, output_dir='reports'):
-        """儲存報告到檔案"""
-        os.makedirs(output_dir, exist_ok=True)
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        path = os.path.join(output_dir, f"report_{timestamp}.json")
-        
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(report, f, ensure_ascii=False, indent=2)
-        
-        print(f"📄 報告已儲存: {path}")
-        return path
-
-# ================= 主程式 =================
+# ================= 主程式入口 =================
 
 def main():
-    """主程式進入點"""
-    
-    # 檢查必要環境變數
-    if not AEDYN_USERNAME or not AEDYN_PASSWORD:
-        print("❌ 錯誤: 未設定 AEDYN_USERNAME 或 AEDYN_PASSWORD")
-        sys.exit(1)
-    
-    if not MAIL_USER or not MAIL_PASSWORD:
-        print("⚠️ 警告: 未設定 MAIL_USER 或 MAIL_PASSWORD，將無法發送 Email")
-    
     try:
-        # 初始化服務
-        service = WeatherMonitorService(
-            username=AEDYN_USERNAME,
-            password=AEDYN_PASSWORD,
-            teams_webhook_url=TEAMS_WEBHOOK_URL
-        )
+        service = WeatherMonitorService()
+        result = service.run_daily_monitoring()
         
-        # 執行監控
-        report = service.run_daily_monitoring()
-        
-        # 儲存報告
-        service.save_report_to_file(report)
-        
-        # 輸出 JSON (供 GitHub Actions 使用)
-        print("\n" + "="*80)
-        print("📤 JSON OUTPUT (for GitHub Actions):")
-        print("="*80)
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-        
-        # 根據結果設定退出碼
-        if report.get('email_sent', False):
-            sys.exit(0)  # 成功
-        else:
-            sys.exit(1)  # 失敗
+        # 儲存報告到檔案
+        report_file = f"weather_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(report_file, 'w', encoding='utf-8') as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+        print(f"\n📄 報告已儲存: {report_file}")
         
     except KeyboardInterrupt:
-        print("\n⚠️ 使用者中斷執行")
-        sys.exit(130)
-        
+        print("\n\n⚠️ 使用者中斷執行")
+        sys.exit(0)
     except Exception as e:
-        print(f"\n❌ 執行過程發生嚴重錯誤: {e}")
+        print(f"\n❌ 執行過程中發生錯誤: {e}")
         traceback.print_exc()
         sys.exit(1)
 
-
 if __name__ == "__main__":
     main()
-

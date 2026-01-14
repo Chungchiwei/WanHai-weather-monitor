@@ -1,0 +1,339 @@
+{
+  "countries": {
+    "TW": {
+      "country_name": "台灣",
+      "country_name_en": "Taiwan",
+      "country_emails": [
+        "harry810403@gmail.com"
+      ],
+      "send_country_summary": true,
+      "ports": {
+        "TWKEL": {
+          "port_name": "基隆",
+          "port_name_en": "Keelung",
+          "agent_emails": [
+            "keelung_agent@wanhai.com",
+            "keelung_ops@wanhai.com"
+          ],
+          "agent_name": "基隆代理公司",
+          "send_individual": true
+        },
+        "TWKHH": {
+          "port_name": "高雄",
+          "port_name_en": "Kaohsiung",
+          "agent_emails": [
+            "kaohsiung_agent@wanhai.com",
+            "kaohsiung_ops@wanhai.com"
+          ],
+          "agent_name": "高雄代理公司",
+          "send_individual": true
+        },
+        "TWTPE": {
+          "port_name": "台北",
+          "port_name_en": "Taipei",
+          "agent_emails": [
+            "taipei_agent@wanhai.com"
+          ],
+          "agent_name": "台北代理公司",
+          "send_individual": true
+        },
+        "TWTXG": {
+          "port_name": "台中",
+          "port_name_en": "Taichung",
+          "agent_emails": [
+            "taichung_agent@wanhai.com"
+          ],
+          "agent_name": "台中代理公司",
+          "send_individual": true
+        }
+      }
+    },
+    "CN": {
+      "country_name": "中國",
+      "country_name_en": "China",
+      "country_emails": [
+        "china_regional_manager@wanhai.com"
+      ],
+      "send_country_summary": true,
+      "ports": {
+        "CNDLC": {
+          "port_name": "大連",
+          "port_name_en": "Dalian",
+          "agent_emails": [],
+          "agent_name": "",
+          "send_individual": false
+        },
+        "CNFOC": {
+          "port_name": "福州",
+          "port_name_en": "Fuzhou",
+          "agent_emails": [],
+          "agent_name": "",
+          "send_individual": false
+        },
+        "CNHSK": {
+          "port_name": "天津",
+          "port_name_en": "Tianjin",
+          "agent_emails": [],
+          "agent_name": "",
+          "send_individual": false
+        },
+        "CNJIA": {
+          "port_name": "嘉興(乍浦)",
+          "port_name_en": "Jiaxing(Zhapu)",
+          "agent_emails": [],
+          "agent_name": "",
+          "send_individual": false
+        },
+        "CNLYG": {
+          "port_name": "連雲港",
+          "port_name_en": "Lianyungang",
+          "agent_emails": [],
+          "agent_name": "",
+          "send_individual": false
+        },
+        "CNNGB": {
+          "port_name": "寧波/北侖",
+          "port_name_en": "Ningbo/Beilun",
+          "agent_emails": [],
+          "agent_name": "",
+          "send_individual": false
+        },
+        "CNNSS": {
+          "port_name": "南沙",
+          "port_name_en": "Nansha",
+          "agent_emails": [],
+          "agent_name": "",
+          "send_individual": false
+        },
+        "CNQZH": {
+          "port_name": "泉州",
+          "port_name_en": "Quanzhou",
+          "agent_emails": [],
+          "agent_name": "",
+          "send_individual": false
+        },
+        "CNRZH": {
+          "port_name": "日照",
+          "port_name_en": "Rizhao",
+          "agent_emails": [],
+          "agent_name": "",
+          "send_individual": false
+        },
+        "CNSHA": {
+          "port_name": "上海",
+          "port_name_en": "Shanghai",
+          "agent_emails": [],
+          "agent_name": "",
+          "send_individual": false
+        },
+        "CNSKU": {
+          "port_name": "蛇口",
+          "port_name_en": "Shekou",
+          "agent_emails": [],
+          "agent_name": "",
+          "send_individual": false
+        },
+        "CNTAO": {
+          "port_name": "青島",
+          "port_name_en": "Qingdao",
+          "agent_emails": [],
+          "agent_name": "",
+          "send_individual": false
+        },
+        "CNXMN": {
+          "port_name": "廈門",
+          "port_name_en": "Xiamen",
+          "agent_emails": [],
+          "agent_name": "",
+          "send_individual": false
+        },
+        "CNYTN": {
+          "port_name": "鹽田",
+          "port_name_en": "Yantian",
+          "agent_emails": [],
+          "agent_name": "",
+          "send_individual": false
+        },
+        "CNZHA": {
+          "port_name": "湛江",
+          "port_name_en": "Zhanjiang",
+          "agent_emails": [],
+          "agent_name": "",
+          "send_individual": false
+        }
+      }
+    },
+    "JP": {
+      "country_name": "日本",
+      "country_name_en": "Japan",
+      "country_emails": [],
+      "send_country_summary": false,
+      "ports": {
+        "JPCHB": {"port_name": "千葉", "port_name_en": "Chiba", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "JPFKY": {"port_name": "福山", "port_name_en": "Fukuyama", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "JPHIJ": {"port_name": "廣島", "port_name_en": "Hiroshima", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "JPHKT": {"port_name": "博多", "port_name_en": "Hakata", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "JPKWS": {"port_name": "川崎", "port_name_en": "Kawasaki", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "JPMIZ": {"port_name": "水島", "port_name_en": "Mizushima", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "JPMOJ": {"port_name": "門司", "port_name_en": "Moji", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "JPNGO": {"port_name": "名古屋", "port_name_en": "Nagoya", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "JPOSA": {"port_name": "大阪", "port_name_en": "Osaka", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "JPSMZ": {"port_name": "清水", "port_name_en": "Shimizu", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "JPTYO": {"port_name": "東京", "port_name_en": "Tokyo", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "JPUKB": {"port_name": "神戶", "port_name_en": "Kobe", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "JPYKK": {"port_name": "四日市", "port_name_en": "Yokkaichi", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "JPYOK": {"port_name": "橫濱", "port_name_en": "Yokohama", "agent_emails": [], "agent_name": "", "send_individual": false}
+      }
+    },
+    "KR": {
+      "country_name": "韓國",
+      "country_name_en": "South Korea",
+      "country_emails": [],
+      "send_country_summary": false,
+      "ports": {
+        "KRINC": {"port_name": "仁川", "port_name_en": "Incheon", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "KRPUS": {"port_name": "釜山", "port_name_en": "Busan", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "KRUSN": {"port_name": "蔚山", "port_name_en": "Ulsan", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "KRBNP": {"port_name": "釜山新港", "port_name_en": "Busan New Port", "agent_emails": ["harry810403@gmail.com"], "agent_name": "", "send_individual": true}
+      }
+    },
+    "HK": {
+      "country_name": "香港",
+      "country_name_en": "Hong Kong",
+      "country_emails": [],
+      "send_country_summary": false,
+      "ports": {
+        "HKHKG": {"port_name": "香港", "port_name_en": "Hong Kong", "agent_emails": [], "agent_name": "", "send_individual": false}
+      }
+    },
+    "SG": {
+      "country_name": "新加坡",
+      "country_name_en": "Singapore",
+      "country_emails": [],
+      "send_country_summary": false,
+      "ports": {
+        "SGSIN": {"port_name": "新加坡", "port_name_en": "Singapore", "agent_emails": [], "agent_name": "", "send_individual": false}
+      }
+    },
+    "MY": {
+      "country_name": "馬來西亞",
+      "country_name_en": "Malaysia",
+      "country_emails": [],
+      "send_country_summary": false,
+      "ports": {
+        "MYPEN": {"port_name": "巴特沃思", "port_name_en": "Butterworth", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "MYPGU": {"port_name": "巴西古當", "port_name_en": "Pasir Gudang", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "MYPKG": {"port_name": "巴生港", "port_name_en": "Port Klang", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "MYPKW": {"port_name": "巴生港西港", "port_name_en": "Port Klang West", "agent_emails": [], "agent_name": "", "send_individual": false}
+      }
+    },
+    "TH": {
+      "country_name": "泰國",
+      "country_name_en": "Thailand",
+      "country_emails": [],
+      "send_country_summary": false,
+      "ports": {
+        "THBKK": {"port_name": "曼谷", "port_name_en": "Bangkok", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "THLCH": {"port_name": "林查班", "port_name_en": "Laem Chabang", "agent_emails": [], "agent_name": "", "send_individual": false}
+      }
+    },
+    "VN": {
+      "country_name": "越南",
+      "country_name_en": "Vietnam",
+      "country_emails": [],
+      "send_country_summary": false,
+      "ports": {
+        "VNCLP": {"port_name": "蓋林", "port_name_en": "Cai Lan", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "VNDAD": {"port_name": "峴港", "port_name_en": "Da Nang", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "VNHPH": {"port_name": "海防", "port_name_en": "Haiphong", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "VNTCT": {"port_name": "胡志明市", "port_name_en": "Ho Chi Minh City", "agent_emails": [], "agent_name": "", "send_individual": false}
+      }
+    },
+    "PH": {
+      "country_name": "菲律賓",
+      "country_name_en": "Philippines",
+      "country_emails": [],
+      "send_country_summary": false,
+      "ports": {
+        "PHCEB": {"port_name": "宿霧", "port_name_en": "Cebu", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "PHCGY": {"port_name": "卡加延德奧羅", "port_name_en": "Cagayan de Oro", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "PHDVO": {"port_name": "達沃", "port_name_en": "Davao", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "PHMNN": {"port_name": "馬尼拉北港", "port_name_en": "Manila North", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "PHMNS": {"port_name": "馬尼拉南港", "port_name_en": "Manila South", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "PHSFS": {"port_name": "蘇比克灣", "port_name_en": "Subic Bay", "agent_emails": [], "agent_name": "", "send_individual": false}
+      }
+    },
+    "ID": {
+      "country_name": "印尼",
+      "country_name_en": "Indonesia",
+      "country_emails": [],
+      "send_country_summary": false,
+      "ports": {
+        "IDBLW": {"port_name": "勿拉灣", "port_name_en": "Belawan", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "IDJKT": {"port_name": "雅加達", "port_name_en": "Jakarta", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "IDSRG": {"port_name": "三寶壟", "port_name_en": "Semarang", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "IDSUB": {"port_name": "泗水", "port_name_en": "Surabaya", "agent_emails": [], "agent_name": "", "send_individual": false}
+      }
+    },
+    "IN": {
+      "country_name": "印度",
+      "country_name_en": "India",
+      "country_emails": [],
+      "send_country_summary": false,
+      "ports": {
+        "INCOK": {"port_name": "科欽", "port_name_en": "Cochin", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "INKAT": {"port_name": "卡圖帕利", "port_name_en": "Kattupalli", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "INMAA": {"port_name": "清奈", "port_name_en": "Chennai", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "INMUN": {"port_name": "蒙德拉", "port_name_en": "Mundra", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "INNSA": {"port_name": "那瓦舍瓦", "port_name_en": "Nhava Sheva", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "INTUT": {"port_name": "杜蒂戈林", "port_name_en": "Tuticorin", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "INVIZ": {"port_name": "維沙卡帕特南", "port_name_en": "Visakhapatnam", "agent_emails": [], "agent_name": "", "send_individual": false}
+      }
+    },
+    "US": {
+      "country_name": "美國",
+      "country_name_en": "United States",
+      "country_emails": [],
+      "send_country_summary": false,
+      "ports": {
+        "USCHS": {"port_name": "查爾斯頓", "port_name_en": "Charleston", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "USLAX": {"port_name": "洛杉磯", "port_name_en": "Los Angeles", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "USNYC": {"port_name": "紐約", "port_name_en": "New York", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "USOAK": {"port_name": "奧克蘭", "port_name_en": "Oakland", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "USORF": {"port_name": "諾福克", "port_name_en": "Norfolk", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "USSAV": {"port_name": "薩凡納", "port_name_en": "Savannah", "agent_emails": [], "agent_name": "", "send_individual": false}
+      }
+    },
+    "MX": {
+      "country_name": "墨西哥",
+      "country_name_en": "Mexico",
+      "country_emails": [],
+      "send_country_summary": false,
+      "ports": {
+        "MXESE": {"port_name": "恩塞納達", "port_name_en": "Ensenada", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "MXLZC": {"port_name": "拉薩羅卡德納斯", "port_name_en": "Lazaro Cardenas", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "MXZLO": {"port_name": "曼薩尼約", "port_name_en": "Manzanillo", "agent_emails": [], "agent_name": "", "send_individual": false}
+      }
+    },
+    "OTHER": {
+      "country_name": "其他",
+      "country_name_en": "Others",
+      "country_emails": [],
+      "send_country_summary": false,
+      "ports": {
+        "AEJEA": {"port_name": "杰貝阿里", "port_name_en": "Jebel Ali", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "COBUN": {"port_name": "布埃納文圖拉", "port_name_en": "Buena Ventura", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "ECGYE": {"port_name": "瓜亞基爾", "port_name_en": "Guayaquil", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "EGSOK": {"port_name": "蘇赫納", "port_name_en": "Sokhna", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "GTPRQ": {"port_name": "克薩爾特南戈港", "port_name_en": "Puerto Quetzal", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "KHSIH": {"port_name": "西哈努克", "port_name_en": "Sihanoukville", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "LKCMB": {"port_name": "可倫坡", "port_name_en": "Colombo", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "PACTB": {"port_name": "克里斯托巴爾", "port_name_en": "Cristobal", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "PECLL": {"port_name": "卡亞俄", "port_name_en": "Callao", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "PKBQM": {"port_name": "穆罕默德·本·卡西姆港", "port_name_en": "Muhammad Bin Qasim", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "SAJED": {"port_name": "吉達", "port_name_en": "Jeddah", "agent_emails": [], "agent_name": "", "send_individual": false},
+        "CLVAP": {"port_name": "瓦爾帕萊索", "port_name_en": "Valparaiso", "agent_emails": [], "agent_name": "", "send_individual": false}
+      }
+    }
+  }
+}
