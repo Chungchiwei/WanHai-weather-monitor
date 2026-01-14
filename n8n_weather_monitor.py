@@ -448,10 +448,10 @@ class WeatherRiskAnalyzer:
                 max_gust_bft=max_wind_record.wind_gust_bft,
                 max_wave=max_wave_record.wave_height,
                 
-                # ✅ 格式：08:00 (UTC)
-                max_wind_time_utc=f"{max_wind_record.time.strftime('%Y-%m-%d %H:%M')} (UTC)",
-                max_gust_time_utc=f"{max_gust_record.time.strftime('%Y-%m-%d %H:%M')} (UTC)",
-                max_wave_time_utc=f"{max_wave_record.time.strftime('%Y-%m-%d %H:%M')} (UTC)",
+                # ✅ 格式：MM/DD 08:00 (UTC)
+                max_wind_time_utc=f"{max_wind_record.time.strftime('%m/%d %H:%M')} (UTC)",
+                max_gust_time_utc=f"{max_gust_record.time.strftime('%m/%d %H:%M')} (UTC)",
+                max_wave_time_utc=f"{max_wave_record.time.strftime('%m/%d %H:%M')} (UTC)",
                 
                 # ✅ 格式：08:00 (LT) 或 08:00 (UTC+8)
                 max_wind_time_lct=f"{max_wind_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
@@ -1242,13 +1242,13 @@ class WeatherMonitorService:
                 gust_style = "color: #DC2626; font-weight: bold;" if p.max_gust_kts >= 34 else "color: #333;"
                 wave_style = "color: #DC2626; font-weight: bold;" if p.max_wave >= 3.5 else "color: #333;"
                 
-                # ✅ 時間格式化（提取 HH:MM 部分）
-                w_lct = safe_format_time(p.max_wind_time_lct)
-                w_utc = safe_format_time(p.max_wind_time_utc)
-                g_lct = safe_format_time(p.max_gust_time_lct)
-                g_utc = safe_format_time(p.max_gust_time_utc)
-                v_lct = safe_format_time(p.max_wave_time_lct)
-                v_utc = safe_format_time(p.max_wave_time_utc)
+                # ✅ 直接使用完整時間字串
+                w_lct = p.max_wind_time_lct  # "2025-01-14 21:00 (LT)"
+                w_utc = p.max_wind_time_utc  # "2025-01-14 12:00 (UTC)"
+                g_lct = p.max_gust_time_lct
+                g_utc = p.max_gust_time_utc
+                v_lct = p.max_wave_time_lct
+                v_utc = p.max_wave_time_utc
                 
                 # 主要資料列
                 html += f"""
@@ -1280,18 +1280,18 @@ class WeatherMonitorService:
                                             {', '.join(p.risk_factors[:2])}
                                         </span>
                                     </div>
-                                    <table border="0" cellpadding="3" cellspacing="0" width="100%" style="font-size: 11px;">
+                                    <table border="0" cellpadding="3" cellspacing="0" width="100%" style="font-size: 10px;">
                                         <tr>
                                             <td style="color: #666; width: 35%;">最大風速:</td>
-                                            <td><strong style="color: #333;">{w_utc} (UTC) / {w_lct} (LT)</strong></td>
+                                            <td><strong style="color: #333;">{w_utc}<br>{w_lct}</strong></td>
                                         </tr>
                                         <tr>
                                             <td style="color: #666;">最大陣風:</td>
-                                            <td><strong style="color: #333;">{g_utc} (UTC) / {g_lct} (LT)</strong></td>
+                                            <td><strong style="color: #333;">{g_utc}<br>{g_lct}</strong></td>
                                         </tr>
                                         <tr>
                                             <td style="color: #666;">最大浪高:</td>
-                                            <td><strong style="color: #333;">{v_utc} (UTC) / {v_lct} (LT)</strong></td>
+                                            <td><strong style="color: #333;">{v_utc}<br>{v_lct}</strong></td>
                                         </tr>
                                     </table>
                                 </td>
