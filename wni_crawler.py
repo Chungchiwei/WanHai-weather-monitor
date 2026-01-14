@@ -451,6 +451,7 @@ class PortWeatherCrawler:
         self.db = WeatherDatabase()
         self.session = self._create_session()
         self.port_map: Dict[str, Dict[str, Any]] = {}
+        self.ports_data: Dict[str, Dict[str, Any]] = {}  # ✅ 新增這行
         self.port_list: List[str] = []
         self.login_manager = AedynLoginManager(username, password)
         self.headers: Dict[str, str] = {}
@@ -460,6 +461,67 @@ class PortWeatherCrawler:
         
         # 智能登入：先嘗試載入舊 Cookie，如果無效才重新登入
         self._smart_login(force_login=auto_login)
+
+    def _load_port_map(self) -> None:
+        """一次性讀取 Excel 並載入所有港口資訊（含經緯度）"""
+        if not os.path.exists(self.excel_path):
+            print(f"⚠️ 找不到 {self.excel_path}，請確認檔案位置。")
+            return
+
+        try:
+            print("⏳ 正在載入港口資料...")
+            df = pd.read_excel(self.excel_path, sheet_name='all_ports_list')
+            
+            # 清理欄位名稱（去除前後空格）
+            df.columns = df.columns.str.strip()
+            
+            for _, row in df.iterrows():
+                code = str(row['Port_Code_5']).strip()
+                obj_id = str(row['Station ID (Object_ID)']).strip()
+                
+                if code and obj_id and obj_id != 'nan':
+                    # 處理經緯度：先轉為 float，若為 NaN 則設為 0.0
+                    try:
+                        lat = float(row.get('Lat', 0.0))
+                        lat = 0.0 if np.isnan(lat) else lat
+                    except (ValueError, TypeError):
+                        lat = 0.0
+                        
+                    try:
+                        lon = float(row.get('Lon', 0.0))
+                        lon = 0.0 if np.isnan(lon) else lon
+                    except (ValueError, TypeError):
+                        lon = 0.0
+
+                    port_info = {
+                        'id': obj_id,
+                        'name': str(row['Port Name']).strip(),
+                        'wni_code': str(row.get('WNI Port Code', code)).strip(),
+                        'country': str(row.get('Country', 'N/A')),
+                        'latitude': lat,
+                        'longitude': lon
+                    }
+                    
+                    self.port_map[code] = port_info
+                    
+                    # ✅ 同時建立 ports_data（與 port_map 相同結構）
+                    self.ports_data[code] = {
+                        'port_name': port_info['name'],
+                        'wni_code': port_info['wni_code'],
+                        'country': port_info['country'],
+                        'station_id': port_info['id'],
+                        'latitude': lat,
+                        'longitude': lon
+                    }
+                    
+                    self.port_list.append(code)
+            
+            print(f"✅ 已載入 {len(self.port_map)} 個港口資料")
+            
+        except Exception as e:
+            print(f"❌ 讀取 Excel 失敗: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _smart_login(self, force_login: bool = False) -> None:
         """
