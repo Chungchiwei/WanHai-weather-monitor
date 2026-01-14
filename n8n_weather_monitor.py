@@ -388,7 +388,7 @@ class WeatherRiskAnalyzer:
 
     @classmethod
     def analyze_port_risk(cls, port_code: str, port_info: Dict[str, Any],
-                          content: str, issued_time: str) -> Optional[RiskAssessment]:
+                        content: str, issued_time: str) -> Optional[RiskAssessment]:
         try:
             parser = WeatherParser()
             port_name, records, warnings = parser.parse_content(content)
@@ -399,9 +399,9 @@ class WeatherRiskAnalyzer:
             risk_periods = []
             max_level = 0
             
-            # 🔧 修正：找出風速最大的那一筆記錄（該筆記錄同時包含當時的陣風值）
+            # 找出風速最大的那一筆記錄
             max_wind_record = max(records, key=lambda r: r.wind_speed_kts)
-            # 🔧 修正：找出陣風最大的那一筆記錄（該筆記錄同時包含當時的風速值）
+            # 找出陣風最大的那一筆記錄
             max_gust_record = max(records, key=lambda r: r.wind_gust_kts)
             # 浪高最大的記錄
             max_wave_record = max(records, key=lambda r: r.wave_height)
@@ -432,25 +432,32 @@ class WeatherRiskAnalyzer:
             if max_wave_record.wave_height >= RISK_THRESHOLDS['wave_caution']:
                 risk_factors.append(f"浪高 {max_wave_record.wave_height:.1f} m")
             
+            # ✅ 計算 LCT 時區偏移（用於顯示）
+            lct_offset_hours = int(max_wind_record.lct_time.utcoffset().total_seconds() / 3600)
+            lct_offset_str = f"UTC{lct_offset_hours:+d}"
+            
             return RiskAssessment(
                 port_code=port_code,
                 port_name=port_info.get('port_name', port_name),
                 country=port_info.get('country', 'N/A'),
                 risk_level=max_level,
                 risk_factors=risk_factors,
-                # 🔧 修正：使用同一筆記錄的風速和陣風
                 max_wind_kts=max_wind_record.wind_speed_kts,
                 max_wind_bft=max_wind_record.wind_speed_bft,
-                max_gust_kts=max_wind_record.wind_gust_kts,  # 使用同一時間的陣風
-                max_gust_bft=max_wind_record.wind_gust_bft,  # 使用同一時間的陣風
+                max_gust_kts=max_wind_record.wind_gust_kts,
+                max_gust_bft=max_wind_record.wind_gust_bft,
                 max_wave=max_wave_record.wave_height,
-                # 時間都使用風速最大的那一筆
-                max_wind_time_utc=max_wind_record.time.strftime('%Y-%m-%d %H:%M'),
-                max_wind_time_lct=max_wind_record.lct_time.strftime('%Y-%m-%d %H:%M'),
-                max_gust_time_utc=max_gust_record.time.strftime('%Y-%m-%d %H:%M'),
-                max_gust_time_lct=max_gust_record.lct_time.strftime('%Y-%m-%d %H:%M'),
-                max_wave_time_utc=max_wave_record.time.strftime('%Y-%m-%d %H:%M'),
-                max_wave_time_lct=max_wave_record.lct_time.strftime('%Y-%m-%d %H:%M'),
+                
+                # ✅ 格式：08:00 (UTC)
+                max_wind_time_utc=f"{max_wind_record.time.strftime('%Y-%m-%d %H:%M')} (UTC)",
+                max_gust_time_utc=f"{max_gust_record.time.strftime('%Y-%m-%d %H:%M')} (UTC)",
+                max_wave_time_utc=f"{max_wave_record.time.strftime('%Y-%m-%d %H:%M')} (UTC)",
+                
+                # ✅ 格式：08:00 (LT) 或 08:00 (UTC+8)
+                max_wind_time_lct=f"{max_wind_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
+                max_gust_time_lct=f"{max_gust_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
+                max_wave_time_lct=f"{max_wave_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
+                
                 risk_periods=risk_periods,
                 issued_time=issued_time,
                 latitude=port_info.get('latitude', 0.0),
@@ -855,11 +862,20 @@ class WeatherMonitorService:
         # 定義字型
         font_style = "font-family: 'Microsoft JhengHei', '微軟正黑體', 'Segoe UI', Arial, sans-serif;"
         
-        # 時間計算
+        # ✅ 時間計算（修正：使用正確的時區處理）
+        try:
+            from zoneinfo import ZoneInfo
+            taipei_tz = ZoneInfo('Asia/Taipei')
+        except ImportError:
+            # Python < 3.9 備用方案
+            taipei_tz = timezone(timedelta(hours=8))
+        
         utc_now = datetime.now(timezone.utc)
-        now_str_UTC = utc_now.strftime('%Y-%m-%d %H:%M')
-        lt_now = utc_now + timedelta(hours=8)
-        now_str_LT = lt_now.strftime('%Y-%m-%d %H:%M')
+        tpe_now = utc_now.astimezone(taipei_tz)
+        
+        # ✅ 格式：2025-01-14 10:15 (TPE)
+        now_str_TPE = f"{tpe_now.strftime('%Y-%m-%d %H:%M')} (TPE)"
+        now_str_UTC = f"{utc_now.strftime('%Y-%m-%d %H:%M')} (UTC)"
 
         # 若無風險的顯示
         if not assessments:
@@ -880,7 +896,7 @@ class WeatherMonitorService:
                         All ports are within safe limits for the next 48 hours.
                     </p>
                     <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #A5D6A7; font-size: 13px; color: #558B2F;">
-                        📅 最後更新時間 Last Updated: {now_str_LT} (TPE) | {now_str_UTC} (UTC)
+                        📅 最後更新時間 Last Updated: {now_str_TPE} | {now_str_UTC}
                     </div>
                 </div>
             </body>
@@ -911,15 +927,21 @@ class WeatherMonitorService:
                             <tr>
                                 <td align="left" valign="middle">
                                     <h1 style="margin: 0; font-size: 22px; color: #ffffff; font-weight: bold;">
-                                        ⛴️ WHL 港口氣象風險監控 Port Weather Risk Monitor
+                                        WHL 港口氣象監控系統
+                                    </h1>
+                                    <h1 style="margin: 0; font-size: 22px; color: #ffffff; font-weight: bold;">
+                                        WHL Port Weather Risk Monitor
                                     </h1>
                                     <div style="margin-top: 3px; font-size: 13px; color: #B3D9FF;">
-                                        未來 48 小時天氣預報與風險評估 48-Hour Weather Forecast & Risk Assessment
+                                        未來 48 小時天氣預報
+                                    </div>
+                                    <div style="margin-top: 3px; font-size: 13px; color: #B3D9FF;">
+                                        48-Hour Weather Forecast
                                     </div>
                                 </td>
                                 <td align="right" valign="bottom" style="font-size: 11px; color: #D6EBFF;">
-                                    <div style="font-weight: bold; color: #ffffff; font-size: 12px;">📅 {now_str_LT} (TPE)</div>
-                                    <div style="margin-top: 2px;">{now_str_UTC} (UTC)</div>
+                                    <div style="font-weight: bold; color: #ffffff; font-size: 12px;">📅 {now_str_TPE}</div>
+                                    <div style="margin-top: 2px;">{now_str_UTC}</div>
                                 </td>
                             </tr>
                         </table>
@@ -941,7 +963,7 @@ class WeatherMonitorService:
                                                     {len(assessments)} 個港口有風險 {len(assessments)} Ports at Risk
                                                 </div>
                                                 <div style="font-size: 14px; color: #991B1B; font-weight: 600;">
-                                                    未來 48 小時內以下港口具有氣象風險 Weather risks in the next 48 hours
+                                                    未來 48 小時內以下港口風力超過風險標準 Weather risks in the next 48 hours
                                                 </div>
                                             </td>
                                             <td align="right" valign="middle" width="280">
@@ -973,10 +995,13 @@ class WeatherMonitorService:
                             <tr>
                                 <td style="background-color: #004B97; padding: 12px;">
                                     <div style="color: #ffffff; font-weight: bold; font-size: 16px;">
-                                        📋 未來48Hrs 小時風險港口總表 (48Hrs RISK LEVEL TABLE)
+                                        📋 未來48 Hrs風險港口總表 (RISK LEVEL TABLE)
                                     </div>
                                     <div style="color: #B3D9FF; font-size: 12px; margin-top: 2px;">
-                                        請確認下方高風險港口 Please check below Hight Risk Level 
+                                        請確認下方風險港口
+                                    </div>
+                                    <div style="color: #B3D9FF; font-size: 12px; margin-top: 2px;">
+                                        Please check below Risk Ports
                                     </div>
                                 </td>
                             </tr>
@@ -1001,7 +1026,9 @@ class WeatherMonitorService:
                     port_cells = ""
                     
                     for p in row_ports:
-                        max_val = max(p.max_wind_kts, p.max_gust_kts)
+                        max_wind = p.max_wind_kts  # ✅ 修正：直接使用屬性
+                        max_gust = p.max_gust_kts  # ✅ 修正：直接使用屬性
+                        max_wave = p.max_wave      # ✅ 修正：直接使用屬性
                         port_cells += f"""
                             <td align="center" valign="top" style="padding:5px;">
                                 <table border="0" cellpadding="8" cellspacing="0" width="100%" style="background-color:#ffffff; border:2px solid {style['color']}; border-radius:4px;">
@@ -1011,10 +1038,13 @@ class WeatherMonitorService:
                                                 {p.port_code}
                                             </div>
                                             <div style="font-size:11px; color:#666; margin-bottom:2px;">
-                                                最大風速 Max Wind
+                                                最大風速 Max Wind: {max_wind:.0f} kts
                                             </div>
-                                            <div style="font-size:18px; font-weight:bold; color:#333;">
-                                                {max_val:.0f} <span style="font-size:12px; color:#666;">kts</span>
+                                            <div style="font-size:11px; color:#666; margin-bottom:2px;">
+                                                最大陣風 Max Gust: {max_gust:.0f} kts
+                                            </div>
+                                            <div style="font-size:11px; color:#666; margin-bottom:2px;">
+                                                最大浪高 Max Wave: {max_wave:.1f} m
                                             </div>
                                         </td>
                                     </tr>
@@ -1134,16 +1164,20 @@ class WeatherMonitorService:
                 row_count += 1
                 row_bg = "#FFFFFF" if row_count % 2 == 0 else "#FAFBFC"
                 
-                # 計算最大風力時間
+                # ✅ 計算最大風力時間（修正：提取時間部分）
                 max_wind_val = max(p.max_wind_kts, p.max_gust_kts)
                 time_lct = p.max_wind_time_lct if p.max_wind_kts >= p.max_gust_kts else p.max_gust_time_lct
                 
-                # 時間格式化
-                if ' ' in time_lct:
-                    date_part = time_lct.split(' ')[0]
-                    time_part = time_lct.split(' ')[1]
-                    time_display = f"{date_part}<br>{time_part}"
-                else:
+                # ✅ 時間格式化（從 "2025-01-14 08:00 (LT)" 提取時間）
+                try:
+                    if '(' in time_lct:
+                        time_lct = time_lct.split('(')[0].strip()  # 移除 (LT)
+                    if ' ' in time_lct:
+                        date_part, time_part = time_lct.split(' ', 1)
+                        time_display = f"{date_part}<br>{time_part}"
+                    else:
+                        time_display = time_lct
+                except:
                     time_display = time_lct
                 
                 # 風速樣式
@@ -1152,31 +1186,31 @@ class WeatherMonitorService:
                 wave_style = "color: #DC2626; font-weight: bold;" if p.max_wave >= 3.5 else "color: #333;"
                 
                 html += f"""
-                                        <tr style="background-color: {row_bg}; border-bottom: 1px solid #E5E7EB;">
-                                            <td align="center" style="padding: 10px 8px;">
-                                                <div style="font-size: 20px;">{style['emoji']}</div>
-                                                <div style="font-size: 9px; color: {style['color']}; font-weight: 600; margin-top: 2px;">{style['label']}</div>
+                                        <tr style="background-color: {row_bg};">
+                                            <td align="center" style="padding: 10px 8px; border-bottom: 1px solid #E5E7EB;">
+                                                <span style="background-color: {style['color']}; color: #ffffff; padding: 4px 8px; border-radius: 3px; font-size: 11px; font-weight: bold;">
+                                                    {style['emoji']} {style['label']}
+                                                </span>
                                             </td>
-                                            <td style="padding: 10px 8px;">
-                                                <div style="font-size: 16px; font-weight: bold; color: {style['color']};">{p.port_code}</div>
+                                            <td style="padding: 10px 8px; border-bottom: 1px solid #E5E7EB; font-size: 14px; font-weight: bold; color: #004B97;">
+                                                {p.port_code}
                                             </td>
-                                            <td style="padding: 10px 8px;">
-                                                <div style="font-size: 13px; color: #374151; font-weight: 500;">{p.port_name}</div>
-                                                <div style="font-size: 10px; color: #9CA3AF; margin-top: 2px;">📍 {p.country}</div>
+                                            <td style="padding: 10px 8px; border-bottom: 1px solid #E5E7EB; font-size: 13px; color: #333;">
+                                                {p.port_name}<br>
+                                                <span style="font-size: 11px; color: #999;">📍 {p.country}</span>
                                             </td>
-                                            <td align="center" style="padding: 10px 8px;">
-                                                <div style="{wind_style} font-size: 18px;">{p.max_wind_kts:.0f}</div>
-                                                <div style="font-size: 10px; color: #666;">kts</div>
+                                            <td align="center" style="padding: 10px 8px; border-bottom: 1px solid #E5E7EB; {wind_style} font-size: 15px;">
+                                                💨 {p.max_wind_kts:.0f} kts<br>
+                                                <span style="font-size: 10px; color: #999;">(Bf {p.max_wind_bft})</span>
                                             </td>
-                                            <td align="center" style="padding: 10px 8px;">
-                                                <div style="{gust_style} font-size: 18px;">{p.max_gust_kts:.0f}</div>
-                                                <div style="font-size: 10px; color: #666;">kts</div>
+                                            <td align="center" style="padding: 10px 8px; border-bottom: 1px solid #E5E7EB; {gust_style} font-size: 15px;">
+                                                💨 {p.max_gust_kts:.0f} kts<br>
+                                                <span style="font-size: 10px; color: #999;">(Bf {p.max_gust_bft})</span>
                                             </td>
-                                            <td align="center" style="padding: 10px 8px;">
-                                                <div style="{wave_style} font-size: 18px;">{p.max_wave:.1f}</div>
-                                                <div style="font-size: 10px; color: #666;">m</div>
+                                            <td align="center" style="padding: 10px 8px; border-bottom: 1px solid #E5E7EB; {wave_style} font-size: 15px;">
+                                                🌊 {p.max_wave:.1f} m
                                             </td>
-                                            <td align="center" style="padding: 10px 8px; font-size: 12px; color: #374151; line-height: 1.4;">
+                                            <td align="center" style="padding: 10px 8px; border-bottom: 1px solid #E5E7EB; font-size: 12px; color: #333;">
                                                 {time_display}
                                             </td>
                                         </tr>
@@ -1196,13 +1230,11 @@ class WeatherMonitorService:
                                         <tr>
                                             <td style="font-size: 14px; color: #78350F; line-height: 1.7;">
                                                 <strong style="color: #92400E; font-size: 15px;">
-                                                    ⚠️ 請各輪立即確認靠泊港口是否在上表中 Please check if your port is in the tables above
+                                                    ⚠️ 請各輪立即確認靠泊港口是否在上表中<br>Please check if your port is in the tables above
                                                 </strong>
                                                 <div style="margin-top: 8px; font-size: 13px;">
-                                                    ✅ 如您的港口<strong>在表中</strong>，請查看下方詳細氣象數據並做好風險評估<br>
+                                                    ✅ 如您預計靠泊的港口<strong>在表中</strong>，請查看下方詳細氣象數據並提前做好相關應對措施<br>
                                                     &nbsp;&nbsp;&nbsp;&nbsp;If your port is listed, please review the detailed weather data below<br>
-                                                    ✅ 如您的港口<strong>不在表中</strong>，可忽略本郵件<br>
-                                                    &nbsp;&nbsp;&nbsp;&nbsp;If your port is NOT listed, you may ignore this email
                                                 </div>
                                             </td>
                                         </tr>
@@ -1220,9 +1252,6 @@ class WeatherMonitorService:
                                     </div>
                                     <div style="font-size: 12px; color: #9CA3AF; margin-top: 4px;">
                                         Detailed Weather Data & Trend Charts for Each Port
-                                    </div>
-                                    <div style="font-size: 11px; color: #D1D5DB; margin-top: 3px; font-style: italic;">
-                                        (僅需相關船舶查看 For Relevant Vessels Only)
                                     </div>
                                 </td>
                             </tr>
@@ -1260,16 +1289,21 @@ class WeatherMonitorService:
             }
         }
 
-        # 時間格式處理函數
+        # ✅ 時間格式處理函數（修正：處理包含時區標記的時間）
         def safe_format_time(time_str):
-            """安全地格式化時間字串"""
+            """安全地格式化時間字串，移除時區標記"""
             if not time_str:
                 return "N/A"
             try:
+                # 移除 (UTC) 或 (LT) 標記
+                if '(' in time_str:
+                    time_str = time_str.split('(')[0].strip()
+                
+                # 只保留時間部分
                 if ' ' in time_str:
-                    return time_str.split(' ')[1]
-                if len(time_str) > 10:
-                    return time_str[5:]
+                    parts = time_str.split(' ')
+                    if len(parts) >= 2:
+                        return parts[1]  # 返回 "08:00"
                 return time_str
             except:
                 return time_str
@@ -1314,7 +1348,7 @@ class WeatherMonitorService:
                 gust_style = "color: #DC2626; font-weight: bold;" if p.max_gust_kts >= 34 else "color: #333;"
                 wave_style = "color: #DC2626; font-weight: bold;" if p.max_wave >= 3.5 else "color: #333;"
                 
-                # 時間格式化
+                # ✅ 時間格式化（提取 HH:MM 部分）
                 w_lct = safe_format_time(p.max_wind_time_lct)
                 w_utc = safe_format_time(p.max_wind_time_utc)
                 g_lct = safe_format_time(p.max_gust_time_lct)
@@ -1352,17 +1386,17 @@ class WeatherMonitorService:
                                             {', '.join(p.risk_factors[:2])}
                                         </span>
                                     </div>
-                                    <table border="0" cellpadding="3" cellspacing="0" width="100%" style="font-size: 12px;">
+                                    <table border="0" cellpadding="3" cellspacing="0" width="100%" style="font-size: 11px;">
                                         <tr>
-                                            <td style="color: #666; width: 40%;">最大風速 Max Wind:</td>
+                                            <td style="color: #666; width: 35%;">最大風速:</td>
                                             <td><strong style="color: #333;">{w_utc} (UTC) / {w_lct} (LT)</strong></td>
                                         </tr>
                                         <tr>
-                                            <td style="color: #666;">最大陣風 Max Gust:</td>
+                                            <td style="color: #666;">最大陣風:</td>
                                             <td><strong style="color: #333;">{g_utc} (UTC) / {g_lct} (LT)</strong></td>
                                         </tr>
                                         <tr>
-                                            <td style="color: #666;">最大浪高 Max Wave:</td>
+                                            <td style="color: #666;">最大浪高:</td>
                                             <td><strong style="color: #333;">{v_utc} (UTC) / {v_lct} (LT)</strong></td>
                                         </tr>
                                     </table>

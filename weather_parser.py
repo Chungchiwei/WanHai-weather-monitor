@@ -109,12 +109,13 @@ class WeatherParser:
     LINE_PATTERN = re.compile(r'^\s*\d{4}\s+\d{4}\s+\d{4}\s+\d{4}')
     WIND_BLOCK_KEY = "WIND kts"
 
-    def parse_content(self, content: str) -> Tuple[str, List[WeatherRecord], List[str]]:
+    def parse_content(self, content: str, port_timezone: Optional[str] = None) -> Tuple[str, List[WeatherRecord], List[str]]:
         """
         解析 WNI 氣象檔案內容
         
         Args:
             content: WNI 氣象檔案的文字內容
+            port_timezone: 不使用（保留參數以相容舊版）
             
         Returns:
             Tuple[港口名稱, 氣象記錄列表, 警告訊息列表]
@@ -122,6 +123,7 @@ class WeatherParser:
         def _safe_float(val_str):
             clean = val_str.replace('*', '')
             return float(clean) if clean else 0.0
+        
         lines = content.strip().split('\n')
         warnings = []
         records = []
@@ -146,6 +148,9 @@ class WeatherParser:
         current_year = datetime.now().year
         prev_mmdd = None
         
+        # ✅ 用於自動偵測 LCT 時區偏移
+        lct_offset = None
+        
         for line in lines[wind_section_start:]:
             line = line.strip()
             
@@ -163,26 +168,37 @@ class WeatherParser:
                     warnings.append(f"欄位不足: {line}")
                     continue
                 
-                # 解析日期時間
-                utc_date = parts[0] # 修正拼字
-                utc_time = parts[1]
-                local_date = parts[2]
-                local_time = parts[3]
+                # ✅ 直接使用 WNI 提供的 UTC 和 LCT 時間
+                utc_date = parts[0]   # 例如：1223
+                utc_time = parts[1]   # 例如：0000
+                local_date = parts[2] # 例如：1223
+                local_time = parts[3] # 例如：0800
                 
                 # 處理跨年
-                if prev_mmdd and prev_mmdd > local_date and prev_mmdd.startswith("12") and local_date.startswith("01"):
+                if prev_mmdd and prev_mmdd > utc_date and prev_mmdd.startswith("12") and utc_date.startswith("01"):
                     current_year += 1
                 prev_mmdd = utc_date
                 
-                 # 建立氣象記錄
-                dt_utc = datetime.strptime(f"{current_year}{utc_date}{utc_time}", "%Y%m%d%H%M")
-                dt_lct = datetime.strptime(f"{current_year}{local_date}{local_time}", "%Y%m%d%H%M")
+                # ✅ 建立 naive datetime
+                dt_utc_naive = datetime.strptime(f"{current_year}{utc_date}{utc_time}", "%Y%m%d%H%M")
+                dt_lct_naive = datetime.strptime(f"{current_year}{local_date}{local_time}", "%Y%m%d%H%M")
+                
+                # ✅ 第一筆資料時自動計算 LCT 時區偏移
+                if lct_offset is None:
+                    time_diff = dt_lct_naive - dt_utc_naive
+                    offset_hours = int(time_diff.total_seconds() / 3600)
+                    lct_offset = timezone(timedelta(hours=offset_hours))
+                
+                # ✅ 只標記時區，不做任何轉換
+                dt_utc = dt_utc_naive.replace(tzinfo=timezone.utc)
+                dt_lct = dt_lct_naive.replace(tzinfo=lct_offset)
+                
                 # 建立氣象記錄
                 record = WeatherRecord(
-                    time=dt_utc,
-                    lct_time=dt_lct,
+                    time=dt_utc,        # UTC 時間（帶 UTC 時區標記）
+                    lct_time=dt_lct,    # LCT 時間（帶本地時區標記）
                     wind_direction=parts[4],
-                    wind_speed_kts=_safe_float(parts[5]), # 使用定義好的 function
+                    wind_speed_kts=_safe_float(parts[5]),
                     wind_gust_kts=_safe_float(parts[6]),
                     wave_direction=parts[7],
                     wave_height=_safe_float(parts[8]),
@@ -199,6 +215,7 @@ class WeatherParser:
             raise ValueError("未成功解析任何氣象資料")
         
         return port_name, records, warnings
+
     
     def parse_file(self, file_path: str) -> Tuple[str, List[WeatherRecord], List[str]]:
         """
