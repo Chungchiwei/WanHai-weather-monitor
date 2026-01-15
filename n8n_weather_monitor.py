@@ -1202,11 +1202,6 @@ def _generate_html_report(self, assessments: List[RiskAssessment]) -> str:
                                     </p>
                                     
                                     <table border="0" cellpadding="0" cellspacing="0" align="center" style="margin-bottom: 20px; margin-top: 10px;">
-                                        <tr>
-                                            <td valign="middle" style="font-size: 12px; color: #6B7280;">資料來源: <strong style="color: #4B5563;">Weathernews Inc. (WNI)</strong></td>
-                                            <td valign="middle" style="padding: 0 8px; color: #D1D5DB;">|</td>
-                                            <td valign="middle" style="font-size: 12px; color: #6B7280;">系統自動生成</td>
-                                        </tr>
                                     </table>
 
                                     <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F3F4F6; border: 1px solid #E5E7EB; border-radius: 6px;">
