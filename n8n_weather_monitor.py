@@ -933,40 +933,44 @@ class WeatherMonitorService:
             <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 900px; margin: 20px auto; background-color: #ffffff;">
                 
                 <tr>
-                    <td style="padding: 25px 25px 15px 25px;">
+                    <td style="padding: 0;">
                         
-                        <!-- ========== 風險港口列表（合併版） ========== -->
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 3px solid #DC2626; margin-bottom: 25px; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);">
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 4px solid #DC2626; box-shadow: 0 4px 16px rgba(220, 38, 38, 0.3);">
                             <tr>
-                                <td style="background-color: #DC2626; padding: 20px;">
+                                <td style="background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%); padding: 25px 20px;">
                                     <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                         <tr>
-                                            <td width="60" valign="top" style="font-size: 36px; line-height: 1; color: #ffffff;">⚠️</td>
-                                            <td valign="middle">
-                                                <div style="font-size: 24px; font-weight: bold; color: #ffffff; margin-bottom: 3px; line-height: 1.2;">
-                                                    未來48 Hrs內 {len(assessments)} 個港口有氣象風險
+                                            <td width="70" valign="top" style="font-size: 48px; line-height: 1; color: #ffffff;">⚠️</td>
+                                            <td valign="middle" style="padding-right: 20px;">
+                                                <div style="font-size: 26px; font-weight: bold; color: #ffffff; margin-bottom: 5px; line-height: 1.3; letter-spacing: 1px;">
+                                                    未來 48 小時港口惡劣天候預警
                                                 </div>
-                                                <div style="font-size: 24px; font-weight: bold; color: #ffffff; margin-bottom: 3px; line-height: 1.2;">
-                                                    48 Hrs {len(assessments)} Ports with Weather Risks
+                                                <div style="font-size: 20px; font-weight: bold; color: #FEE2E2; margin-bottom: 12px; line-height: 1.3;">
+                                                    Weather Alert: {len(assessments)} Ports at Risk (Next 48 Hrs)
                                                 </div>
-                                                <div style="font-size: 13px; color: #FEE2E2; font-weight: 600; margin-top: 8px;">
-                                                    ⚠️ 請立即確認您的靠泊港口是否在下列名單中 Please check your berthing port immediately
+                                                
+                                                <div style="font-size: 13px; color: #ffffff; background-color: rgba(255,255,255,0.2); padding: 8px 12px; border-radius: 4px; display: inline-block; font-weight: 500; line-height: 1.5;">
+                                                    ⚠️ 請立即確認您的靠泊港口是否在下列名單中，並採取相應防範措施<br>
+                                                    <span style="opacity: 0.9;">Please check your berthing port and take appropriate precautions</span>
                                                 </div>
                                             </td>
-                                            <td align="right" valign="middle" width="280">
-                                                <table border="0" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.1);">
+                                            <td align="right" valign="middle" width="300">
+                                                <table border="0" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
                                                     <tr>
-                                                        <td align="center" style="padding: 8px 10px;">
-                                                            <div style="font-size: 24px; font-weight: bold; color: #DC2626; line-height: 1;">{len(risk_groups[3])}</div>
-                                                            <div style="font-size: 14px; color: #666; margin-top: 3px;">🔴 危險 DANGER</div>
+                                                        <td align="center" style="padding: 12px 15px;">
+                                                            <div style="font-size: 32px; font-weight: bold; color: #DC2626; line-height: 1;">{len(risk_groups[3])}</div>
+                                                            <div style="font-size: 13px; color: #DC2626; margin-top: 4px; font-weight: 600;">🔴 高風險</div>
+                                                            <div style="font-size: 12px; color: #999; margin-top: 1px;">HIGH RISK</div>
                                                         </td>
-                                                        <td align="center" style="padding: 8px 10px; border-left: 1px solid #E5E7EB;">
-                                                            <div style="font-size: 24px; font-weight: bold; color: #F59E0B; line-height: 1;">{len(risk_groups[2])}</div>
-                                                            <div style="font-size: 14px; color: #666; margin-top: 3px;">🟠 警告 WARNING</div>
+                                                        <td align="center" style="padding: 12px 15px; border-left: 2px solid #F3F4F6;">
+                                                            <div style="font-size: 32px; font-weight: bold; color: #F59E0B; line-height: 1;">{len(risk_groups[2])}</div>
+                                                            <div style="font-size: 13px; color: #F59E0B; margin-top: 4px; font-weight: 600;">🟠 中風險</div>
+                                                            <div style="font-size: 12px; color: #999; margin-top: 1px;">MEDIUM RISK</div>
                                                         </td>
-                                                        <td align="center" style="padding: 8px 10px; border-left: 1px solid #E5E7EB;">
-                                                            <div style="font-size: 24px; font-weight: bold; color: #0EA5E9; line-height: 1;">{len(risk_groups[1])}</div>
-                                                            <div style="font-size: 14px; color: #666; margin-top: 3px;">🟡 注意 CAUTION</div>
+                                                        <td align="center" style="padding: 12px 15px; border-left: 2px solid #F3F4F6;">
+                                                            <div style="font-size: 32px; font-weight: bold; color: #EAB308; line-height: 1;">{len(risk_groups[1])}</div>
+                                                            <div style="font-size: 13px; color: #EAB308; margin-top: 4px; font-weight: 600;">🟡 低風險</div>
+                                                            <div style="font-size: 12px; color: #999; margin-top: 1px;">LOW RISK</div>
                                                         </td>
                                                     </tr>
                                                 </table>
@@ -975,6 +979,32 @@ class WeatherMonitorService:
                                     </table>
                                 </td>
                             </tr>
+                            
+                            <tr>
+                                <td style="background-color: #7F1D1D; padding: 10px 20px;">
+                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                        <tr>
+                                            <td style="font-size: 13px; color: #FEE2E2; font-weight: 600;">
+                                                📅 最後更新時間 Last Updated:
+                                            </td>
+                                            <td align="right" style="font-size: 13px; color: #ffffff; font-weight: 600;">
+                                                {now_str_TPE} (TPE) &nbsp;|&nbsp; {now_str_UTC} (UTC)
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                            
+                            <tr>
+                                <td style="background-color: #FECACA; padding: 12px 20px; border-top: 1px solid #EF4444;">
+                                    <div style="font-size: 13px; color: #7F1D1D; line-height: 1.5; font-weight: 600; text-align: left;">
+                                        <strong style="color: #991B1B;">📢 Risk Advisory 風險提示：</strong><br>
+                                        請船長及相關人員密切關注天氣變化，評估風險後決定是否調整航行計劃或延遲靠港。<br>
+                                        <span style="font-weight: 400; color: #991B1B;">Captains and relevant personnel should closely monitor weather changes and assess risks regarding sailing plans or port calls.</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            
                             <tr>
                                 <td style="padding: 0;">
                                     <table border="0" cellpadding="0" cellspacing="0" width="100%">
@@ -982,9 +1012,9 @@ class WeatherMonitorService:
         
         # ==================== 風險港口列表 ====================
         summary_styles = {
-            3: {'emoji': '🔴', 'label': 'DANGER', 'color': '#DC2626', 'bg': '#FEF2F2'},
-            2: {'emoji': '🟠', 'label': 'WARNING', 'color': '#F59E0B', 'bg': '#FFFBEB'},
-            1: {'emoji': '🟡', 'label': 'CAUTION', 'color': '#0EA5E9', 'bg': '#F0F9FF'}
+            3: {'emoji': '🔴', 'label': 'DANGER', 'label_zh': '危險', 'color': '#DC2626', 'bg': '#FEF2F2', 'border': '#FCA5A5'},
+            2: {'emoji': '🟠', 'label': 'WARNING', 'label_zh': '警告', 'color': '#F59E0B', 'bg': '#FFFBEB', 'border': '#FCD34D'},
+            1: {'emoji': '🟡', 'label': 'CAUTION', 'label_zh': '注意', 'color': '#0EA5E9', 'bg': '#F0F9FF', 'border': '#7DD3FC'}
         }
         
         for level in [3, 2, 1]:
@@ -992,18 +1022,21 @@ class WeatherMonitorService:
             style = summary_styles[level]
             
             if ports:
-                port_codes = ', '.join([f"<strong style='font-size: 16px;'>{p.port_code}</strong>" for p in ports])
+                port_codes = ', '.join([f"<strong style='font-size: 17px; color: {style['color']};'>{p.port_code}</strong>" for p in ports])
                 html += f"""
                                         <tr>
-                                            <td style="padding: 18px; border-bottom: 1px solid #E5E7EB; background-color: {style['bg']};">
+                                            <td style="padding: 20px; border-bottom: 2px solid {style['border']}; background-color: {style['bg']};">
                                                 <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                                     <tr>
-                                                        <td width="200" valign="top">
-                                                            <div style="font-size: 18px; font-weight: bold; color: {style['color']};">
-                                                                {style['emoji']} {style['label']} ({len(ports)} 個港口)
+                                                        <td width="220" valign="top">
+                                                            <div style="font-size: 20px; font-weight: bold; color: {style['color']}; line-height: 1.3;">
+                                                                {style['emoji']} {style['label_zh']} {style['label']}
+                                                            </div>
+                                                            <div style="font-size: 14px; color: #666; margin-top: 4px;">
+                                                                ({len(ports)} 個港口)
                                                             </div>
                                                         </td>
-                                                        <td style="font-size: 15px; color: #1F2937; line-height: 1.8;">
+                                                        <td style="font-size: 16px; color: #1F2937; line-height: 2;">
                                                             {port_codes}
                                                         </td>
                                                     </tr>
@@ -1013,25 +1046,43 @@ class WeatherMonitorService:
                 """
         
         html += """
-                                    </table>
-                                </td>
-                            </tr>
-                        </table>
-
-                        <!-- ========== 行動指引 ========== -->
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FFFBEB; border-left: 4px solid #F59E0B; margin-bottom: 25px;">
+                <tr>
+                    <td style="padding: 25px 25px 15px 25px;">
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FFFBEB; border-left: 5px solid #F59E0B; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(245, 158, 11, 0.15); border-radius: 4px;">
                             <tr>
-                                <td style="padding: 15px 18px;">
+                                <td style="padding: 20px 22px;">
                                     <table border="0" cellpadding="0" cellspacing="0">
                                         <tr>
-                                            <td style="font-size: 14px; color: #78350F; line-height: 1.7;">
-                                                <div style="margin-top: 8px; font-size: 13px;">
-                                                    ✅ 請確認您的靠泊港口是否在上述風險港口列表中<br>
-                                                    &nbsp;&nbsp;&nbsp;&nbsp;Please check if your berthing port is listed above<br><br>
-                                                    ✅ 如您的港口在列表中，請查看下方詳細氣象數據並提前做好相關應對措施<br>
-                                                    &nbsp;&nbsp;&nbsp;&nbsp;If your port is listed, please review the weather data below and prepare accordingly<br><br>
-                                                    ✅ 請與當地代理確認最新港口天氣與作業狀況<br>
-                                                    &nbsp;&nbsp;&nbsp;&nbsp;Please confirm latest port operation status with local agent
+                                            <td style="font-size: 14px; line-height: 1.6;">
+                                                <div style="font-size: 15px; font-weight: 700; margin-bottom: 15px; color: #92400E; border-bottom: 1px solid rgba(146, 64, 14, 0.2); padding-bottom: 8px;">
+                                                    📋 船隊風險應對措施 Fleet Risk Response Actions:
+                                                </div>
+                                                
+                                                <div style="margin-bottom: 12px;">
+                                                    <div style="font-size: 14px; font-weight: 700; color: #451a03;">
+                                                        ✅ 請立即確認貴輪靠泊港口是否在風險名單中，並評估可能影響
+                                                    </div>
+                                                    <div style="font-size: 13px; color: #B45309; margin-top: 3px; font-weight: 500;">
+                                                        Immediately verify if your vessel's port of call is on the alert list and assess potential impacts.
+                                                    </div>
+                                                </div>
+
+                                                <div style="margin-bottom: 12px;">
+                                                    <div style="font-size: 14px; font-weight: 700; color: #451a03;">
+                                                        ✅ 根據風險等級制定應對策略，包括可能的靠泊時間調整或替代方案
+                                                    </div>
+                                                    <div style="font-size: 13px; color: #B45309; margin-top: 3px; font-weight: 500;">
+                                                        Formulate response strategies based on risk levels, including schedule adjustments or berthing alternatives.
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <div style="font-size: 14px; font-weight: 700; color: #451a03;">
+                                                        ✅ 與船管PIC、當地代理保持密切聯繫，及時報告船舶狀態和決策
+                                                    </div>
+                                                    <div style="font-size: 13px; color: #B45309; margin-top: 3px; font-weight: 500;">
+                                                        Maintain close contact with the PIC and local agents; promptly report vessel status and decisions.
+                                                    </div>
                                                 </div>
                                             </td>
                                         </tr>
@@ -1040,19 +1091,20 @@ class WeatherMonitorService:
                             </tr>
                         </table>
 
-                        <!-- ========== 分隔線 ========== -->
                         <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 25px 0;">
                             <tr>
-                                <td style="border-top: 3px dashed #D1D5DB; padding: 15px 0; text-align: center;">
-                                    <div style="font-size: 14px; color: #6B7280; font-weight: 600;">
-                                        ⬇️ 以下為各港口詳細氣象數據 ⬇️
+                                <td style="border-top: 3px dashed #D1D5DB; padding-top: 20px; text-align: center;">
+                                    <div style="font-size: 15px; color: #4B5563; font-weight: 700; letter-spacing: 1px;">
+                                        ⬇️ 以下為各港口詳細氣象風險資料 ⬇️
                                     </div>
-                                    <div style="font-size: 12px; color: #9CA3AF; margin-top: 4px;">
-                                        Detailed Weather Data for Each Port
+                                    <div style="font-size: 12px; color: #9CA3AF; margin-top: 5px; font-weight: 600; letter-spacing: 0.5px;">
+                                        DETAILED WEATHER RISK DATA FOR EACH PORT
                                     </div>
                                 </td>
                             </tr>
                         </table>
+                    </td>
+                </tr>
         """
 
         # ==================== 詳細港口資料區 ====================
@@ -1119,14 +1171,79 @@ class WeatherMonitorService:
             
             # 遍歷該等級的每個港口
             for index, p in enumerate(ports):
+                # 1. 樣式與背景邏輯
                 row_bg = "#FFFFFF" if index % 2 == 0 else "#FAFBFC"
                 
-                # 數值樣式判斷
+                # 2. 數值強調樣式 (閾值判斷)
                 wind_style = "color: #DC2626; font-weight: bold;" if p.max_wind_kts >= 28 else "color: #333;"
                 gust_style = "color: #DC2626; font-weight: bold;" if p.max_gust_kts >= 34 else "color: #333;"
                 wave_style = "color: #DC2626; font-weight: bold;" if p.max_wave >= 3.5 else "color: #333;"
                 
-                # ✅ 使用外層定義的 format_time_display 函數
+                # 3. 風險等級 (顏色、文字、圖示)
+                if p.risk_level == 3:
+                    risk_level_bg = "#FEF2F2"
+                    risk_level_color = "#DC2626"
+                    risk_level_text = "高風險 HIGH RISK"
+                    risk_level_icon = "🔴"
+                elif p.risk_level == 2:
+                    risk_level_bg = "#FFFBEB"
+                    risk_level_color = "#F59E0B"
+                    risk_level_text = "中風險 MEDIUM RISK"
+                    risk_level_icon = "🟠"
+                else:
+                    risk_level_bg = "#F0F9FF"
+                    risk_level_color = "#0EA5E9"
+                    risk_level_text = "低風險 LOW RISK"
+                    risk_level_icon = "🟡"
+
+                # 4. 風速等級 (文字、顏色)
+                if p.max_wind_kts >= 34:
+                    wind_level_text = "強風"
+                    wind_level_color = "#DC2626"
+                elif p.max_wind_kts >= 28:
+                    wind_level_text = "中強風"
+                    wind_level_color = "#F59E0B"
+                elif p.max_wind_kts >= 22:
+                    wind_level_text = "微風"
+                    wind_level_color = "#0EA5E9"
+                else:
+                    wind_level_text = ""
+                    wind_level_color = "#333"
+
+                # 5. 陣風等級 (文字、顏色)
+                if p.max_gust_kts >= 41:
+                    gust_level_text = "危險陣風"
+                    gust_level_color = "#DC2626"
+                elif p.max_gust_kts >= 34:
+                    gust_level_text = "強陣風"
+                    gust_level_color = "#F59E0B"
+                elif p.max_gust_kts >= 28:
+                    gust_level_text = "中陣風"
+                    gust_level_color = "#0EA5E9"
+                else:
+                    gust_level_text = ""
+                    gust_level_color = "#333"
+
+                # 6. 浪高等級 (文字、顏色)
+                if p.max_wave >= 4.0:
+                    wave_level_text = "危險浪高"
+                    wave_level_color = "#DC2626"
+                elif p.max_wave >= 3.5:
+                    wave_level_text = "高浪"
+                    wave_level_color = "#F59E0B"
+                elif p.max_wave >= 2.5:
+                    wave_level_text = "中浪"
+                    wave_level_color = "#0EA5E9"
+                else:
+                    wave_level_text = ""
+                    wave_level_color = "#333"
+
+                # 7. 風險持續時間
+                risk_periods_count = len(p.risk_periods)
+                # 如果 count > 0 回傳數字字串 (例如 "9")，否則回傳 "0" 或 "N/A"
+                risk_duration = f"{risk_periods_count * 3}" if risk_periods_count > 0 else "0"
+
+                # 8. 時間格式化
                 w_utc = format_time_display(p.max_wind_time_utc)
                 w_lct = format_time_display(p.max_wind_time_lct)
                 g_utc = format_time_display(p.max_gust_time_utc)
@@ -1136,59 +1253,117 @@ class WeatherMonitorService:
                 
                 # 主要資料列
                 html += f"""
-                            <tr style="background-color: {row_bg};">
-                                <td valign="top" style="padding: 12px; border-bottom: 1px solid #eee; font-size: 13px;">
-                                    <div style="font-size: 18px; font-weight: bold; color: #004B97; margin-bottom: 4px;">{p.port_code}</div>
-                                    <div style="font-size: 12px; color: #666; margin-bottom: 3px;">{p.port_name}</div>
-                                    <div style="font-size: 11px; color: #999;">📍 {p.country}</div>
-                                </td>
+                            <tr style="background-color: {row_bg}; border-bottom: 1px solid #E5E7EB;">
+                            <td valign="top" style="padding: 15px; width: 25%;">
+                                <div style="font-size: 20px; font-weight: 800; color: #1E3A8A; margin-bottom: 4px; line-height: 1;">
+                                    {p.port_code}
+                                </div>
+                                <div style="font-size: 13px; color: #4B5563; font-weight: 600; margin-bottom: 4px;">
+                                    {p.port_name}
+                                </div>
+                                <div style="font-size: 12px; color: #6B7280; margin-bottom: 8px;">
+                                    📍 {p.country}
+                                </div>
+                                <div>
+                                    <span style="background-color: {risk_level_bg}; color: {risk_level_color}; font-size: 11px; font-weight: 700; padding: 3px 6px; border-radius: 3px; display: inline-block;">
+                                        {risk_level_icon} {risk_level_text}
+                                    </span>
+                                </div>
+                            </td>
 
-                                <td valign="top" style="padding: 12px; border-bottom: 1px solid #eee; font-size: 13px;">
-                                    <div style="margin-bottom: 4px;">
-                                        <span style="color: #666; font-size: 11px;">風速 Wind</span>
-                                        <span style="{wind_style} font-size: 16px; margin-left: 5px;">💨 {p.max_wind_kts:.0f} kts</span>
+                            <td valign="top" style="padding: 15px; width: 30%;">
+                                <div style="margin-bottom: 10px; display: flex; align-items: flex-start;">
+                                    <div style="width: 24px; font-size: 16px; padding-top: 2px;">💨</div>
+                                    <div style="flex: 1;">
+                                        <span style="font-size: 11px; color: #6B7280; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px;">風速 Wind</span>
+                                        <div style="display: flex; align-items: baseline;">
+                                            <span style="{wind_style} font-size: 16px; font-weight: 700; white-space: nowrap;">
+                                                {p.max_wind_kts:.0f} <span style="font-size: 12px; font-weight: 500;">kts</span>
+                                            </span>
+                                            <span style="font-size: 11px; color: {wind_level_color}; margin-left: 6px; font-weight: 600;">
+                                                {wind_level_text}
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div style="margin-bottom: 4px;">
-                                        <span style="color: #666; font-size: 11px;">陣風 Gust</span>
-                                        <span style="{gust_style} font-size: 16px; margin-left: 5px;">💨 {p.max_gust_kts:.0f} kts</span>
+                                </div>
+                                <div style="margin-bottom: 10px; display: flex; align-items: flex-start;">
+                                    <div style="width: 24px; font-size: 16px; padding-top: 2px;">🌪️</div>
+                                    <div style="flex: 1;">
+                                        <span style="font-size: 11px; color: #6B7280; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px;">陣風 Gust</span>
+                                        <div style="display: flex; align-items: baseline;">
+                                            <span style="{gust_style} font-size: 16px; font-weight: 700; white-space: nowrap;">
+                                                {p.max_gust_kts:.0f} <span style="font-size: 12px; font-weight: 500;">kts</span>
+                                            </span>
+                                            <span style="font-size: 11px; color: {gust_level_color}; margin-left: 6px; font-weight: 600;">
+                                                {gust_level_text}
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <span style="color: #666; font-size: 11px;">浪高 Wave</span>
-                                        <span style="{wave_style} font-size: 16px; margin-left: 5px;">🌊 {p.max_wave:.1f} m</span>
+                                </div>
+                                <div style="display: flex; align-items: flex-start;">
+                                    <div style="width: 24px; font-size: 16px; padding-top: 2px;">🌊</div>
+                                    <div style="flex: 1;">
+                                        <span style="font-size: 11px; color: #6B7280; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px;">浪高 Wave</span>
+                                        <div style="display: flex; align-items: baseline;">
+                                            <span style="{wave_style} font-size: 16px; font-weight: 700; white-space: nowrap;">
+                                                {p.max_wave:.1f} <span style="font-size: 12px; font-weight: 500;">m</span>
+                                            </span>
+                                            <span style="font-size: 11px; color: {wave_level_color}; margin-left: 6px; font-weight: 600;">
+                                                {wave_level_text}
+                                            </span>
+                                        </div>
                                     </div>
-                                </td>
+                                </div>
+                            </td>
 
-                                <td valign="top" style="padding: 12px; border-bottom: 1px solid #eee; font-size: 12px; color: #555;">
-                                    <div style="margin-bottom: 8px;">
-                                        <span style="background-color: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; font-size: 11px; padding: 3px 8px; border-radius: 3px;">
-                                            {', '.join(p.risk_factors[:2])}
-                                        </span>
-                                    </div>
-                                    <table border="0" cellpadding="3" cellspacing="0" width="100%" style="font-size: 10px;">
-                                        <tr>
-                                            <td style="color: #666; width: 35%;">最大風速:</td>
-                                            <td>
-                                                <strong style="color: #333;">{w_utc} (UTC)</strong><br>
-                                                <strong style="color: #333;">{w_lct} (LT)</strong>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td style="color: #666;">最大陣風:</td>
-                                            <td>
-                                                <strong style="color: #333;">{g_utc} (UTC)</strong><br>
-                                                <strong style="color: #333;">{g_lct} (LT)</strong>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td style="color: #666;">最大浪高:</td>
-                                            <td>
-                                                <strong style="color: #333;">{v_utc} (UTC)</strong><br>
-                                                <strong style="color: #333;">{v_lct} (LT)</strong>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
+                            <td valign="top" style="padding: 15px; width: 45%;">
+                                <div style="margin-bottom: 12px;">
+                                    <span style="background-color: #FEF2F2; color: #B91C1C; border: 1px solid #FCA5A5; font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 4px; display: inline-block; line-height: 1.4;">
+                                        ⚠️ 風險因素 Risk Factors: {', '.join(p.risk_factors[:2])}
+                                    </span>
+                                </div>
+                                
+                                <table border="0" cellpadding="2" cellspacing="0" width="100%" style="font-size: 12px; border-collapse: collapse;">
+                                    <tr>
+                                        <td valign="top" style="color: #6B7280; width: 85px; padding-bottom: 8px; line-height: 1.3;">
+                                            最大風速<br><span style="font-size: 10px;">Max Wind:</span>
+                                        </td>
+                                        <td valign="top" style="padding-bottom: 8px;">
+                                            <div style="color: #111827; font-weight: 600;">{w_utc} <span style="color: #9CA3AF; font-size: 10px; font-weight: normal;">UTC</span></div>
+                                            <div style="color: #4B5563;">{w_lct} <span style="color: #9CA3AF; font-size: 10px;">LT</span></div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td valign="top" style="color: #6B7280; width: 85px; padding-bottom: 8px; line-height: 1.3;">
+                                            最大陣風<br><span style="font-size: 10px;">Max Gust:</span>
+                                        </td>
+                                        <td valign="top" style="padding-bottom: 8px;">
+                                            <div style="color: #111827; font-weight: 600;">{g_utc} <span style="color: #9CA3AF; font-size: 10px; font-weight: normal;">UTC</span></div>
+                                            <div style="color: #4B5563;">{g_lct} <span style="color: #9CA3AF; font-size: 10px;">LT</span></div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td valign="top" style="color: #6B7280; width: 85px; padding-bottom: 8px; line-height: 1.3;">
+                                            最大浪高<br><span style="font-size: 10px;">Max Wave:</span>
+                                        </td>
+                                        <td valign="top" style="padding-bottom: 8px;">
+                                            <div style="color: #111827; font-weight: 600;">{v_utc} <span style="color: #9CA3AF; font-size: 10px; font-weight: normal;">UTC</span></div>
+                                            <div style="color: #4B5563;">{v_lct} <span style="color: #9CA3AF; font-size: 10px;">LT</span></div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td valign="top" style="color: #991B1B; width: 85px; padding-top: 8px; border-top: 1px dashed #E5E7EB; font-weight: 600; line-height: 1.3;">
+                                            風險持續<br><span style="font-size: 10px;">Duration:</span>
+                                        </td>
+                                        <td valign="top" style="padding-top: 8px; border-top: 1px dashed #E5E7EB;">
+                                            <div style="color: #991B1B; font-weight: 700; font-size: 13px;">
+                                                {risk_duration} <span style="font-size: 11px; font-weight: 600;">小時 Hrs</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
                 """
                 
                 # 圖表列處理
@@ -1224,53 +1399,111 @@ class WeatherMonitorService:
 
         # ==================== Header (移到最後) ====================
         html += f"""
-                    </td>
-                </tr>
-                
-                <!-- ========== Header ========== -->
-                <tr>
-                    <td style="background-color: #004B97; padding: 20px;">
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
                             <tr>
-                                <td align="left" valign="middle">
-                                    <h1 style="margin: 0; font-size: 22px; color: #ffffff; font-weight: bold;">
-                                        ⛴️ WHL 港口氣象風險通知
-                                    </h1>
-                                    <h1 style="margin: 0; font-size: 22px; color: #ffffff; font-weight: bold;">
-                                        WHL Port Weather Risk Notification
-                                    </h1>
-                                    <div style="margin-top: 3px; font-size: 13px; color: #B3D9FF;">
-                                        未來 48 小時天氣預報 48-Hour Weather Forecast
-                                    </div>
-                                </td>
-                                <td align="right" valign="bottom" style="font-size: 11px; color: #D6EBFF;">
-                                    <div style="font-weight: bold; color: #ffffff; font-size: 12px;">📅 {now_str_TPE}</div>
-                                    <div style="margin-top: 2px;">{now_str_UTC}</div>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-                
-                <!-- ========== Footer ========== -->
-                <tr>
-                    <td style="background-color: #F8F9FA; padding: 20px; text-align: center; color: #9CA3AF; font-size: 12px; border-top: 1px solid #E5E7EB;">
-                        <p style="margin: 0 0 6px 0; font-size: 13px; color: #6B7280;">
-                            <strong>萬海航運股份有限公司 Wan Hai Lines Ltd.</strong>
-                        </p>
-                        <p style="margin: 0 0 6px 0;">
-                            Marine Technology Division | Fleet Risk Department
-                        </p>
-                        <p style="margin: 0; font-size: 11px; color: #D1D5DB;">
-                            資料來源 Data Source: Weathernews Inc. (WNI) | 自動化系統 Automated System
-                        </p>
-                    </td>
-                </tr>
-            </table>
-            </center>
-        </body>
-        </html>
-        """
+                            <td style="background-color: #004B97; background: linear-gradient(135deg, #004B97 0%, #003366 100%); padding: 30px 25px; border-bottom: 4px solid #002D5A; box-shadow: 0 4px 12px rgba(0, 43, 85, 0.2);">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <tr>
+                                        <td align="left" valign="middle">
+                                            <div style="font-size: 28px; color: #ffffff; font-weight: 800; letter-spacing: 1.5px; margin-bottom: 6px; text-shadow: 0 2px 4px rgba(0,0,0,0.2); line-height: 1.2;">
+                                                ⛴️ WHL 港口氣象風險通知
+                                            </div>
+                                            <div style="font-size: 16px; color: #BAE6FD; font-weight: 600; margin-bottom: 15px; letter-spacing: 0.5px; font-family: Helvetica, Arial, sans-serif;">
+                                                WHL Port Weather Risk Notification
+                                            </div>
+                                            <table border="0" cellpadding="0" cellspacing="0">
+                                                <tr>
+                                                    <td style="background-color: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); border-radius: 4px; padding: 6px 12px;">
+                                                        <span style="font-size: 13px; color: #E0F2FE; font-weight: 500;">
+                                                            📊 未來 48 小時天氣預報 <span style="color: #7DD3FC;">|</span> 48-Hour Weather Forecast
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                        
+                                        <td align="right" valign="bottom" width="220">
+                                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid rgba(255,255,255,0.15);">
+                                                <tr>
+                                                    <td style="padding: 10px 15px; text-align: right;">
+                                                        <div style="font-size: 10px; color: #94A3B8; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
+                                                            REPORT GENERATED
+                                                        </div>
+                                                        <div style="font-family: monospace, sans-serif; font-size: 16px; color: #ffffff; font-weight: 700; margin-bottom: 2px;">
+                                                            {now_str_TPE} <span style="font-size: 12px; color: #38BDF8; font-weight: normal;">TPE</span>
+                                                        </div>
+                                                        <div style="font-family: monospace, sans-serif; font-size: 13px; color: #94A3B8;">
+                                                            {now_str_UTC} <span style="font-size: 11px; color: #64748B;">UTC</span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+
+                    <tr>
+                        <td style="background-color: #F8F9FA; padding: 40px 20px; text-align: center; border-top: 1px solid #E5E7EB;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 0 auto;">
+                                <tr>
+                                    <td align="center">
+                                        
+                                        <table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 15px;">
+                                            <tr>
+                                                <td style="background-color: #C60C30; color: white; font-weight: 900; font-size: 24px; padding: 4px 12px; border-radius: 4px 0 0 4px; font-family: Arial, sans-serif;">
+                                                    W
+                                                </td>
+                                                <td style="background-color: #004B97; color: white; font-weight: 900; font-size: 24px; padding: 4px 12px; border-radius: 0 4px 4px 0; font-family: Arial, sans-serif;">
+                                                    WH
+                                                </td>
+                                            </tr>
+                                        </table>
+
+                                        <p style="margin: 0 0 4px 0; font-size: 16px; color: #111827; font-weight: 800; letter-spacing: 1px; font-family: 'Arial', sans-serif;">
+                                            WAN HAI LINES LTD.
+                                        </p>
+                                        <p style="margin: 0 0 25px 0; font-size: 14px; color: #4B5563; font-weight: 500;">
+                                            萬海航運股份有限公司
+                                        </p>
+
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%"><tr><td align="center" style="padding-bottom: 20px;"><div style="border-top: 1px solid #D1D5DB; width: 40px;"></div></td></tr></table>
+                                        
+                                        <p style="margin: 0 0 5px 0; font-size: 13px; color: #4B5563; font-weight: 600;">
+                                            Marine Technology Division | Fleet Risk Management Dept.
+                                        </p>
+                                        
+                                        <table border="0" cellpadding="0" cellspacing="0" align="center" style="margin-bottom: 20px; margin-top: 10px;">
+                                            <tr>
+                                                <td valign="middle" style="font-size: 12px; color: #6B7280;">資料來源: <strong style="color: #4B5563;">Weathernews Inc. (WNI)</strong></td>
+                                                <td valign="middle" style="padding: 0 8px; color: #D1D5DB;">|</td>
+                                                <td valign="middle" style="font-size: 12px; color: #6B7280;">系統自動生成</td>
+                                            </tr>
+                                        </table>
+
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F3F4F6; border: 1px solid #E5E7EB; border-radius: 6px;">
+                                            <tr>
+                                                <td style="padding: 12px 15px; text-align: left;">
+                                                    <div style="font-size: 11px; color: #9CA3AF; margin-bottom: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">⚠️ 免責聲明 Disclaimer</div>
+                                                    <div style="font-size: 12px; color: #6B7280; line-height: 1.5;">
+                                                        本信件內容僅供參考，船長仍應依據實際天候狀況與專業判斷採取適當措施。<br>
+                                                        <span style="color: #9CA3AF;">This report is for reference only. Captains should take appropriate actions based on actual weather conditions.</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                        
+                                        <div style="margin-top: 25px; font-size: 10px; color: #D1D5DB;">&copy; {now_str_TPE[:4]} Wan Hai Lines Ltd. All Rights Reserved.</div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+                </center>
+            </body>
+            </html>
+            """
         
         return html
     
