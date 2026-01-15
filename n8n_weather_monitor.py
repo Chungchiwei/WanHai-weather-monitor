@@ -1244,33 +1244,7 @@ class WeatherMonitorService:
             </html>
             """
             
-            return html
-
-        # ==================== Footer ====================
-        html += f"""
-                    </td>
-                </tr>
-                <tr>
-                    <td style="background-color: #F8F9FA; padding: 20px; text-align: center; color: #9CA3AF; font-size: 12px; border-top: 1px solid #E5E7EB;">
-                        <p style="margin: 0 0 6px 0; font-size: 13px; color: #6B7280;">
-                            <strong>萬海航運股份有限公司 Wan Hai Lines Ltd.</strong>
-                        </p>
-                        <p style="margin: 0 0 6px 0;">
-                            Marine Technology Division | Fleet Risk Department
-                        </p>
-                        <p style="margin: 0; font-size: 11px; color: #D1D5DB;">
-                            資料來源 Data Source: Weathernews Inc. (WNI) | 自動化系統 Automated System
-                        </p>
-                    </td>
-                </tr>
-            </table>
-            </center>
-        </body>
-        </html>
-        """
-        
-        return html
-    
+            return html    
     def save_report_to_file(self, report, output_dir='reports'):
         """儲存報告到檔案"""
         os.makedirs(output_dir, exist_ok=True)
