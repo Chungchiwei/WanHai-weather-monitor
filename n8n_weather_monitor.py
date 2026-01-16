@@ -145,172 +145,480 @@ class ChartGenerator:
         buf.close()
         return img_str
 
-    def generate_wind_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
-        """繪製風速趨勢圖，回傳 Base64 字串（高解析度版）"""
-        if not assessment.raw_records:
-            print(f"      ⚠️ {port_code} 沒有原始資料記錄")
+def generate_wind_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
+    """繪製風速趨勢圖，回傳 Base64 字串（專業優化版）"""
+    if not assessment.raw_records:
+        print(f"      ⚠️ {port_code} 沒有原始資料記錄")
+        return None
+        
+    try:
+        df = self._prepare_dataframe(assessment.raw_records)
+        
+        if df.empty:
+            print(f"      ⚠️ {port_code} DataFrame 為空")
             return None
-            
-        try:
-            df = self._prepare_dataframe(assessment.raw_records)
-            
-            if df.empty:
-                print(f"      ⚠️ {port_code} DataFrame 為空")
-                return None
-            
-            print(f"      📊 準備繪製 {port_code} 的風速圖 (資料點數: {len(df)})")
-            
-            plt.style.use('seaborn-v0_8-darkgrid')
-            
-            # 🔥 增加圖表尺寸
-            fig, ax = plt.subplots(figsize=(18, 8))
-            
-            # 繪製曲線 - 加粗線條
-            ax.plot(df['time'], df['wind_speed'], color='#2563EB', 
-                label='Wind Speed (kts)', linewidth=3.5, marker='o', markersize=6, zorder=3)
-            ax.plot(df['time'], df['wind_gust'], color='#DC2626', 
-                linestyle='--', label='Gust (kts)', linewidth=2.8, marker='s', markersize=5, zorder=3)
-            
-            # 填充
-            ax.fill_between(df['time'], df['wind_speed'], alpha=0.15, color='#2563EB', zorder=1)
-            ax.fill_between(
-                df['time'], 
-                df['wind_speed'], 
-                y2=0,
-                where=(df['wind_speed'] >= RISK_THRESHOLDS['wind_caution']),
-                interpolate=True,
-                color='#F59E0B',
-                alpha=0.25,
-                label='High Risk Period',
-                zorder=2
-            )                    
-            
-            # 閾值線
-            ax.axhline(RISK_THRESHOLDS['wind_danger'], color="#DC2626", 
-                    linestyle=':', linewidth=2.5, label=f'Danger ({RISK_THRESHOLDS["wind_danger"]} kts)', zorder=2)   
-            ax.axhline(RISK_THRESHOLDS['wind_warning'], color="#F59E0B", 
-                    linestyle='--', linewidth=2.5, label=f'Warning ({RISK_THRESHOLDS["wind_warning"]} kts)', zorder=2)        
-            ax.axhline(RISK_THRESHOLDS['wind_caution'], color="#FCD34D", 
-                    linestyle=':', linewidth=2.2, label=f'Caution ({RISK_THRESHOLDS["wind_caution"]} kts)', zorder=2)
-            
-            # 標題與標籤 - 加大字體
-            ax.set_title(f"{assessment.port_name} ({assessment.port_code}) - Wind Speed & Gust Trend (48 Hrs)", 
-                        fontsize=20, fontweight='bold', pad=25, color='#1F2937')
-            ax.set_ylabel('Speed (knots)', fontsize=16, fontweight='600', color='#374151')
-            ax.set_xlabel('Date / Time (UTC)', fontsize=16, fontweight='600', color='#374151')
-            ax.legend(loc='upper left', frameon=True, fontsize=13, shadow=True, fancybox=True)
-            ax.grid(True, alpha=0.4, linestyle='--', linewidth=1)
-            
-            # 設定背景顏色
-            ax.set_facecolor('#F9FAFB')
-            fig.patch.set_facecolor('white')
-            
-            # 日期格式
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
-            ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
-            plt.xticks(rotation=30, ha='right', fontsize=12)
-            plt.yticks(fontsize=12)
-            
-            # 加入邊框
-            for spine in ax.spines.values():
-                spine.set_edgecolor('#D1D5DB')
-                spine.set_linewidth(2)
-            
-            plt.tight_layout()
-            
-            # 1. 存檔（高解析度）
-            filepath = os.path.join(self.output_dir, f"wind_{port_code}.png")
-            fig.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
-            print(f"      💾 圖片已存檔: {filepath}")
-            
-            # 2. 轉 Base64（高解析度）
-            base64_str = self._fig_to_base64(fig, dpi=150)
-            print(f"      ✅ Base64 轉換成功 (長度: {len(base64_str)} 字元)")
-            
-            plt.close(fig)
-            return base64_str
-            
-        except Exception as e:
-            print(f"      ❌ 繪製風速圖失敗 {port_code}: {e}")
-            traceback.print_exc()
+        
+        print(f"      📊 準備繪製 {port_code} 的風速圖 (資料點數: {len(df)})")
+        
+        # 🎨 使用更專業的樣式
+        plt.style.use('default')
+        
+        # 🔥 設定圖表尺寸和 DPI
+        fig, ax = plt.subplots(figsize=(16, 7), dpi=120)
+        
+        # 設定背景顏色（漸層效果的替代方案）
+        fig.patch.set_facecolor('#FFFFFF')
+        ax.set_facecolor('#F8FAFC')
+        
+        # ==================== 繪製風險區域背景 ====================
+        # 危險區域（紅色）
+        ax.axhspan(RISK_THRESHOLDS['wind_danger'], ax.get_ylim()[1] if len(df) > 0 else 60, 
+                   facecolor='#FEE2E2', alpha=0.3, zorder=0)
+        # 警告區域（橙色）
+        ax.axhspan(RISK_THRESHOLDS['wind_warning'], RISK_THRESHOLDS['wind_danger'], 
+                   facecolor='#FEF3C7', alpha=0.3, zorder=0)
+        # 注意區域（黃色）
+        ax.axhspan(RISK_THRESHOLDS['wind_caution'], RISK_THRESHOLDS['wind_warning'], 
+                   facecolor='#FEF9C3', alpha=0.3, zorder=0)
+        
+        # ==================== 繪製主要數據線 ====================
+        # 風速線（藍色，粗實線）
+        line1 = ax.plot(df['time'], df['wind_speed'], 
+                        color='#1E40AF', 
+                        linewidth=3.5, 
+                        marker='o', 
+                        markersize=7,
+                        markerfacecolor='#3B82F6',
+                        markeredgecolor='#1E40AF',
+                        markeredgewidth=1.5,
+                        label='Wind Speed',
+                        zorder=5,
+                        alpha=0.9)
+        
+        # 陣風線（紅色，虛線）
+        line2 = ax.plot(df['time'], df['wind_gust'], 
+                        color='#DC2626', 
+                        linewidth=3, 
+                        linestyle='--',
+                        marker='s', 
+                        markersize=6,
+                        markerfacecolor='#EF4444',
+                        markeredgecolor='#DC2626',
+                        markeredgewidth=1.5,
+                        label='Wind Gust',
+                        zorder=5,
+                        alpha=0.9)
+        
+        # ==================== 填充區域 ====================
+        # 風速曲線下方填充（淡藍色）
+        ax.fill_between(df['time'], df['wind_speed'], 
+                        alpha=0.2, 
+                        color='#3B82F6', 
+                        zorder=2)
+        
+        # 高風險時段特別標註（橙色填充）
+        high_risk_mask = df['wind_speed'] >= RISK_THRESHOLDS['wind_caution']
+        if high_risk_mask.any():
+            ax.fill_between(df['time'], 
+                           df['wind_speed'], 
+                           where=high_risk_mask,
+                           interpolate=True,
+                           color='#F59E0B',
+                           alpha=0.35,
+                           label='High Risk Period',
+                           zorder=3)
+        
+        # ==================== 繪製閾值線 ====================
+        # 危險線
+        ax.axhline(RISK_THRESHOLDS['wind_danger'], 
+                   color="#DC2626", 
+                   linestyle='-', 
+                   linewidth=2.5, 
+                   label=f'🔴 Danger Threshold ({RISK_THRESHOLDS["wind_danger"]} kts)', 
+                   zorder=4,
+                   alpha=0.8)
+        
+        # 警告線
+        ax.axhline(RISK_THRESHOLDS['wind_warning'], 
+                   color="#F59E0B", 
+                   linestyle='--', 
+                   linewidth=2.5, 
+                   label=f'🟠 Warning Threshold ({RISK_THRESHOLDS["wind_warning"]} kts)', 
+                   zorder=4,
+                   alpha=0.8)
+        
+        # 注意線
+        ax.axhline(RISK_THRESHOLDS['wind_caution'], 
+                   color="#EAB308", 
+                   linestyle=':', 
+                   linewidth=2.2, 
+                   label=f'🟡 Caution Threshold ({RISK_THRESHOLDS["wind_caution"]} kts)', 
+                   zorder=4,
+                   alpha=0.7)
+        
+        # ==================== 標註最大值 ====================
+        max_wind_idx = df['wind_speed'].idxmax()
+        max_gust_idx = df['wind_gust'].idxmax()
+        
+        # 標註最大風速
+        ax.annotate(f'Max: {df.loc[max_wind_idx, "wind_speed"]:.1f} kts',
+                   xy=(df.loc[max_wind_idx, 'time'], df.loc[max_wind_idx, 'wind_speed']),
+                   xytext=(10, 15),
+                   textcoords='offset points',
+                   fontsize=11,
+                   fontweight='bold',
+                   color='#1E40AF',
+                   bbox=dict(boxstyle='round,pad=0.5', facecolor='#EFF6FF', edgecolor='#3B82F6', linewidth=2),
+                   arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0', color='#1E40AF', lw=2))
+        
+        # 標註最大陣風
+        ax.annotate(f'Max: {df.loc[max_gust_idx, "wind_gust"]:.1f} kts',
+                   xy=(df.loc[max_gust_idx, 'time'], df.loc[max_gust_idx, 'wind_gust']),
+                   xytext=(10, -20),
+                   textcoords='offset points',
+                   fontsize=11,
+                   fontweight='bold',
+                   color='#DC2626',
+                   bbox=dict(boxstyle='round,pad=0.5', facecolor='#FEF2F2', edgecolor='#EF4444', linewidth=2),
+                   arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0', color='#DC2626', lw=2))
+        
+        # ==================== 標題與標籤 ====================
+        # 主標題
+        ax.set_title(f"🌪️ Wind Speed & Gust Forecast - {assessment.port_name} ({assessment.port_code})", 
+                    fontsize=22, 
+                    fontweight='bold', 
+                    pad=20, 
+                    color='#1F2937',
+                    fontfamily='sans-serif')
+        
+        # 副標題
+        fig.text(0.5, 0.94, '48-Hour Weather Monitoring | Data Source: WNI', 
+                ha='center', 
+                fontsize=12, 
+                color='#6B7280',
+                style='italic')
+        
+        # Y軸標籤
+        ax.set_ylabel('Wind Speed (knots)', 
+                     fontsize=15, 
+                     fontweight='600', 
+                     color='#374151',
+                     labelpad=10)
+        
+        # X軸標籤
+        ax.set_xlabel('Date / Time (UTC)', 
+                     fontsize=15, 
+                     fontweight='600', 
+                     color='#374151',
+                     labelpad=10)
+        
+        # ==================== 圖例設定 ====================
+        legend = ax.legend(loc='upper left', 
+                          frameon=True, 
+                          fontsize=12, 
+                          shadow=True, 
+                          fancybox=True,
+                          framealpha=0.95,
+                          edgecolor='#D1D5DB',
+                          facecolor='#FFFFFF',
+                          ncol=2)
+        legend.get_frame().set_linewidth(1.5)
+        
+        # ==================== 網格設定 ====================
+        ax.grid(True, 
+               alpha=0.3, 
+               linestyle='--', 
+               linewidth=0.8, 
+               color='#9CA3AF',
+               zorder=1)
+        ax.set_axisbelow(True)
+        
+        # ==================== 座標軸格式 ====================
+        # X軸日期格式
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d\n%H:%M'))
+        ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
+        ax.xaxis.set_minor_locator(mdates.HourLocator(interval=3))
+        
+        # 旋轉X軸標籤
+        plt.setp(ax.xaxis.get_majorticklabels(), 
+                rotation=0, 
+                ha='center', 
+                fontsize=11,
+                fontweight='500')
+        
+        # Y軸刻度
+        plt.setp(ax.yaxis.get_majorticklabels(), 
+                fontsize=11,
+                fontweight='500')
+        
+        # ==================== 邊框美化 ====================
+        for spine in ['top', 'right']:
+            ax.spines[spine].set_visible(False)
+        
+        for spine in ['bottom', 'left']:
+            ax.spines[spine].set_edgecolor('#9CA3AF')
+            ax.spines[spine].set_linewidth(2)
+        
+        # ==================== 設定Y軸範圍 ====================
+        y_max = max(df['wind_gust'].max(), RISK_THRESHOLDS['wind_danger']) * 1.15
+        ax.set_ylim(0, y_max)
+        
+        # ==================== 加入水印 ====================
+        fig.text(0.99, 0.01, 'WHL Marine Technology Division', 
+                ha='right', 
+                va='bottom',
+                fontsize=9, 
+                color='#9CA3AF',
+                alpha=0.6,
+                style='italic')
+        
+        plt.tight_layout(rect=[0, 0.02, 1, 0.96])
+        
+        # ==================== 儲存與轉換 ====================
+        # 1. 存檔（高解析度）
+        filepath = os.path.join(self.output_dir, f"wind_{port_code}.png")
+        fig.savefig(filepath, 
+                   dpi=150, 
+                   bbox_inches='tight', 
+                   facecolor='white',
+                   edgecolor='none',
+                   pad_inches=0.1)
+        print(f"      💾 圖片已存檔: {filepath}")
+        
+        # 2. 轉 Base64（高解析度）
+        base64_str = self._fig_to_base64(fig, dpi=150)
+        print(f"      ✅ Base64 轉換成功 (長度: {len(base64_str)} 字元)")
+        
+        plt.close(fig)
+        return base64_str
+        
+    except Exception as e:
+        print(f"      ❌ 繪製風速圖失敗 {port_code}: {e}")
+        traceback.print_exc()
+        return None
+
+
+def generate_wave_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
+    """繪製浪高趨勢圖，回傳 Base64 字串（專業優化版）"""
+    if not assessment.raw_records:
+        return None
+        
+    try:
+        df = self._prepare_dataframe(assessment.raw_records)
+        
+        if df['wave_height'].max() < 1.0:
             return None
 
-    def generate_wave_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
-        """繪製浪高趨勢圖，回傳 Base64 字串（高解析度版）"""
-        if not assessment.raw_records:
-            return None
-            
-        try:
-            df = self._prepare_dataframe(assessment.raw_records)
-            
-            if df['wave_height'].max() < 1.0:
-                return None
-
-            plt.style.use('seaborn-v0_8-darkgrid')
-            
-            # 🔥 增加圖表尺寸
-            fig, ax = plt.subplots(figsize=(18, 8))
-            
-            # 繪製曲線
-            ax.plot(df['time'], df['wave_height'], color='#059669', 
-                   label='Sig. Wave Height (m)', linewidth=3.5, marker='o', markersize=6, zorder=3)
-            ax.fill_between(df['time'], df['wave_height'], alpha=0.15, color='#059669', zorder=1)
-            ax.fill_between(
-                df['time'], 
-                df['wave_height'], 
-                y2=0,
-                where=(df['wave_height'] > RISK_THRESHOLDS['wave_caution']),
-                interpolate=True,
-                color='#F59E0B',
-                alpha=0.25,
-                label='Risk Area',
-                zorder=2
-            )          
-            
-            # 閾值線
-            ax.axhline(RISK_THRESHOLDS['wave_caution'], color="#FCD34D", 
-                      linestyle=':', linewidth=2.2, label=f'Caution ({RISK_THRESHOLDS["wave_caution"]} m)', zorder=2)
-            ax.axhline(RISK_THRESHOLDS['wave_warning'], color="#F59E0B", 
-                      linestyle='--', linewidth=2.5, label=f'Warning ({RISK_THRESHOLDS["wave_warning"]} m)', zorder=2)
-            ax.axhline(RISK_THRESHOLDS['wave_danger'], color="#DC2626", 
-                      linestyle=':', linewidth=2.5, label=f'Danger ({RISK_THRESHOLDS["wave_danger"]} m)', zorder=2)    
-            
-            ax.set_title(f"{assessment.port_name} ({assessment.port_code}) - Wave Height Trend (48 Hrs)", 
-                        fontsize=20, fontweight='bold', pad=25, color='#1F2937')
-            ax.set_ylabel('Height (m)', fontsize=16, fontweight='600', color='#374151')
-            ax.set_xlabel('Date / Time (UTC)', fontsize=16, fontweight='600', color='#374151')
-            ax.legend(loc='upper left', frameon=True, fontsize=13, shadow=True, fancybox=True)
-            ax.grid(True, alpha=0.4, linestyle='--', linewidth=1)
-            
-            ax.set_facecolor('#F9FAFB')
-            fig.patch.set_facecolor('white')
-            
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
-            ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
-            plt.xticks(rotation=30, ha='right', fontsize=12)
-            plt.yticks(fontsize=12)
-            
-            for spine in ax.spines.values():
-                spine.set_edgecolor('#D1D5DB')
-                spine.set_linewidth(2)
-            
-            plt.tight_layout()
-            
-            # 1. 存檔（高解析度）
-            filepath = os.path.join(self.output_dir, f"wave_{port_code}.png")
-            fig.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
-            
-            # 2. 轉 Base64（高解析度）
-            base64_str = self._fig_to_base64(fig, dpi=150)
-            
-            plt.close(fig)
-            print(f"   ✅ 浪高圖已生成: {filepath}")
-            return base64_str
-            
-        except Exception as e:
-            print(f"   ❌ 繪製浪高圖失敗 {port_code}: {e}")
-            traceback.print_exc()
-            return None
+        # 🎨 使用專業樣式
+        plt.style.use('default')
+        
+        # 🔥 設定圖表尺寸和 DPI
+        fig, ax = plt.subplots(figsize=(16, 7), dpi=120)
+        
+        # 設定背景顏色
+        fig.patch.set_facecolor('#FFFFFF')
+        ax.set_facecolor('#F0FDF4')
+        
+        # ==================== 繪製風險區域背景 ====================
+        # 危險區域（紅色）
+        ax.axhspan(RISK_THRESHOLDS['wave_danger'], ax.get_ylim()[1] if len(df) > 0 else 8, 
+                   facecolor='#FEE2E2', alpha=0.3, zorder=0)
+        # 警告區域（橙色）
+        ax.axhspan(RISK_THRESHOLDS['wave_warning'], RISK_THRESHOLDS['wave_danger'], 
+                   facecolor='#FEF3C7', alpha=0.3, zorder=0)
+        # 注意區域（黃色）
+        ax.axhspan(RISK_THRESHOLDS['wave_caution'], RISK_THRESHOLDS['wave_warning'], 
+                   facecolor='#FEF9C3', alpha=0.3, zorder=0)
+        
+        # ==================== 繪製主要數據線 ====================
+        # 浪高線（綠色系，粗實線）
+        line = ax.plot(df['time'], df['wave_height'], 
+                      color='#047857', 
+                      linewidth=4, 
+                      marker='o', 
+                      markersize=7,
+                      markerfacecolor='#10B981',
+                      markeredgecolor='#047857',
+                      markeredgewidth=1.5,
+                      label='Significant Wave Height',
+                      zorder=5,
+                      alpha=0.9)
+        
+        # ==================== 填充區域 ====================
+        # 浪高曲線下方填充（淡綠色）
+        ax.fill_between(df['time'], df['wave_height'], 
+                        alpha=0.25, 
+                        color='#10B981', 
+                        zorder=2)
+        
+        # 高風險時段特別標註（橙色填充）
+        high_risk_mask = df['wave_height'] >= RISK_THRESHOLDS['wave_caution']
+        if high_risk_mask.any():
+            ax.fill_between(df['time'], 
+                           df['wave_height'], 
+                           where=high_risk_mask,
+                           interpolate=True,
+                           color='#F59E0B',
+                           alpha=0.35,
+                           label='High Risk Period',
+                           zorder=3)
+        
+        # ==================== 繪製閾值線 ====================
+        # 危險線
+        ax.axhline(RISK_THRESHOLDS['wave_danger'], 
+                   color="#DC2626", 
+                   linestyle='-', 
+                   linewidth=2.5, 
+                   label=f'🔴 Danger Threshold ({RISK_THRESHOLDS["wave_danger"]} m)', 
+                   zorder=4,
+                   alpha=0.8)
+        
+        # 警告線
+        ax.axhline(RISK_THRESHOLDS['wave_warning'], 
+                   color="#F59E0B", 
+                   linestyle='--', 
+                   linewidth=2.5, 
+                   label=f'🟠 Warning Threshold ({RISK_THRESHOLDS["wave_warning"]} m)', 
+                   zorder=4,
+                   alpha=0.8)
+        
+        # 注意線
+        ax.axhline(RISK_THRESHOLDS['wave_caution'], 
+                   color="#EAB308", 
+                   linestyle=':', 
+                   linewidth=2.2, 
+                   label=f'🟡 Caution Threshold ({RISK_THRESHOLDS["wave_caution"]} m)', 
+                   zorder=4,
+                   alpha=0.7)
+        
+        # ==================== 標註最大值 ====================
+        max_wave_idx = df['wave_height'].idxmax()
+        
+        # 標註最大浪高
+        ax.annotate(f'Max: {df.loc[max_wave_idx, "wave_height"]:.2f} m',
+                   xy=(df.loc[max_wave_idx, 'time'], df.loc[max_wave_idx, 'wave_height']),
+                   xytext=(10, 15),
+                   textcoords='offset points',
+                   fontsize=11,
+                   fontweight='bold',
+                   color='#047857',
+                   bbox=dict(boxstyle='round,pad=0.5', facecolor='#D1FAE5', edgecolor='#10B981', linewidth=2),
+                   arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0', color='#047857', lw=2))
+        
+        # ==================== 標題與標籤 ====================
+        # 主標題
+        ax.set_title(f"🌊 Wave Height Forecast - {assessment.port_name} ({assessment.port_code})", 
+                    fontsize=22, 
+                    fontweight='bold', 
+                    pad=20, 
+                    color='#1F2937',
+                    fontfamily='sans-serif')
+        
+        # 副標題
+        fig.text(0.5, 0.94, '48-Hour Weather Monitoring | Data Source: WNI', 
+                ha='center', 
+                fontsize=12, 
+                color='#6B7280',
+                style='italic')
+        
+        # Y軸標籤
+        ax.set_ylabel('Wave Height (meters)', 
+                     fontsize=15, 
+                     fontweight='600', 
+                     color='#374151',
+                     labelpad=10)
+        
+        # X軸標籤
+        ax.set_xlabel('Date / Time (UTC)', 
+                     fontsize=15, 
+                     fontweight='600', 
+                     color='#374151',
+                     labelpad=10)
+        
+        # ==================== 圖例設定 ====================
+        legend = ax.legend(loc='upper left', 
+                          frameon=True, 
+                          fontsize=12, 
+                          shadow=True, 
+                          fancybox=True,
+                          framealpha=0.95,
+                          edgecolor='#D1D5DB',
+                          facecolor='#FFFFFF',
+                          ncol=2)
+        legend.get_frame().set_linewidth(1.5)
+        
+        # ==================== 網格設定 ====================
+        ax.grid(True, 
+               alpha=0.3, 
+               linestyle='--', 
+               linewidth=0.8, 
+               color='#9CA3AF',
+               zorder=1)
+        ax.set_axisbelow(True)
+        
+        # ==================== 座標軸格式 ====================
+        # X軸日期格式
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d\n%H:%M'))
+        ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
+        ax.xaxis.set_minor_locator(mdates.HourLocator(interval=3))
+        
+        # 旋轉X軸標籤
+        plt.setp(ax.xaxis.get_majorticklabels(), 
+                rotation=0, 
+                ha='center', 
+                fontsize=11,
+                fontweight='500')
+        
+        # Y軸刻度
+        plt.setp(ax.yaxis.get_majorticklabels(), 
+                fontsize=11,
+                fontweight='500')
+        
+        # ==================== 邊框美化 ====================
+        for spine in ['top', 'right']:
+            ax.spines[spine].set_visible(False)
+        
+        for spine in ['bottom', 'left']:
+            ax.spines[spine].set_edgecolor('#9CA3AF')
+            ax.spines[spine].set_linewidth(2)
+        
+        # ==================== 設定Y軸範圍 ====================
+        y_max = max(df['wave_height'].max(), RISK_THRESHOLDS['wave_danger']) * 1.15
+        ax.set_ylim(0, y_max)
+        
+        # ==================== 加入水印 ====================
+        fig.text(0.99, 0.01, 'WHL Marine Technology Division', 
+                ha='right', 
+                va='bottom',
+                fontsize=9, 
+                color='#9CA3AF',
+                alpha=0.6,
+                style='italic')
+        
+        plt.tight_layout(rect=[0, 0.02, 1, 0.96])
+        
+        # ==================== 儲存與轉換 ====================
+        # 1. 存檔（高解析度）
+        filepath = os.path.join(self.output_dir, f"wave_{port_code}.png")
+        fig.savefig(filepath, 
+                   dpi=150, 
+                   bbox_inches='tight', 
+                   facecolor='white',
+                   edgecolor='none',
+                   pad_inches=0.1)
+        print(f"      💾 圖片已存檔: {filepath}")
+        
+        # 2. 轉 Base64（高解析度）
+        base64_str = self._fig_to_base64(fig, dpi=150)
+        print(f"      ✅ Base64 轉換成功 (長度: {len(base64_str)} 字元)")
+        
+        plt.close(fig)
+        return base64_str
+        
+    except Exception as e:
+        print(f"      ❌ 繪製浪高圖失敗 {port_code}: {e}")
+        traceback.print_exc()
+        return None
 
 
 # ================= 風險分析模組 (修正版) =================
@@ -921,6 +1229,13 @@ class WeatherMonitorService:
         for a in assessments:
             risk_groups[a.risk_level].append(a)
 
+        # ==================== 風險港口樣式定義 ====================
+        summary_styles = {
+            3: {'emoji': '🔴', 'label': 'DANGER', 'label_zh': '高度風險', 'color': '#DC2626', 'bg': '#FEF2F2', 'border': '#FCA5A5'},
+            2: {'emoji': '🟠', 'label': 'WARNING', 'label_zh': '中度風險', 'color': '#F59E0B', 'bg': '#FFFBEB', 'border': '#FCD34D'},
+            1: {'emoji': '🟡', 'label': 'CAUTION', 'label_zh': '低度風險', 'color': '#0EA5E9', 'bg': '#F0F9FF', 'border': '#7DD3FC'}
+        }
+
         # ==================== HTML 開始 ====================
         html = f"""
                 <!DOCTYPE html>
@@ -934,55 +1249,59 @@ class WeatherMonitorService:
                     <center>
                     <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="max-width: 900px; margin: 20px auto;">
                 """
-        html += f"""  
-                <tr>
-                            <td style="padding: 0 25px;">
-                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                    <tr>
-                                        <td bgcolor="#7F1D1D" style="padding: 8px 20px;">
-                                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                                <tr>
-                                                    <td align="left" style="font-size: 13px; color: #FEE2E2; font-weight: bold;">
-                                                        📅 最後更新時間 Last Updated:
-                                                    </td>
-                                                    <td align="right" style="font-size: 13px; color: #ffffff; font-weight: bold;">
-                                                        {now_str_TPE} | {now_str_UTC}
-                                                    </td>
-                                                </tr>
-                                            </table>
-                                        </td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
-                        
-                        <tr>
-                            <td style="padding: 0 25px;">
-                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                    <tr>
-                                        <td bgcolor="#FECACA" style="padding: 12px 20px; border-top: 1px solid #EF4444;">
-                                            <div style="font-size: 13px; color: #7F1D1D; line-height: 1.5; font-weight: bold; text-align: left;">
-                                                <strong style="color: #991B1B;">📢 Risk Advisory 風險提示：</strong><br>
-                                                請船長及相關人員密切關注天氣變化，評估風險後決定是否調整航行計劃或延遲靠港。<br>
-                                                <span style="color: #991B1B;">Captains and relevant personnel should closely monitor weather changes and assess risks regarding sailing plans or port calls.</span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
-                        
-                        <tr>
-                            <td style="padding: 0;">
-                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                """
-        # ==================== 風險港口列表 ====================
-        summary_styles = {
-            3: {'emoji': '🔴', 'label': 'DANGER', 'label_zh': '高度風險', 'color': '#DC2626', 'bg': '#FEF2F2', 'border': '#FCA5A5'},
-            2: {'emoji': '🟠', 'label': 'WARNING', 'label_zh': '中度風險', 'color': '#F59E0B', 'bg': '#FFFBEB', 'border': '#FCD34D'},
-            1: {'emoji': '🟡', 'label': 'CAUTION', 'label_zh': '低度風險', 'color': '#0EA5E9', 'bg': '#F0F9FF', 'border': '#7DD3FC'}
-        }
         
+        # ==================== 1. 時間戳記 ====================
+        html += f"""  
+                    <tr>
+                        <td style="padding: 0 25px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td bgcolor="#7F1D1D" style="padding: 8px 20px;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                            <tr>
+                                                <td align="left" style="font-size: 13px; color: #FEE2E2; font-weight: bold;">
+                                                    📅 最後更新時間 Last Updated:
+                                                </td>
+                                                <td align="right" style="font-size: 13px; color: #ffffff; font-weight: bold;">
+                                                    {now_str_TPE} | {now_str_UTC}
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- ==================== 2. 港口清單總表標題 ==================== -->
+                    <tr>
+                        <td style="padding: 25px 25px 0 25px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td bgcolor="#1E3A8A" style="padding: 15px 20px; border-radius: 8px 8px 0 0;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                            <tr>
+                                                <td style="font-size: 22px; font-weight: bold; color: #ffffff;">
+                                                    📋 風險港口清單總表 Risk Port Summary
+                                                </td>
+                                                <td align="right" style="font-size: 14px; color: #BFDBFE; font-weight: 600;">
+                                                    共 {len(assessments)} 個港口 | Total {len(assessments)} Ports
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- ==================== 港口清單內容 ==================== -->
+                    <tr>
+                        <td style="padding: 0 25px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 3px solid #1E3A8A; border-top: none;">
+                """
+        
+        # ==================== 風險港口列表 ====================
         for level in [3, 2, 1]:
             ports = risk_groups[level]
             style = summary_styles[level]
@@ -990,145 +1309,181 @@ class WeatherMonitorService:
             if ports:
                 port_codes = ', '.join([f"<strong style='font-size: 17px; color: {style['color']};'>{p.port_code}</strong>" for p in ports])
                 html += f"""
-                                        <tr>
-                            <td style="padding: 0 25px;">
-                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                    <tr>
-                                        <td style="padding: 15px 20px; border-bottom: 2px solid {style['border']}; background-color: {style['bg']};">
-                                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                                <tr>
-                                                    <td width="220" valign="top">
-                                                        <div style="font-size: 20px; font-weight: bold; color: {style['color']}; line-height: 1.3;">
-                                                            {style['emoji']} {style['label_zh']} {style['label']}
-                                                        </div>
-                                                        <div style="font-size: 14px; color: #666; margin-top: 4px;">
-                                                            ({len(ports)} 個港口)
-                                                        </div>
-                                                    </td>
-                                                    <td style="font-size: 16px; color: #1F2937; line-height: 1.6;">
-                                                        {port_codes}
-                                                    </td>
-                                                </tr>
-                                            </table>
-                                        </td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
+                                <tr>
+                                    <td style="padding: 18px 20px; border-bottom: 2px solid {style['border']}; background-color: {style['bg']};">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                            <tr>
+                                                <td width="240" valign="middle">
+                                                    <div style="font-size: 22px; font-weight: bold; color: {style['color']}; line-height: 1.2;">
+                                                        {style['emoji']} {style['label_zh']}
+                                                    </div>
+                                                    <div style="font-size: 16px; color: {style['color']}; margin-top: 2px; font-weight: 600;">
+                                                        {style['label']}
+                                                    </div>
+                                                </td>
+                                                <td width="120" valign="middle" align="center">
+                                                    <div style="background-color: {style['color']}; color: #ffffff; font-size: 32px; font-weight: bold; padding: 8px 16px; border-radius: 8px; display: inline-block; min-width: 60px;">
+                                                        {len(ports)}
+                                                    </div>
+                                                    <div style="font-size: 12px; color: #666; margin-top: 4px; font-weight: 600;">
+                                                        個港口 Ports
+                                                    </div>
+                                                </td>
+                                                <td style="font-size: 17px; color: #1F2937; line-height: 1.8; padding-left: 20px;">
+                                                    {port_codes}
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
                 """
+        
+        # ==================== 快速統計列 ====================
         html += f"""
-                                </table>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 25px 25px 0 25px;">
-                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 4px solid #C8102E;">
-                                    <tr>
-                                        <td bgcolor="#C8102E" style="padding: 25px 20px;">
-                                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                                <tr>
-                                                    <td width="70" valign="top" style="font-size: 48px; line-height: 1; color: #ffffff;">⚠️</td>
-                                                    <td valign="middle">
-                                                        <div style="font-size: 26px; font-weight: bold; color: #ffffff; margin-bottom: 5px; line-height: 1.3;">
-                                                            WHL Port Weather Risk Monitor
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <td style="padding: 0 25px 20px 25px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#F3F4F6" style="border: 1px solid #D1D5DB; border-top: none; border-radius: 0 0 8px 8px;">
+                                <tr>
+                                    <td style="padding: 12px 20px; font-size: 13px; color: #4B5563; text-align: center; font-weight: 600;">
+                                        ⚡ 快速統計：高風險 {len(risk_groups[3])} 個 | 中風險 {len(risk_groups[2])} 個 | 低風險 {len(risk_groups[1])} 個
+                                        <span style="margin-left: 20px; color: #6B7280;">Quick Stats: Danger {len(risk_groups[3])} | Warning {len(risk_groups[2])} | Caution {len(risk_groups[1])}</span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- ==================== 3. 標題橫幅 ==================== -->
+                    <tr>
+                        <td style="padding: 25px 25px 0 25px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 4px solid #C8102E;">
+                                <tr>
+                                    <td bgcolor="#C8102E" style="padding: 25px 20px;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                            <tr>
+                                                <td width="70" valign="top" style="font-size: 48px; line-height: 1; color: #ffffff;">⚠️</td>
+                                                <td valign="middle">
+                                                    <div style="font-size: 26px; font-weight: bold; color: #ffffff; margin-bottom: 5px; line-height: 1.3;">
+                                                        WHL Port Weather Risk Monitor
+                                                    </div>
+                                                    <div style="font-size: 20px; font-weight: bold; color: #FFFFFF; margin-bottom: 12px; line-height: 1.3;">
+                                                        未來 48 小時港口惡劣天候預警系統 <br>
+                                                        Weather Warning for Next 48 Hours
+                                                    </div>
+                                                    <div style="font-size: 16px; color: #ffffff; margin-bottom: 12px;">
+                                                        資料來源: <span style="color: #ffffff; font-weight: bold;">Weathernews Inc. (WNI)</span>
+                                                    </div>
+                                                </td>
+                                                <td align="right" width="300">
+                                                    <table border="0" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="border-radius: 10px;">
+                                                        <tr>
+                                                            <td align="center" style="padding: 12px 15px; width: 33%;">
+                                                                <div style="font-size: 32px; font-weight: bold; color: #DC2626; line-height: 1;">{len(risk_groups[3])}</div>
+                                                                <div style="font-size: 12px; color: #666666;">DANGER</div>
+                                                            </td>
+                                                            <td align="center" style="padding: 12px 15px; border-left: 2px solid #F3F4F6; width: 33%;">
+                                                                <div style="font-size: 32px; font-weight: bold; color: #F59E0B; line-height: 1;">{len(risk_groups[2])}</div>
+                                                                <div style="font-size: 12px; color: #666666;">WARNING</div>
+                                                            </td>
+                                                            <td align="center" style="padding: 12px 15px; border-left: 2px solid #F3F4F6; width: 33%;">
+                                                                <div style="font-size: 32px; font-weight: bold; color: #0EA5E9; line-height: 1;">{len(risk_groups[1])}</div>
+                                                                <div style="font-size: 12px; color: #666666;">CAUTION</div>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- ==================== 4. 風險提示 ==================== -->
+                    <tr>
+                        <td style="padding: 0 25px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td bgcolor="#FECACA" style="padding: 12px 20px; border-top: 1px solid #EF4444;">
+                                        <div style="font-size: 13px; color: #7F1D1D; line-height: 1.5; font-weight: bold; text-align: left;">
+                                            <strong style="color: #991B1B;">📢 Risk Advisory 風險提示：</strong><br>
+                                            請船長及相關人員密切關注天氣變化，評估風險後決定是否調整航行計劃或延遲靠港。<br>
+                                            <span style="color: #991B1B;">Captains and relevant personnel should closely monitor weather changes and assess risks regarding sailing plans or port calls.</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- ==================== 5. 應對措施 ==================== -->
+                    <tr>
+                        <td style="padding: 25px 25px 15px 25px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FFFBEB; border-left: 5px solid #F59E0B; margin-bottom: 25px; border-radius: 4px;">
+                                <tr>
+                                    <td style="padding: 20px 22px;">
+                                        <table border="0" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td style="font-size: 14px; line-height: 1.6;">
+                                                    <div style="font-size: 15px; font-weight: 700; margin-bottom: 15px; color: #92400E; border-bottom: 1px solid #F59E0B; padding-bottom: 8px;">
+                                                        📋 船隊風險應對措施 Fleet Risk Response Actions:
+                                                    </div>
+                                                    
+                                                    <div style="margin-bottom: 12px;">
+                                                        <div style="font-size: 14px; font-weight: 700; color: #451a03;">
+                                                            ✅ 請立即確認貴輪靠泊港口是否在風險名單中，並評估可能影響
                                                         </div>
-                                                        <div style="font-size: 20px; font-weight: bold; color: #FFFFFF; margin-bottom: 12px; line-height: 1.3;">
-                                                            未來 48 小時港口惡劣天候預警系統 <br>
-                                                            Weather Warning for Next 48 Hours
+                                                        <div style="font-size: 13px; color: #B45309; margin-top: 3px; font-weight: 500;">
+                                                            Immediately verify if your vessel's port of call is on the alert list and assess potential impacts.
                                                         </div>
-                                                        <div style="font-size: 16px; color: #ffffff; margin-bottom: 12px;">
-                                                            資料來源: <span style="color: #ffffff; font-weight: bold;">Weathernews Inc. (WNI)</span>
+                                                    </div>
+
+                                                    <div style="margin-bottom: 12px;">
+                                                        <div style="font-size: 14px; font-weight: 700; color: #451a03;">
+                                                            ✅ 根據風險等級制定應對策略，包括可能的靠泊時間調整或替代方案
                                                         </div>
-                                                    </td>
-                                                    <td align="right" width="300">
-                                                        <table border="0" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="border-radius: 10px;">
-                                                            <tr>
-                                                                <td align="center" style="padding: 12px 15px; width: 33%;">
-                                                                    <div style="font-size: 32px; font-weight: bold; color: #DC2626; line-height: 1;">{len(risk_groups[3])}</div>
-                                                                    <div style="font-size: 12px; color: #666666;">DANGER</div>
-                                                                </td>
-                                                                <td align="center" style="padding: 12px 15px; border-left: 2px solid #F3F4F6; width: 33%;">
-                                                                    <div style="font-size: 32px; font-weight: bold; color: #F59E0B; line-height: 1;">{len(risk_groups[2])}</div>
-                                                                    <div style="font-size: 12px; color: #666666;">WARNING</div>
-                                                                </td>
-                                                                <td align="center" style="padding: 12px 15px; border-left: 2px solid #F3F4F6; width: 33%;">
-                                                                    <div style="font-size: 32px; font-weight: bold; color: #0EA5E9; line-height: 1;">{len(risk_groups[1])}</div>
-                                                                    <div style="font-size: 12px; color: #666666;">CAUTION</div>
-                                                                </td>
-                                                            </tr>
-                                                        </table>
-                                                    </td>
-                                                </tr>
-                                            </table>
-                                        </td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
-                    """        
-        html += """
-                <tr>
-                    <td style="padding: 25px 25px 15px 25px;">
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FFFBEB; border-left: 5px solid #F59E0B; margin-bottom: 25px; border-radius: 4px;">
-                            <tr>
-                                <td style="padding: 20px 22px;">
-                                    <table border="0" cellpadding="0" cellspacing="0">
-                                        <tr>
-                                            <td style="font-size: 14px; line-height: 1.6;">
-                                                <div style="font-size: 15px; font-weight: 700; margin-bottom: 15px; color: #92400E; border-bottom: 1px solid #F59E0B; padding-bottom: 8px;">
-                                                    📋 船隊風險應對措施 Fleet Risk Response Actions:
-                                                </div>
-                                                
-                                                <div style="margin-bottom: 12px;">
-                                                    <div style="font-size: 14px; font-weight: 700; color: #451a03;">
-                                                        ✅ 請立即確認貴輪靠泊港口是否在風險名單中，並評估可能影響
+                                                        <div style="font-size: 13px; color: #B45309; margin-top: 3px; font-weight: 500;">
+                                                            Formulate response strategies based on risk levels, including schedule adjustments or berthing alternatives.
+                                                        </div>
                                                     </div>
-                                                    <div style="font-size: 13px; color: #B45309; margin-top: 3px; font-weight: 500;">
-                                                        Immediately verify if your vessel's port of call is on the alert list and assess potential impacts.
-                                                    </div>
-                                                </div>
 
-                                                <div style="margin-bottom: 12px;">
-                                                    <div style="font-size: 14px; font-weight: 700; color: #451a03;">
-                                                        ✅ 根據風險等級制定應對策略，包括可能的靠泊時間調整或替代方案
+                                                    <div>
+                                                        <div style="font-size: 14px; font-weight: 700; color: #451a03;">
+                                                            ✅ 與船管PIC、當地代理保持密切聯繫，及時報告船舶狀態和決策
+                                                        </div>
+                                                        <div style="font-size: 13px; color: #B45309; margin-top: 3px; font-weight: 500;">
+                                                            Maintain close contact with the PIC and local agents; promptly report vessel status and decisions.
+                                                        </div>
                                                     </div>
-                                                    <div style="font-size: 13px; color: #B45309; margin-top: 3px; font-weight: 500;">
-                                                        Formulate response strategies based on risk levels, including schedule adjustments or berthing alternatives.
-                                                    </div>
-                                                </div>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
 
-                                                <div>
-                                                    <div style="font-size: 14px; font-weight: 700; color: #451a03;">
-                                                        ✅ 與船管PIC、當地代理保持密切聯繫，及時報告船舶狀態和決策
-                                                    </div>
-                                                    <div style="font-size: 13px; color: #B45309; margin-top: 3px; font-weight: 500;">
-                                                        Maintain close contact with the PIC and local agents; promptly report vessel status and decisions.
-                                                    </div>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-                        </table>
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 25px 0;">
+                                <tr>
+                                    <td style="border-top: 3px dashed #D1D5DB; padding-top: 20px; text-align: center;">
+                                        <div style="font-size: 15px; color: #4B5563; font-weight: 700;">
+                                            ⬇️ 以下為各港口詳細氣象風險資料 ⬇️
+                                        </div>
+                                        <div style="font-size: 12px; color: #9CA3AF; margin-top: 5px; font-weight: 600;">
+                                            DETAILED WEATHER RISK DATA FOR EACH PORT
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                """
 
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 25px 0;">
-                            <tr>
-                                <td style="border-top: 3px dashed #D1D5DB; padding-top: 20px; text-align: center;">
-                                    <div style="font-size: 15px; color: #4B5563; font-weight: 700;">
-                                        ⬇️ 以下為各港口詳細氣象風險資料 ⬇️
-                                    </div>
-                                    <div style="font-size: 12px; color: #9CA3AF; margin-top: 5px; font-weight: 600;">
-                                        DETAILED WEATHER RISK DATA FOR EACH PORT
-                                    </div>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-        """
-
-        # ==================== 詳細港口資料區 ====================
+        # ==================== 6. 詳細港口資料區 ====================
         styles_detail = {
             3: {
                 'color': '#DC2626', 
@@ -1169,25 +1524,27 @@ class WeatherMonitorService:
             
             # 該等級的標題區塊
             html += f"""
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px;">
-                            <tr>
-                                <td style="background-color: {style['color']}; color: white; padding: 10px 15px; font-weight: bold; font-size: 15px;">
-                                    {style['title_zh']} {style['title_en']}
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style="font-size: 11px; color: #666; padding: 5px 0 8px 0;">
-                                    {style['desc']}
-                                </td>
-                            </tr>
-                        </table>
-                        
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 1px solid #E5E7EB; margin-bottom: 30px;">
-                            <tr style="background-color: {style['header_bg']}; font-size: 12px; color: #666;">
-                                <th align="left" style="padding: 10px; border-bottom: 2px solid {style['border']}; width: 18%; font-weight: 600;">港口資訊<br>Port Info</th>
-                                <th align="left" style="padding: 10px; border-bottom: 2px solid {style['border']}; width: 25%; font-weight: 600;">未來 48 Hrs 氣象數據<br>48-Hr Weather Data</th>
-                                <th align="left" style="padding: 10px; border-bottom: 2px solid {style['border']}; width: 57%; font-weight: 600;">高風險時段<br>High Risk Period</th>
-                            </tr>
+                        <tr>
+                            <td style="padding: 0 25px;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px;">
+                                    <tr>
+                                        <td style="background-color: {style['color']}; color: white; padding: 10px 15px; font-weight: bold; font-size: 15px;">
+                                            {style['title_zh']} {style['title_en']}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="font-size: 11px; color: #666; padding: 5px 0 8px 0;">
+                                            {style['desc']}
+                                        </td>
+                                    </tr>
+                                </table>
+                                
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 1px solid #E5E7EB; margin-bottom: 30px;">
+                                    <tr style="background-color: {style['header_bg']}; font-size: 12px; color: #666;">
+                                        <th align="left" style="padding: 10px; border-bottom: 2px solid {style['border']}; width: 18%; font-weight: 600;">港口資訊<br>Port Info</th>
+                                        <th align="left" style="padding: 10px; border-bottom: 2px solid {style['border']}; width: 25%; font-weight: 600;">未來 48 Hrs 氣象數據<br>48-Hr Weather Data</th>
+                                        <th align="left" style="padding: 10px; border-bottom: 2px solid {style['border']}; width: 57%; font-weight: 600;">高風險時段<br>High Risk Period</th>
+                                    </tr>
             """
             
             # 遍歷該等級的每個港口
@@ -1261,7 +1618,6 @@ class WeatherMonitorService:
 
                 # 7. 風險持續時間
                 risk_periods_count = len(p.risk_periods)
-                # 如果 count > 0 回傳數字字串 (例如 "9")，否則回傳 "0" 或 "N/A"
                 risk_duration = f"{risk_periods_count * 3}" if risk_periods_count > 0 else "0"
 
                 # 8. 時間格式化
@@ -1416,97 +1772,103 @@ class WeatherMonitorService:
                             </tr>
                     """
             
-            html += "</table>"  # 結束該風險等級的表格
-        html += f"""
-                <tr>
-                    <td bgcolor="#004B97" align="left" valign="top" style="padding: 30px 25px;">
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                            <tr>
-                                <td align="left" valign="middle">
-                                    <font size="5" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                        ⛴️ WHL Port Weather Risk Monitor
-                                    </b></font><br><br>
-                                    <font size="3" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                        WHL Port Weather Risk Notification
-                                    </b></font><br><br>
-                                    <table border="0" cellpadding="0" cellspacing="0">
-                                        <tr>
-                                            <td bgcolor="#0A5999" align="center" valign="middle" style="padding: 6px 12px; border: 1px solid #ffffff;">
-                                                <font size="2" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                                    📊  Weather Forecast System
-                                                </b></font>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                                
-                                <td align="right" valign="bottom" width="220">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#003366">
-                                        <tr>
-                                            <td align="right" valign="middle" style="padding: 10px 15px; border: 1px solid #ffffff;">
-                                                <font size="1" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                                    REPORT GENERATED
-                                                </b></font><br>
-                                                <font size="3" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                                    {now_str_TPE}
-                                                </b></font><br>
-                                                <font size="2" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI">
-                                                    {now_str_UTC}
-                                                </font>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-
-                <tr>
-                    <td bgcolor="#F8F9FA" align="center" valign="top" style="padding: 30px 20px; border-top: 1px solid #cccccc;">
-                        <table border="0" cellpadding="0" cellspacing="0" width="600">
-                            <tr>
-                                <td align="center" valign="top">
-                                    <font size="4" color="#000000" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                        萬海航運股份有限公司
-                                    </b></font><br>
-                                    <font size="3" color="#333333" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                        WAN HAI LINES LTD.
-                                    </b></font><br><br>
-                                    
-                                    <hr width="100" size="1" color="#cccccc"><br>
-                                    
-                                    <font size="2" color="#333333" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                        Marine Technology Division | Fleet Risk Management Dept.
-                                    </b></font><br><br>
-                                    
-                                    <table border="1" cellpadding="10" cellspacing="0" width="100%" bgcolor="#F3F4F6" bordercolor="#cccccc">
-                                        <tr>
-                                            <td align="left" valign="top">
-                                                <font size="1" color="#333333" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                                    ⚠️ 免責聲明 Disclaimer
-                                                </b></font><br>
-                                                <font size="2" color="#666666" face="Arial, Noto Sans TC, Microsoft JhengHei UI">
-                                                    本信件內容僅供參考，船長仍應依據實際天候狀況與專業判斷採取適當措施。<br>
-                                                    This report is for reference only. Captains should take appropriate actions based on actual weather conditions.
-                                                </font>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                    <br>
-                                    <font size="1" color="#999999" face="Arial, Noto Sans TC, Microsoft JhengHei UI">
-                                        &copy; {now_str_TPE[:4]} Wan Hai Lines Ltd. All Rights Reserved.
-                                    </font>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-                </table>
-                </center>
-            </body>
-            </html>
+            html += """
+                                </table>
+                            </td>
+                        </tr>
             """
+
+        # ==================== 7. 頁尾 ====================
+        html += f"""
+                    <tr>
+                        <td bgcolor="#004B97" align="left" valign="top" style="padding: 30px 25px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="left" valign="middle">
+                                        <font size="5" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
+                                            ⛴️ WHL Port Weather Risk Monitor
+                                        </b></font><br><br>
+                                        <font size="3" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
+                                            WHL Port Weather Risk Notification
+                                        </b></font><br><br>
+                                        <table border="0" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td bgcolor="#0A5999" align="center" valign="middle" style="padding: 6px 12px; border: 1px solid #ffffff;">
+                                                    <font size="2" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
+                                                        📊  Weather Forecast System
+                                                    </b></font>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                    
+                                    <td align="right" valign="bottom" width="220">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#003366">
+                                            <tr>
+                                                <td align="right" valign="middle" style="padding: 10px 15px; border: 1px solid #ffffff;">
+                                                    <font size="1" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
+                                                        REPORT GENERATED
+                                                    </b></font><br>
+                                                    <font size="3" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
+                                                        {now_str_TPE}
+                                                    </b></font><br>
+                                                    <font size="2" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI">
+                                                        {now_str_UTC}
+                                                    </font>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td bgcolor="#F8F9FA" align="center" valign="top" style="padding: 30px 20px; border-top: 1px solid #cccccc;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="600">
+                                <tr>
+                                    <td align="center" valign="top">
+                                        <font size="4" color="#000000" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
+                                            萬海航運股份有限公司
+                                        </b></font><br>
+                                        <font size="3" color="#333333" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
+                                            WAN HAI LINES LTD.
+                                        </b></font><br><br>
+                                        
+                                        <hr width="100" size="1" color="#cccccc"><br>
+                                        
+                                        <font size="2" color="#333333" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
+                                            Marine Technology Division | Fleet Risk Management Dept.
+                                        </b></font><br><br>
+                                        
+                                        <table border="1" cellpadding="10" cellspacing="0" width="100%" bgcolor="#F3F4F6" bordercolor="#cccccc">
+                                            <tr>
+                                                <td align="left" valign="top">
+                                                    <font size="1" color="#333333" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
+                                                        ⚠️ 免責聲明 Disclaimer
+                                                    </b></font><br>
+                                                    <font size="2" color="#666666" face="Arial, Noto Sans TC, Microsoft JhengHei UI">
+                                                        本信件內容僅供參考，船長仍應依據實際天候狀況與專業判斷採取適當措施。<br>
+                                                        This report is for reference only. Captains should take appropriate actions based on actual weather conditions.
+                                                    </font>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                        <br>
+                                        <font size="1" color="#999999" face="Arial, Noto Sans TC, Microsoft JhengHei UI">
+                                            &copy; {now_str_TPE[:4]} Wan Hai Lines Ltd. All Rights Reserved.
+                                        </font>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    </table>
+                    </center>
+                </body>
+                </html>
+                """
         
         return html
     
