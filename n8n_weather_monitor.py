@@ -933,7 +933,93 @@ class WeatherMonitorService:
                 <body bgcolor="#F0F4F8" style="margin: 0; padding: 0; {font_style}">
                     <center>
                     <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="max-width: 900px; margin: 20px auto;">
+                """
+        html += f"""  
+                <tr>
+                            <td style="padding: 0 25px;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <tr>
+                                        <td bgcolor="#7F1D1D" style="padding: 8px 20px;">
+                                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                <tr>
+                                                    <td align="left" style="font-size: 13px; color: #FEE2E2; font-weight: bold;">
+                                                        📅 最後更新時間 Last Updated:
+                                                    </td>
+                                                    <td align="right" style="font-size: 13px; color: #ffffff; font-weight: bold;">
+                                                        {now_str_TPE} | {now_str_UTC}
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
                         
+                        <tr>
+                            <td style="padding: 0 25px;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <tr>
+                                        <td bgcolor="#FECACA" style="padding: 12px 20px; border-top: 1px solid #EF4444;">
+                                            <div style="font-size: 13px; color: #7F1D1D; line-height: 1.5; font-weight: bold; text-align: left;">
+                                                <strong style="color: #991B1B;">📢 Risk Advisory 風險提示：</strong><br>
+                                                請船長及相關人員密切關注天氣變化，評估風險後決定是否調整航行計劃或延遲靠港。<br>
+                                                <span style="color: #991B1B;">Captains and relevant personnel should closely monitor weather changes and assess risks regarding sailing plans or port calls.</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td style="padding: 0;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                """
+        # ==================== 風險港口列表 ====================
+        summary_styles = {
+            3: {'emoji': '🔴', 'label': 'DANGER', 'label_zh': '高度風險', 'color': '#DC2626', 'bg': '#FEF2F2', 'border': '#FCA5A5'},
+            2: {'emoji': '🟠', 'label': 'WARNING', 'label_zh': '中度風險', 'color': '#F59E0B', 'bg': '#FFFBEB', 'border': '#FCD34D'},
+            1: {'emoji': '🟡', 'label': 'CAUTION', 'label_zh': '低度風險', 'color': '#0EA5E9', 'bg': '#F0F9FF', 'border': '#7DD3FC'}
+        }
+        
+        for level in [3, 2, 1]:
+            ports = risk_groups[level]
+            style = summary_styles[level]
+            
+            if ports:
+                port_codes = ', '.join([f"<strong style='font-size: 17px; color: {style['color']};'>{p.port_code}</strong>" for p in ports])
+                html += f"""
+                                        <tr>
+                            <td style="padding: 0 25px;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <tr>
+                                        <td style="padding: 15px 20px; border-bottom: 2px solid {style['border']}; background-color: {style['bg']};">
+                                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                <tr>
+                                                    <td width="220" valign="top">
+                                                        <div style="font-size: 20px; font-weight: bold; color: {style['color']}; line-height: 1.3;">
+                                                            {style['emoji']} {style['label_zh']} {style['label']}
+                                                        </div>
+                                                        <div style="font-size: 14px; color: #666; margin-top: 4px;">
+                                                            ({len(ports)} 個港口)
+                                                        </div>
+                                                    </td>
+                                                    <td style="font-size: 16px; color: #1F2937; line-height: 1.6;">
+                                                        {port_codes}
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                """
+        html += f"""
+                                </table>
+                            </td>
+                        </tr>
                         <tr>
                             <td style="padding: 25px 25px 0 25px;">
                                 <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 4px solid #C8102E;">
@@ -979,90 +1065,7 @@ class WeatherMonitorService:
                                 </table>
                             </td>
                         </tr>
-                            
-                        <tr>
-                            <td style="padding: 0 25px;">
-                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                    <tr>
-                                        <td bgcolor="#7F1D1D" style="padding: 8px 20px;">
-                                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                                <tr>
-                                                    <td align="left" style="font-size: 13px; color: #FEE2E2; font-weight: bold;">
-                                                        📅 最後更新時間 Last Updated:
-                                                    </td>
-                                                    <td align="right" style="font-size: 13px; color: #ffffff; font-weight: bold;">
-                                                        {now_str_TPE} | {now_str_UTC}
-                                                    </td>
-                                                </tr>
-                                            </table>
-                                        </td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
-                        
-                        <tr>
-                            <td style="padding: 0 25px;">
-                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                    <tr>
-                                        <td bgcolor="#FECACA" style="padding: 12px 20px; border-top: 1px solid #EF4444;">
-                                            <div style="font-size: 13px; color: #7F1D1D; line-height: 1.5; font-weight: bold; text-align: left;">
-                                                <strong style="color: #991B1B;">📢 Risk Advisory 風險提示：</strong><br>
-                                                請船長及相關人員密切關注天氣變化，評估風險後決定是否調整航行計劃或延遲靠港。<br>
-                                                <span style="color: #991B1B;">Captains and relevant personnel should closely monitor weather changes and assess risks regarding sailing plans or port calls.</span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
-                        
-                        <tr>
-                            <td style="padding: 0;">
-                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
-        """
-        
-        # ==================== 風險港口列表 ====================
-        summary_styles = {
-            3: {'emoji': '🔴', 'label': 'DANGER', 'label_zh': '高度風險', 'color': '#DC2626', 'bg': '#FEF2F2', 'border': '#FCA5A5'},
-            2: {'emoji': '🟠', 'label': 'WARNING', 'label_zh': '中度風險', 'color': '#F59E0B', 'bg': '#FFFBEB', 'border': '#FCD34D'},
-            1: {'emoji': '🟡', 'label': 'CAUTION', 'label_zh': '低度風險', 'color': '#0EA5E9', 'bg': '#F0F9FF', 'border': '#7DD3FC'}
-        }
-        
-        for level in [3, 2, 1]:
-            ports = risk_groups[level]
-            style = summary_styles[level]
-            
-            if ports:
-                port_codes = ', '.join([f"<strong style='font-size: 17px; color: {style['color']};'>{p.port_code}</strong>" for p in ports])
-                html += f"""
-                                        <tr>
-                            <td style="padding: 0 25px;">
-                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                    <tr>
-                                        <td style="padding: 15px 20px; border-bottom: 2px solid {style['border']}; background-color: {style['bg']};">
-                                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                                <tr>
-                                                    <td width="220" valign="top">
-                                                        <div style="font-size: 20px; font-weight: bold; color: {style['color']}; line-height: 1.3;">
-                                                            {style['emoji']} {style['label_zh']} {style['label']}
-                                                        </div>
-                                                        <div style="font-size: 14px; color: #666; margin-top: 4px;">
-                                                            ({len(ports)} 個港口)
-                                                        </div>
-                                                    </td>
-                                                    <td style="font-size: 16px; color: #1F2937; line-height: 1.6;">
-                                                        {port_codes}
-                                                    </td>
-                                                </tr>
-                                            </table>
-                                        </td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
-                """
-        
+                    """        
         html += """
                 <tr>
                     <td style="padding: 25px 25px 15px 25px;">
