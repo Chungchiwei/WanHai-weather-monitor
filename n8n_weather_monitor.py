@@ -874,11 +874,11 @@ class TeamsNotifier:
             {
                 "type": "FactSet",
                 "facts": [
-                    {"title": "🔴 危險 (Danger)", "value": str(len(danger_ports))},
-                    {"title": "🟠 警告 (Warning)", "value": str(len(warning_ports))},
-                    {"title": "🟡 注意 (Caution)", "value": str(len(caution_ports))},
+                    {"title": "🔴 高度風險 (HEIGHT RISK)", "value": str(len(danger_ports))},
+                    {"title": "🟠 中度風險 (MEDIUM RISK)", "value": str(len(warning_ports))},
+                    {"title": "🟡 低度風險 (LOW RISK)", "value": str(len(caution_ports))},
                     {"title": "📅 更新時間", "value": datetime.now().strftime('%Y-%m-%d %H:%M')}
-                ],
+                ],  
                 "spacing": "Medium"
             }
         ]
@@ -1231,9 +1231,9 @@ class WeatherMonitorService:
 
         # ==================== 風險港口樣式定義 ====================
         summary_styles = {
-            3: {'emoji': '🔴', 'label': 'DANGER', 'label_zh': '高度風險', 'color': '#DC2626', 'bg': '#FEF2F2', 'border': '#FCA5A5'},
-            2: {'emoji': '🟠', 'label': 'WARNING', 'label_zh': '中度風險', 'color': '#F59E0B', 'bg': '#FFFBEB', 'border': '#FCD34D'},
-            1: {'emoji': '🟡', 'label': 'CAUTION', 'label_zh': '低度風險', 'color': '#0EA5E9', 'bg': '#F0F9FF', 'border': '#7DD3FC'}
+            3: {'emoji': '🔴', 'label': 'HIGHT Risk', 'label_zh': '高度風險', 'color': '#DC2626', 'bg': '#FEF2F2', 'border': '#FCA5A5'},
+            2: {'emoji': '🟠', 'label': 'MEDIUM Risk', 'label_zh': '中度風險', 'color': '#F59E0B', 'bg': '#FFFBEB', 'border': '#FCD34D'},
+            1: {'emoji': '🟡', 'label': 'LOW Risk', 'label_zh': '低度風險', 'color': '#0EA5E9', 'bg': '#F0F9FF', 'border': '#7DD3FC'}
         }
 
         # ==================== HTML 開始 ====================
@@ -1349,8 +1349,8 @@ class WeatherMonitorService:
                             <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#F3F4F6" style="border: 1px solid #D1D5DB; border-top: none; border-radius: 0 0 8px 8px;">
                                 <tr>
                                     <td style="padding: 12px 20px; font-size: 13px; color: #4B5563; text-align: center; font-weight: 600;">
-                                        ⚡ 快速統計：高風險 {len(risk_groups[3])} 個 | 中風險 {len(risk_groups[2])} 個 | 低風險 {len(risk_groups[1])} 個
-                                        <span style="margin-left: 20px; color: #6B7280;">Quick Stats: Danger {len(risk_groups[3])} | Warning {len(risk_groups[2])} | Caution {len(risk_groups[1])}</span>
+                                        ⚡ 快速統計：高度風險 {len(risk_groups[3])} 個 | 中度風險 {len(risk_groups[2])} 個 | 低度風險 {len(risk_groups[1])} 個
+                                        <span style="margin-left: 20px; color: #6B7280;">Quick Stats: HEIGHT {len(risk_groups[3])} | MEDIUM {len(risk_groups[2])} | LOW {len(risk_groups[1])}</span>
                                     </td>
                                 </tr>
                             </table>
@@ -1383,15 +1383,15 @@ class WeatherMonitorService:
                                                         <tr>
                                                             <td align="center" style="padding: 12px 15px; width: 33%;">
                                                                 <div style="font-size: 32px; font-weight: bold; color: #DC2626; line-height: 1;">{len(risk_groups[3])}</div>
-                                                                <div style="font-size: 12px; color: #666666;">DANGER</div>
+                                                                <div style="font-size: 12px; color: #666666;">HIGHT RISK</div>
                                                             </td>
                                                             <td align="center" style="padding: 12px 15px; border-left: 2px solid #F3F4F6; width: 33%;">
                                                                 <div style="font-size: 32px; font-weight: bold; color: #F59E0B; line-height: 1;">{len(risk_groups[2])}</div>
-                                                                <div style="font-size: 12px; color: #666666;">WARNING</div>
+                                                                <div style="font-size: 12px; color: #666666;">MEDIUM RISK</div>
                                                             </td>
                                                             <td align="center" style="padding: 12px 15px; border-left: 2px solid #F3F4F6; width: 33%;">
                                                                 <div style="font-size: 32px; font-weight: bold; color: #0EA5E9; line-height: 1;">{len(risk_groups[1])}</div>
-                                                                <div style="font-size: 12px; color: #666666;">CAUTION</div>
+                                                                <div style="font-size: 12px; color: #666666;">LOW RISK</div>
                                                             </td>
                                                         </tr>
                                                     </table>
@@ -1489,7 +1489,7 @@ class WeatherMonitorService:
                 'color': '#DC2626', 
                 'bg': '#FEF2F2', 
                 'title_zh': '🔴 危險等級港口', 
-                'title_en': 'DANGER LEVEL PORTS',
+                'title_en': 'HIGHT RISK LEVEL PORTS',
                 'border': '#DC2626', 
                 'header_bg': '#FEE2E2', 
                 'desc': '條件 Criteria: 風速 Wind > 34 kts / 陣風 Gust > 41 kts / 浪高 Wave > 4.0 m'
@@ -1498,7 +1498,7 @@ class WeatherMonitorService:
                 'color': '#F59E0B', 
                 'bg': '#FFFBEB', 
                 'title_zh': '🟠 警告等級港口', 
-                'title_en': 'WARNING LEVEL PORTS',
+                'title_en': 'MEDIUM RISK LEVEL PORTS',
                 'border': '#F59E0B', 
                 'header_bg': '#FEF3C7', 
                 'desc': '條件 Criteria: 風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m'
@@ -1507,7 +1507,7 @@ class WeatherMonitorService:
                 'color': '#0EA5E9', 
                 'bg': '#F0F9FF', 
                 'title_zh': '🟡 注意等級港口', 
-                'title_en': 'CAUTION LEVEL PORTS',
+                'title_en': 'LOW RISK LEVEL PORTS',
                 'border': '#0EA5E9', 
                 'header_bg': '#E0F2FE', 
                 'desc': '條件 Criteria: 風速 Wind > 22 kts / 陣風 Gust > 28 kts / 浪高 Wave > 2.5 m'
