@@ -145,480 +145,480 @@ class ChartGenerator:
         buf.close()
         return img_str
 
-def generate_wind_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
-    """繪製風速趨勢圖，回傳 Base64 字串（專業優化版）"""
-    if not assessment.raw_records:
-        print(f"      ⚠️ {port_code} 沒有原始資料記錄")
-        return None
-        
-    try:
-        df = self._prepare_dataframe(assessment.raw_records)
-        
-        if df.empty:
-            print(f"      ⚠️ {port_code} DataFrame 為空")
+    def generate_wind_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
+        """繪製風速趨勢圖，回傳 Base64 字串（專業優化版）"""
+        if not assessment.raw_records:
+            print(f"      ⚠️ {port_code} 沒有原始資料記錄")
             return None
-        
-        print(f"      📊 準備繪製 {port_code} 的風速圖 (資料點數: {len(df)})")
-        
-        # 🎨 使用更專業的樣式
-        plt.style.use('default')
-        
-        # 🔥 設定圖表尺寸和 DPI
-        fig, ax = plt.subplots(figsize=(16, 7), dpi=120)
-        
-        # 設定背景顏色（漸層效果的替代方案）
-        fig.patch.set_facecolor('#FFFFFF')
-        ax.set_facecolor('#F8FAFC')
-        
-        # ==================== 繪製風險區域背景 ====================
-        # 危險區域（紅色）
-        ax.axhspan(RISK_THRESHOLDS['wind_danger'], ax.get_ylim()[1] if len(df) > 0 else 60, 
-                   facecolor='#FEE2E2', alpha=0.3, zorder=0)
-        # 警告區域（橙色）
-        ax.axhspan(RISK_THRESHOLDS['wind_warning'], RISK_THRESHOLDS['wind_danger'], 
-                   facecolor='#FEF3C7', alpha=0.3, zorder=0)
-        # 注意區域（黃色）
-        ax.axhspan(RISK_THRESHOLDS['wind_caution'], RISK_THRESHOLDS['wind_warning'], 
-                   facecolor='#FEF9C3', alpha=0.3, zorder=0)
-        
-        # ==================== 繪製主要數據線 ====================
-        # 風速線（藍色，粗實線）
-        line1 = ax.plot(df['time'], df['wind_speed'], 
-                        color='#1E40AF', 
-                        linewidth=3.5, 
+            
+        try:
+            df = self._prepare_dataframe(assessment.raw_records)
+            
+            if df.empty:
+                print(f"      ⚠️ {port_code} DataFrame 為空")
+                return None
+            
+            print(f"      📊 準備繪製 {port_code} 的風速圖 (資料點數: {len(df)})")
+            
+            # 🎨 使用更專業的樣式
+            plt.style.use('default')
+            
+            # 🔥 設定圖表尺寸和 DPI
+            fig, ax = plt.subplots(figsize=(16, 7), dpi=120)
+            
+            # 設定背景顏色（漸層效果的替代方案）
+            fig.patch.set_facecolor('#FFFFFF')
+            ax.set_facecolor('#F8FAFC')
+            
+            # ==================== 繪製風險區域背景 ====================
+            # 危險區域（紅色）
+            ax.axhspan(RISK_THRESHOLDS['wind_danger'], ax.get_ylim()[1] if len(df) > 0 else 60, 
+                    facecolor='#FEE2E2', alpha=0.3, zorder=0)
+            # 警告區域（橙色）
+            ax.axhspan(RISK_THRESHOLDS['wind_warning'], RISK_THRESHOLDS['wind_danger'], 
+                    facecolor='#FEF3C7', alpha=0.3, zorder=0)
+            # 注意區域（黃色）
+            ax.axhspan(RISK_THRESHOLDS['wind_caution'], RISK_THRESHOLDS['wind_warning'], 
+                    facecolor='#FEF9C3', alpha=0.3, zorder=0)
+            
+            # ==================== 繪製主要數據線 ====================
+            # 風速線（藍色，粗實線）
+            line1 = ax.plot(df['time'], df['wind_speed'], 
+                            color='#1E40AF', 
+                            linewidth=3.5, 
+                            marker='o', 
+                            markersize=7,
+                            markerfacecolor='#3B82F6',
+                            markeredgecolor='#1E40AF',
+                            markeredgewidth=1.5,
+                            label='Wind Speed',
+                            zorder=5,
+                            alpha=0.9)
+            
+            # 陣風線（紅色，虛線）
+            line2 = ax.plot(df['time'], df['wind_gust'], 
+                            color='#DC2626', 
+                            linewidth=3, 
+                            linestyle='--',
+                            marker='s', 
+                            markersize=6,
+                            markerfacecolor='#EF4444',
+                            markeredgecolor='#DC2626',
+                            markeredgewidth=1.5,
+                            label='Wind Gust',
+                            zorder=5,
+                            alpha=0.9)
+            
+            # ==================== 填充區域 ====================
+            # 風速曲線下方填充（淡藍色）
+            ax.fill_between(df['time'], df['wind_speed'], 
+                            alpha=0.2, 
+                            color='#3B82F6', 
+                            zorder=2)
+            
+            # 高風險時段特別標註（橙色填充）
+            high_risk_mask = df['wind_speed'] >= RISK_THRESHOLDS['wind_caution']
+            if high_risk_mask.any():
+                ax.fill_between(df['time'], 
+                            df['wind_speed'], 
+                            where=high_risk_mask,
+                            interpolate=True,
+                            color='#F59E0B',
+                            alpha=0.35,
+                            label='High Risk Period',
+                            zorder=3)
+            
+            # ==================== 繪製閾值線 ====================
+            # 危險線
+            ax.axhline(RISK_THRESHOLDS['wind_danger'], 
+                    color="#DC2626", 
+                    linestyle='-', 
+                    linewidth=2.5, 
+                    label=f'🔴 Danger Threshold ({RISK_THRESHOLDS["wind_danger"]} kts)', 
+                    zorder=4,
+                    alpha=0.8)
+            
+            # 警告線
+            ax.axhline(RISK_THRESHOLDS['wind_warning'], 
+                    color="#F59E0B", 
+                    linestyle='--', 
+                    linewidth=2.5, 
+                    label=f'🟠 Warning Threshold ({RISK_THRESHOLDS["wind_warning"]} kts)', 
+                    zorder=4,
+                    alpha=0.8)
+            
+            # 注意線
+            ax.axhline(RISK_THRESHOLDS['wind_caution'], 
+                    color="#EAB308", 
+                    linestyle=':', 
+                    linewidth=2.2, 
+                    label=f'🟡 Caution Threshold ({RISK_THRESHOLDS["wind_caution"]} kts)', 
+                    zorder=4,
+                    alpha=0.7)
+            
+            # ==================== 標註最大值 ====================
+            max_wind_idx = df['wind_speed'].idxmax()
+            max_gust_idx = df['wind_gust'].idxmax()
+            
+            # 標註最大風速
+            ax.annotate(f'Max: {df.loc[max_wind_idx, "wind_speed"]:.1f} kts',
+                    xy=(df.loc[max_wind_idx, 'time'], df.loc[max_wind_idx, 'wind_speed']),
+                    xytext=(10, 15),
+                    textcoords='offset points',
+                    fontsize=11,
+                    fontweight='bold',
+                    color='#1E40AF',
+                    bbox=dict(boxstyle='round,pad=0.5', facecolor='#EFF6FF', edgecolor='#3B82F6', linewidth=2),
+                    arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0', color='#1E40AF', lw=2))
+            
+            # 標註最大陣風
+            ax.annotate(f'Max: {df.loc[max_gust_idx, "wind_gust"]:.1f} kts',
+                    xy=(df.loc[max_gust_idx, 'time'], df.loc[max_gust_idx, 'wind_gust']),
+                    xytext=(10, -20),
+                    textcoords='offset points',
+                    fontsize=11,
+                    fontweight='bold',
+                    color='#DC2626',
+                    bbox=dict(boxstyle='round,pad=0.5', facecolor='#FEF2F2', edgecolor='#EF4444', linewidth=2),
+                    arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0', color='#DC2626', lw=2))
+            
+            # ==================== 標題與標籤 ====================
+            # 主標題
+            ax.set_title(f"🌪️ Wind Speed & Gust Forecast - {assessment.port_name} ({assessment.port_code})", 
+                        fontsize=22, 
+                        fontweight='bold', 
+                        pad=20, 
+                        color='#1F2937',
+                        fontfamily='sans-serif')
+            
+            # 副標題
+            fig.text(0.5, 0.94, '48-Hour Weather Monitoring | Data Source: WNI', 
+                    ha='center', 
+                    fontsize=12, 
+                    color='#6B7280',
+                    style='italic')
+            
+            # Y軸標籤
+            ax.set_ylabel('Wind Speed (knots)', 
+                        fontsize=15, 
+                        fontweight='600', 
+                        color='#374151',
+                        labelpad=10)
+            
+            # X軸標籤
+            ax.set_xlabel('Date / Time (UTC)', 
+                        fontsize=15, 
+                        fontweight='600', 
+                        color='#374151',
+                        labelpad=10)
+            
+            # ==================== 圖例設定 ====================
+            legend = ax.legend(loc='upper left', 
+                            frameon=True, 
+                            fontsize=12, 
+                            shadow=True, 
+                            fancybox=True,
+                            framealpha=0.95,
+                            edgecolor='#D1D5DB',
+                            facecolor='#FFFFFF',
+                            ncol=2)
+            legend.get_frame().set_linewidth(1.5)
+            
+            # ==================== 網格設定 ====================
+            ax.grid(True, 
+                alpha=0.3, 
+                linestyle='--', 
+                linewidth=0.8, 
+                color='#9CA3AF',
+                zorder=1)
+            ax.set_axisbelow(True)
+            
+            # ==================== 座標軸格式 ====================
+            # X軸日期格式
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d\n%H:%M'))
+            ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
+            ax.xaxis.set_minor_locator(mdates.HourLocator(interval=3))
+            
+            # 旋轉X軸標籤
+            plt.setp(ax.xaxis.get_majorticklabels(), 
+                    rotation=0, 
+                    ha='center', 
+                    fontsize=11,
+                    fontweight='500')
+            
+            # Y軸刻度
+            plt.setp(ax.yaxis.get_majorticklabels(), 
+                    fontsize=11,
+                    fontweight='500')
+            
+            # ==================== 邊框美化 ====================
+            for spine in ['top', 'right']:
+                ax.spines[spine].set_visible(False)
+            
+            for spine in ['bottom', 'left']:
+                ax.spines[spine].set_edgecolor('#9CA3AF')
+                ax.spines[spine].set_linewidth(2)
+            
+            # ==================== 設定Y軸範圍 ====================
+            y_max = max(df['wind_gust'].max(), RISK_THRESHOLDS['wind_danger']) * 1.15
+            ax.set_ylim(0, y_max)
+            
+            # ==================== 加入水印 ====================
+            fig.text(0.99, 0.01, 'WHL Marine Technology Division', 
+                    ha='right', 
+                    va='bottom',
+                    fontsize=9, 
+                    color='#9CA3AF',
+                    alpha=0.6,
+                    style='italic')
+            
+            plt.tight_layout(rect=[0, 0.02, 1, 0.96])
+            
+            # ==================== 儲存與轉換 ====================
+            # 1. 存檔（高解析度）
+            filepath = os.path.join(self.output_dir, f"wind_{port_code}.png")
+            fig.savefig(filepath, 
+                    dpi=150, 
+                    bbox_inches='tight', 
+                    facecolor='white',
+                    edgecolor='none',
+                    pad_inches=0.1)
+            print(f"      💾 圖片已存檔: {filepath}")
+            
+            # 2. 轉 Base64（高解析度）
+            base64_str = self._fig_to_base64(fig, dpi=150)
+            print(f"      ✅ Base64 轉換成功 (長度: {len(base64_str)} 字元)")
+            
+            plt.close(fig)
+            return base64_str
+            
+        except Exception as e:
+            print(f"      ❌ 繪製風速圖失敗 {port_code}: {e}")
+            traceback.print_exc()
+            return None
+
+
+    def generate_wave_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
+        """繪製浪高趨勢圖，回傳 Base64 字串（專業優化版）"""
+        if not assessment.raw_records:
+            return None
+            
+        try:
+            df = self._prepare_dataframe(assessment.raw_records)
+            
+            if df['wave_height'].max() < 1.0:
+                return None
+
+            # 🎨 使用專業樣式
+            plt.style.use('default')
+            
+            # 🔥 設定圖表尺寸和 DPI
+            fig, ax = plt.subplots(figsize=(16, 7), dpi=120)
+            
+            # 設定背景顏色
+            fig.patch.set_facecolor('#FFFFFF')
+            ax.set_facecolor('#F0FDF4')
+            
+            # ==================== 繪製風險區域背景 ====================
+            # 危險區域（紅色）
+            ax.axhspan(RISK_THRESHOLDS['wave_danger'], ax.get_ylim()[1] if len(df) > 0 else 8, 
+                    facecolor='#FEE2E2', alpha=0.3, zorder=0)
+            # 警告區域（橙色）
+            ax.axhspan(RISK_THRESHOLDS['wave_warning'], RISK_THRESHOLDS['wave_danger'], 
+                    facecolor='#FEF3C7', alpha=0.3, zorder=0)
+            # 注意區域（黃色）
+            ax.axhspan(RISK_THRESHOLDS['wave_caution'], RISK_THRESHOLDS['wave_warning'], 
+                    facecolor='#FEF9C3', alpha=0.3, zorder=0)
+            
+            # ==================== 繪製主要數據線 ====================
+            # 浪高線（綠色系，粗實線）
+            line = ax.plot(df['time'], df['wave_height'], 
+                        color='#047857', 
+                        linewidth=4, 
                         marker='o', 
                         markersize=7,
-                        markerfacecolor='#3B82F6',
-                        markeredgecolor='#1E40AF',
+                        markerfacecolor='#10B981',
+                        markeredgecolor='#047857',
                         markeredgewidth=1.5,
-                        label='Wind Speed',
+                        label='Significant Wave Height',
                         zorder=5,
                         alpha=0.9)
-        
-        # 陣風線（紅色，虛線）
-        line2 = ax.plot(df['time'], df['wind_gust'], 
-                        color='#DC2626', 
-                        linewidth=3, 
-                        linestyle='--',
-                        marker='s', 
-                        markersize=6,
-                        markerfacecolor='#EF4444',
-                        markeredgecolor='#DC2626',
-                        markeredgewidth=1.5,
-                        label='Wind Gust',
-                        zorder=5,
-                        alpha=0.9)
-        
-        # ==================== 填充區域 ====================
-        # 風速曲線下方填充（淡藍色）
-        ax.fill_between(df['time'], df['wind_speed'], 
-                        alpha=0.2, 
-                        color='#3B82F6', 
-                        zorder=2)
-        
-        # 高風險時段特別標註（橙色填充）
-        high_risk_mask = df['wind_speed'] >= RISK_THRESHOLDS['wind_caution']
-        if high_risk_mask.any():
-            ax.fill_between(df['time'], 
-                           df['wind_speed'], 
-                           where=high_risk_mask,
-                           interpolate=True,
-                           color='#F59E0B',
-                           alpha=0.35,
-                           label='High Risk Period',
-                           zorder=3)
-        
-        # ==================== 繪製閾值線 ====================
-        # 危險線
-        ax.axhline(RISK_THRESHOLDS['wind_danger'], 
-                   color="#DC2626", 
-                   linestyle='-', 
-                   linewidth=2.5, 
-                   label=f'🔴 Danger Threshold ({RISK_THRESHOLDS["wind_danger"]} kts)', 
-                   zorder=4,
-                   alpha=0.8)
-        
-        # 警告線
-        ax.axhline(RISK_THRESHOLDS['wind_warning'], 
-                   color="#F59E0B", 
-                   linestyle='--', 
-                   linewidth=2.5, 
-                   label=f'🟠 Warning Threshold ({RISK_THRESHOLDS["wind_warning"]} kts)', 
-                   zorder=4,
-                   alpha=0.8)
-        
-        # 注意線
-        ax.axhline(RISK_THRESHOLDS['wind_caution'], 
-                   color="#EAB308", 
-                   linestyle=':', 
-                   linewidth=2.2, 
-                   label=f'🟡 Caution Threshold ({RISK_THRESHOLDS["wind_caution"]} kts)', 
-                   zorder=4,
-                   alpha=0.7)
-        
-        # ==================== 標註最大值 ====================
-        max_wind_idx = df['wind_speed'].idxmax()
-        max_gust_idx = df['wind_gust'].idxmax()
-        
-        # 標註最大風速
-        ax.annotate(f'Max: {df.loc[max_wind_idx, "wind_speed"]:.1f} kts',
-                   xy=(df.loc[max_wind_idx, 'time'], df.loc[max_wind_idx, 'wind_speed']),
-                   xytext=(10, 15),
-                   textcoords='offset points',
-                   fontsize=11,
-                   fontweight='bold',
-                   color='#1E40AF',
-                   bbox=dict(boxstyle='round,pad=0.5', facecolor='#EFF6FF', edgecolor='#3B82F6', linewidth=2),
-                   arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0', color='#1E40AF', lw=2))
-        
-        # 標註最大陣風
-        ax.annotate(f'Max: {df.loc[max_gust_idx, "wind_gust"]:.1f} kts',
-                   xy=(df.loc[max_gust_idx, 'time'], df.loc[max_gust_idx, 'wind_gust']),
-                   xytext=(10, -20),
-                   textcoords='offset points',
-                   fontsize=11,
-                   fontweight='bold',
-                   color='#DC2626',
-                   bbox=dict(boxstyle='round,pad=0.5', facecolor='#FEF2F2', edgecolor='#EF4444', linewidth=2),
-                   arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0', color='#DC2626', lw=2))
-        
-        # ==================== 標題與標籤 ====================
-        # 主標題
-        ax.set_title(f"🌪️ Wind Speed & Gust Forecast - {assessment.port_name} ({assessment.port_code})", 
-                    fontsize=22, 
-                    fontweight='bold', 
-                    pad=20, 
-                    color='#1F2937',
-                    fontfamily='sans-serif')
-        
-        # 副標題
-        fig.text(0.5, 0.94, '48-Hour Weather Monitoring | Data Source: WNI', 
-                ha='center', 
-                fontsize=12, 
-                color='#6B7280',
-                style='italic')
-        
-        # Y軸標籤
-        ax.set_ylabel('Wind Speed (knots)', 
-                     fontsize=15, 
-                     fontweight='600', 
-                     color='#374151',
-                     labelpad=10)
-        
-        # X軸標籤
-        ax.set_xlabel('Date / Time (UTC)', 
-                     fontsize=15, 
-                     fontweight='600', 
-                     color='#374151',
-                     labelpad=10)
-        
-        # ==================== 圖例設定 ====================
-        legend = ax.legend(loc='upper left', 
-                          frameon=True, 
-                          fontsize=12, 
-                          shadow=True, 
-                          fancybox=True,
-                          framealpha=0.95,
-                          edgecolor='#D1D5DB',
-                          facecolor='#FFFFFF',
-                          ncol=2)
-        legend.get_frame().set_linewidth(1.5)
-        
-        # ==================== 網格設定 ====================
-        ax.grid(True, 
-               alpha=0.3, 
-               linestyle='--', 
-               linewidth=0.8, 
-               color='#9CA3AF',
-               zorder=1)
-        ax.set_axisbelow(True)
-        
-        # ==================== 座標軸格式 ====================
-        # X軸日期格式
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d\n%H:%M'))
-        ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
-        ax.xaxis.set_minor_locator(mdates.HourLocator(interval=3))
-        
-        # 旋轉X軸標籤
-        plt.setp(ax.xaxis.get_majorticklabels(), 
-                rotation=0, 
-                ha='center', 
-                fontsize=11,
-                fontweight='500')
-        
-        # Y軸刻度
-        plt.setp(ax.yaxis.get_majorticklabels(), 
-                fontsize=11,
-                fontweight='500')
-        
-        # ==================== 邊框美化 ====================
-        for spine in ['top', 'right']:
-            ax.spines[spine].set_visible(False)
-        
-        for spine in ['bottom', 'left']:
-            ax.spines[spine].set_edgecolor('#9CA3AF')
-            ax.spines[spine].set_linewidth(2)
-        
-        # ==================== 設定Y軸範圍 ====================
-        y_max = max(df['wind_gust'].max(), RISK_THRESHOLDS['wind_danger']) * 1.15
-        ax.set_ylim(0, y_max)
-        
-        # ==================== 加入水印 ====================
-        fig.text(0.99, 0.01, 'WHL Marine Technology Division', 
-                ha='right', 
-                va='bottom',
-                fontsize=9, 
+            
+            # ==================== 填充區域 ====================
+            # 浪高曲線下方填充（淡綠色）
+            ax.fill_between(df['time'], df['wave_height'], 
+                            alpha=0.25, 
+                            color='#10B981', 
+                            zorder=2)
+            
+            # 高風險時段特別標註（橙色填充）
+            high_risk_mask = df['wave_height'] >= RISK_THRESHOLDS['wave_caution']
+            if high_risk_mask.any():
+                ax.fill_between(df['time'], 
+                            df['wave_height'], 
+                            where=high_risk_mask,
+                            interpolate=True,
+                            color='#F59E0B',
+                            alpha=0.35,
+                            label='High Risk Period',
+                            zorder=3)
+            
+            # ==================== 繪製閾值線 ====================
+            # 危險線
+            ax.axhline(RISK_THRESHOLDS['wave_danger'], 
+                    color="#DC2626", 
+                    linestyle='-', 
+                    linewidth=2.5, 
+                    label=f'🔴 Danger Threshold ({RISK_THRESHOLDS["wave_danger"]} m)', 
+                    zorder=4,
+                    alpha=0.8)
+            
+            # 警告線
+            ax.axhline(RISK_THRESHOLDS['wave_warning'], 
+                    color="#F59E0B", 
+                    linestyle='--', 
+                    linewidth=2.5, 
+                    label=f'🟠 Warning Threshold ({RISK_THRESHOLDS["wave_warning"]} m)', 
+                    zorder=4,
+                    alpha=0.8)
+            
+            # 注意線
+            ax.axhline(RISK_THRESHOLDS['wave_caution'], 
+                    color="#EAB308", 
+                    linestyle=':', 
+                    linewidth=2.2, 
+                    label=f'🟡 Caution Threshold ({RISK_THRESHOLDS["wave_caution"]} m)', 
+                    zorder=4,
+                    alpha=0.7)
+            
+            # ==================== 標註最大值 ====================
+            max_wave_idx = df['wave_height'].idxmax()
+            
+            # 標註最大浪高
+            ax.annotate(f'Max: {df.loc[max_wave_idx, "wave_height"]:.2f} m',
+                    xy=(df.loc[max_wave_idx, 'time'], df.loc[max_wave_idx, 'wave_height']),
+                    xytext=(10, 15),
+                    textcoords='offset points',
+                    fontsize=11,
+                    fontweight='bold',
+                    color='#047857',
+                    bbox=dict(boxstyle='round,pad=0.5', facecolor='#D1FAE5', edgecolor='#10B981', linewidth=2),
+                    arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0', color='#047857', lw=2))
+            
+            # ==================== 標題與標籤 ====================
+            # 主標題
+            ax.set_title(f"🌊 Wave Height Forecast - {assessment.port_name} ({assessment.port_code})", 
+                        fontsize=22, 
+                        fontweight='bold', 
+                        pad=20, 
+                        color='#1F2937',
+                        fontfamily='sans-serif')
+            
+            # 副標題
+            fig.text(0.5, 0.94, '48-Hour Weather Monitoring | Data Source: WNI', 
+                    ha='center', 
+                    fontsize=12, 
+                    color='#6B7280',
+                    style='italic')
+            
+            # Y軸標籤
+            ax.set_ylabel('Wave Height (meters)', 
+                        fontsize=15, 
+                        fontweight='600', 
+                        color='#374151',
+                        labelpad=10)
+            
+            # X軸標籤
+            ax.set_xlabel('Date / Time (UTC)', 
+                        fontsize=15, 
+                        fontweight='600', 
+                        color='#374151',
+                        labelpad=10)
+            
+            # ==================== 圖例設定 ====================
+            legend = ax.legend(loc='upper left', 
+                            frameon=True, 
+                            fontsize=12, 
+                            shadow=True, 
+                            fancybox=True,
+                            framealpha=0.95,
+                            edgecolor='#D1D5DB',
+                            facecolor='#FFFFFF',
+                            ncol=2)
+            legend.get_frame().set_linewidth(1.5)
+            
+            # ==================== 網格設定 ====================
+            ax.grid(True, 
+                alpha=0.3, 
+                linestyle='--', 
+                linewidth=0.8, 
                 color='#9CA3AF',
-                alpha=0.6,
-                style='italic')
-        
-        plt.tight_layout(rect=[0, 0.02, 1, 0.96])
-        
-        # ==================== 儲存與轉換 ====================
-        # 1. 存檔（高解析度）
-        filepath = os.path.join(self.output_dir, f"wind_{port_code}.png")
-        fig.savefig(filepath, 
-                   dpi=150, 
-                   bbox_inches='tight', 
-                   facecolor='white',
-                   edgecolor='none',
-                   pad_inches=0.1)
-        print(f"      💾 圖片已存檔: {filepath}")
-        
-        # 2. 轉 Base64（高解析度）
-        base64_str = self._fig_to_base64(fig, dpi=150)
-        print(f"      ✅ Base64 轉換成功 (長度: {len(base64_str)} 字元)")
-        
-        plt.close(fig)
-        return base64_str
-        
-    except Exception as e:
-        print(f"      ❌ 繪製風速圖失敗 {port_code}: {e}")
-        traceback.print_exc()
-        return None
-
-
-def generate_wave_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
-    """繪製浪高趨勢圖，回傳 Base64 字串（專業優化版）"""
-    if not assessment.raw_records:
-        return None
-        
-    try:
-        df = self._prepare_dataframe(assessment.raw_records)
-        
-        if df['wave_height'].max() < 1.0:
+                zorder=1)
+            ax.set_axisbelow(True)
+            
+            # ==================== 座標軸格式 ====================
+            # X軸日期格式
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d\n%H:%M'))
+            ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
+            ax.xaxis.set_minor_locator(mdates.HourLocator(interval=3))
+            
+            # 旋轉X軸標籤
+            plt.setp(ax.xaxis.get_majorticklabels(), 
+                    rotation=0, 
+                    ha='center', 
+                    fontsize=11,
+                    fontweight='500')
+            
+            # Y軸刻度
+            plt.setp(ax.yaxis.get_majorticklabels(), 
+                    fontsize=11,
+                    fontweight='500')
+            
+            # ==================== 邊框美化 ====================
+            for spine in ['top', 'right']:
+                ax.spines[spine].set_visible(False)
+            
+            for spine in ['bottom', 'left']:
+                ax.spines[spine].set_edgecolor('#9CA3AF')
+                ax.spines[spine].set_linewidth(2)
+            
+            # ==================== 設定Y軸範圍 ====================
+            y_max = max(df['wave_height'].max(), RISK_THRESHOLDS['wave_danger']) * 1.15
+            ax.set_ylim(0, y_max)
+            
+            # ==================== 加入水印 ====================
+            fig.text(0.99, 0.01, 'WHL Marine Technology Division', 
+                    ha='right', 
+                    va='bottom',
+                    fontsize=9, 
+                    color='#9CA3AF',
+                    alpha=0.6,
+                    style='italic')
+            
+            plt.tight_layout(rect=[0, 0.02, 1, 0.96])
+            
+            # ==================== 儲存與轉換 ====================
+            # 1. 存檔（高解析度）
+            filepath = os.path.join(self.output_dir, f"wave_{port_code}.png")
+            fig.savefig(filepath, 
+                    dpi=150, 
+                    bbox_inches='tight', 
+                    facecolor='white',
+                    edgecolor='none',
+                    pad_inches=0.1)
+            print(f"      💾 圖片已存檔: {filepath}")
+            
+            # 2. 轉 Base64（高解析度）
+            base64_str = self._fig_to_base64(fig, dpi=150)
+            print(f"      ✅ Base64 轉換成功 (長度: {len(base64_str)} 字元)")
+            
+            plt.close(fig)
+            return base64_str
+            
+        except Exception as e:
+            print(f"      ❌ 繪製浪高圖失敗 {port_code}: {e}")
+            traceback.print_exc()
             return None
-
-        # 🎨 使用專業樣式
-        plt.style.use('default')
-        
-        # 🔥 設定圖表尺寸和 DPI
-        fig, ax = plt.subplots(figsize=(16, 7), dpi=120)
-        
-        # 設定背景顏色
-        fig.patch.set_facecolor('#FFFFFF')
-        ax.set_facecolor('#F0FDF4')
-        
-        # ==================== 繪製風險區域背景 ====================
-        # 危險區域（紅色）
-        ax.axhspan(RISK_THRESHOLDS['wave_danger'], ax.get_ylim()[1] if len(df) > 0 else 8, 
-                   facecolor='#FEE2E2', alpha=0.3, zorder=0)
-        # 警告區域（橙色）
-        ax.axhspan(RISK_THRESHOLDS['wave_warning'], RISK_THRESHOLDS['wave_danger'], 
-                   facecolor='#FEF3C7', alpha=0.3, zorder=0)
-        # 注意區域（黃色）
-        ax.axhspan(RISK_THRESHOLDS['wave_caution'], RISK_THRESHOLDS['wave_warning'], 
-                   facecolor='#FEF9C3', alpha=0.3, zorder=0)
-        
-        # ==================== 繪製主要數據線 ====================
-        # 浪高線（綠色系，粗實線）
-        line = ax.plot(df['time'], df['wave_height'], 
-                      color='#047857', 
-                      linewidth=4, 
-                      marker='o', 
-                      markersize=7,
-                      markerfacecolor='#10B981',
-                      markeredgecolor='#047857',
-                      markeredgewidth=1.5,
-                      label='Significant Wave Height',
-                      zorder=5,
-                      alpha=0.9)
-        
-        # ==================== 填充區域 ====================
-        # 浪高曲線下方填充（淡綠色）
-        ax.fill_between(df['time'], df['wave_height'], 
-                        alpha=0.25, 
-                        color='#10B981', 
-                        zorder=2)
-        
-        # 高風險時段特別標註（橙色填充）
-        high_risk_mask = df['wave_height'] >= RISK_THRESHOLDS['wave_caution']
-        if high_risk_mask.any():
-            ax.fill_between(df['time'], 
-                           df['wave_height'], 
-                           where=high_risk_mask,
-                           interpolate=True,
-                           color='#F59E0B',
-                           alpha=0.35,
-                           label='High Risk Period',
-                           zorder=3)
-        
-        # ==================== 繪製閾值線 ====================
-        # 危險線
-        ax.axhline(RISK_THRESHOLDS['wave_danger'], 
-                   color="#DC2626", 
-                   linestyle='-', 
-                   linewidth=2.5, 
-                   label=f'🔴 Danger Threshold ({RISK_THRESHOLDS["wave_danger"]} m)', 
-                   zorder=4,
-                   alpha=0.8)
-        
-        # 警告線
-        ax.axhline(RISK_THRESHOLDS['wave_warning'], 
-                   color="#F59E0B", 
-                   linestyle='--', 
-                   linewidth=2.5, 
-                   label=f'🟠 Warning Threshold ({RISK_THRESHOLDS["wave_warning"]} m)', 
-                   zorder=4,
-                   alpha=0.8)
-        
-        # 注意線
-        ax.axhline(RISK_THRESHOLDS['wave_caution'], 
-                   color="#EAB308", 
-                   linestyle=':', 
-                   linewidth=2.2, 
-                   label=f'🟡 Caution Threshold ({RISK_THRESHOLDS["wave_caution"]} m)', 
-                   zorder=4,
-                   alpha=0.7)
-        
-        # ==================== 標註最大值 ====================
-        max_wave_idx = df['wave_height'].idxmax()
-        
-        # 標註最大浪高
-        ax.annotate(f'Max: {df.loc[max_wave_idx, "wave_height"]:.2f} m',
-                   xy=(df.loc[max_wave_idx, 'time'], df.loc[max_wave_idx, 'wave_height']),
-                   xytext=(10, 15),
-                   textcoords='offset points',
-                   fontsize=11,
-                   fontweight='bold',
-                   color='#047857',
-                   bbox=dict(boxstyle='round,pad=0.5', facecolor='#D1FAE5', edgecolor='#10B981', linewidth=2),
-                   arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0', color='#047857', lw=2))
-        
-        # ==================== 標題與標籤 ====================
-        # 主標題
-        ax.set_title(f"🌊 Wave Height Forecast - {assessment.port_name} ({assessment.port_code})", 
-                    fontsize=22, 
-                    fontweight='bold', 
-                    pad=20, 
-                    color='#1F2937',
-                    fontfamily='sans-serif')
-        
-        # 副標題
-        fig.text(0.5, 0.94, '48-Hour Weather Monitoring | Data Source: WNI', 
-                ha='center', 
-                fontsize=12, 
-                color='#6B7280',
-                style='italic')
-        
-        # Y軸標籤
-        ax.set_ylabel('Wave Height (meters)', 
-                     fontsize=15, 
-                     fontweight='600', 
-                     color='#374151',
-                     labelpad=10)
-        
-        # X軸標籤
-        ax.set_xlabel('Date / Time (UTC)', 
-                     fontsize=15, 
-                     fontweight='600', 
-                     color='#374151',
-                     labelpad=10)
-        
-        # ==================== 圖例設定 ====================
-        legend = ax.legend(loc='upper left', 
-                          frameon=True, 
-                          fontsize=12, 
-                          shadow=True, 
-                          fancybox=True,
-                          framealpha=0.95,
-                          edgecolor='#D1D5DB',
-                          facecolor='#FFFFFF',
-                          ncol=2)
-        legend.get_frame().set_linewidth(1.5)
-        
-        # ==================== 網格設定 ====================
-        ax.grid(True, 
-               alpha=0.3, 
-               linestyle='--', 
-               linewidth=0.8, 
-               color='#9CA3AF',
-               zorder=1)
-        ax.set_axisbelow(True)
-        
-        # ==================== 座標軸格式 ====================
-        # X軸日期格式
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d\n%H:%M'))
-        ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
-        ax.xaxis.set_minor_locator(mdates.HourLocator(interval=3))
-        
-        # 旋轉X軸標籤
-        plt.setp(ax.xaxis.get_majorticklabels(), 
-                rotation=0, 
-                ha='center', 
-                fontsize=11,
-                fontweight='500')
-        
-        # Y軸刻度
-        plt.setp(ax.yaxis.get_majorticklabels(), 
-                fontsize=11,
-                fontweight='500')
-        
-        # ==================== 邊框美化 ====================
-        for spine in ['top', 'right']:
-            ax.spines[spine].set_visible(False)
-        
-        for spine in ['bottom', 'left']:
-            ax.spines[spine].set_edgecolor('#9CA3AF')
-            ax.spines[spine].set_linewidth(2)
-        
-        # ==================== 設定Y軸範圍 ====================
-        y_max = max(df['wave_height'].max(), RISK_THRESHOLDS['wave_danger']) * 1.15
-        ax.set_ylim(0, y_max)
-        
-        # ==================== 加入水印 ====================
-        fig.text(0.99, 0.01, 'WHL Marine Technology Division', 
-                ha='right', 
-                va='bottom',
-                fontsize=9, 
-                color='#9CA3AF',
-                alpha=0.6,
-                style='italic')
-        
-        plt.tight_layout(rect=[0, 0.02, 1, 0.96])
-        
-        # ==================== 儲存與轉換 ====================
-        # 1. 存檔（高解析度）
-        filepath = os.path.join(self.output_dir, f"wave_{port_code}.png")
-        fig.savefig(filepath, 
-                   dpi=150, 
-                   bbox_inches='tight', 
-                   facecolor='white',
-                   edgecolor='none',
-                   pad_inches=0.1)
-        print(f"      💾 圖片已存檔: {filepath}")
-        
-        # 2. 轉 Base64（高解析度）
-        base64_str = self._fig_to_base64(fig, dpi=150)
-        print(f"      ✅ Base64 轉換成功 (長度: {len(base64_str)} 字元)")
-        
-        plt.close(fig)
-        return base64_str
-        
-    except Exception as e:
-        print(f"      ❌ 繪製浪高圖失敗 {port_code}: {e}")
-        traceback.print_exc()
-        return None
 
 
 # ================= 風險分析模組 (修正版) =================
