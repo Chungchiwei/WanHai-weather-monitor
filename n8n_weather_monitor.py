@@ -981,13 +981,13 @@ class WeatherMonitorService:
                         </tr>
                             
                         <tr>
-                            <td bgcolor="#7F1D1D" style="padding: 10px 20px;">
+                            <td style="padding: 0 25px;"> 
                                 <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                     <tr>
                                         <td style="font-size: 13px; color: #FEE2E2; font-weight: bold;">
                                             📅 最後更新時間 Last Updated:
                                         </td>
-                                        <td align="right" style="font-size: 13px; color: #ffffff; font-weight: bold;">
+                                        <td bgcolor="#7F1D1D" style="padding: 10px 20px;">
                                             {now_str_TPE} &nbsp;|&nbsp; {now_str_UTC}
                                         </td>
                                     </tr>
@@ -996,12 +996,18 @@ class WeatherMonitorService:
                         </tr>
                         
                         <tr>
-                            <td bgcolor="#FECACA" style="padding: 12px 20px; border-top: 1px solid #EF4444;">
-                                <div style="font-size: 13px; color: #7F1D1D; line-height: 1.5; font-weight: bold; text-align: left;">
-                                    <strong style="color: #991B1B;">📢 Risk Advisory 風險提示：</strong><br>
-                                    請船長及相關人員密切關注天氣變化，評估風險後決定是否調整航行計劃或延遲靠港。<br>
-                                    <span style="color: #991B1B;">Captains and relevant personnel should closely monitor weather changes and assess risks regarding sailing plans or port calls.</span>
-                                </div>
+                            <td style="padding: 0 25px;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <tr>
+                                        <td bgcolor="#FECACA" style="padding: 12px 20px; border-top: 1px solid #EF4444;">
+                                            <div style="font-size: 13px; color: #7F1D1D; line-height: 1.5; font-weight: bold; text-align: left;">
+                                                <strong style="color: #991B1B;">📢 Risk Advisory 風險提示：</strong><br>
+                                                請船長及相關人員密切關注天氣變化，評估風險後決定是否調整航行計劃或延遲靠港。<br>
+                                                <span style="color: #991B1B;">Captains and relevant personnel should closely monitor weather changes and assess risks regarding sailing plans or port calls.</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
                             </td>
                         </tr>
                         
