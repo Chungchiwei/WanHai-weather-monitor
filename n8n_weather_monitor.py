@@ -873,8 +873,8 @@ class WeatherMonitorService:
                 return time_str
         
         # ==================== 初始化設定 ====================
-        # 定義字型
-        font_style = "font-family: 'Microsoft JhengHei', '微軟正黑體', 'Segoe UI', Arial, sans-serif;"
+        # 定義字型 - 更改為更現代的字體組合
+        font_style = "font-family: 'Noto Sans TC', 'Microsoft JhengHei UI', 'Microsoft YaHei UI', 'Segoe UI', Arial, sans-serif;"
         
         # ✅ 時間計算（使用正確的時區處理）
         try:
@@ -896,6 +896,7 @@ class WeatherMonitorService:
             <html>
             <head>
                 <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
             </head>
             <body style="margin: 0; padding: 20px; background-color: #F0F4F8; {font_style}">
                 <div style="max-width: 900px; margin: 0 auto; background-color: #E8F5E9; padding: 40px; border-left: 8px solid #4CAF50; border-radius: 4px; text-align: center;">
@@ -927,6 +928,7 @@ class WeatherMonitorService:
                 <head>
                     <meta charset="UTF-8">
                     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 </head>
                 <body bgcolor="#F0F4F8" style="margin: 0; padding: 0; {font_style}">
                     <center>
@@ -934,9 +936,9 @@ class WeatherMonitorService:
                         
                         <tr>
                             <td style="padding: 25px 25px 0 25px;">
-                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 4px solid #DC2626;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 4px solid #C8102E;">
                                     <tr>
-                                        <td bgcolor="#DC2626" style="padding: 25px 20px;">
+                                        <td bgcolor="#C8102E" style="padding: 25px 20px;">
                                             <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                                 <tr>
                                                     <td width="70" valign="top" style="font-size: 48px; line-height: 1; color: #ffffff;">⚠️</td>
@@ -944,7 +946,7 @@ class WeatherMonitorService:
                                                         <div style="font-size: 26px; font-weight: bold; color: #ffffff; margin-bottom: 5px; line-height: 1.3;">
                                                             WHL Port Weather Risk Monitor
                                                         </div>
-                                                        <div style="font-size: 20px; font-weight: bold; color: #FEE2E2; margin-bottom: 12px; line-height: 1.3;">
+                                                        <div style="font-size: 20px; font-weight: bold; color: #FFFFFF; margin-bottom: 12px; line-height: 1.3;">
                                                             未來 48 小時港口惡劣天候預警系統 <br>
                                                             Weather Warning for Next 48 Hours
                                                         </div>
@@ -955,15 +957,15 @@ class WeatherMonitorService:
                                                     <td align="right" width="300">
                                                         <table border="0" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="border-radius: 10px;">
                                                             <tr>
-                                                                <td align="center" style="padding: 12px 15px;">
+                                                                <td align="center" style="padding: 12px 15px; width: 33%;">
                                                                     <div style="font-size: 32px; font-weight: bold; color: #DC2626; line-height: 1;">{len(risk_groups[3])}</div>
                                                                     <div style="font-size: 12px; color: #666666;">DANGER</div>
                                                                 </td>
-                                                                <td align="center" style="padding: 12px 15px; border-left: 2px solid #F3F4F6;">
+                                                                <td align="center" style="padding: 12px 15px; border-left: 2px solid #F3F4F6; width: 33%;">
                                                                     <div style="font-size: 32px; font-weight: bold; color: #F59E0B; line-height: 1;">{len(risk_groups[2])}</div>
                                                                     <div style="font-size: 12px; color: #666666;">WARNING</div>
                                                                 </td>
-                                                                <td align="center" style="padding: 12px 15px; border-left: 2px solid #F3F4F6;">
+                                                                <td align="center" style="padding: 12px 15px; border-left: 2px solid #F3F4F6; width: 33%;">
                                                                     <div style="font-size: 32px; font-weight: bold; color: #0EA5E9; line-height: 1;">{len(risk_groups[1])}</div>
                                                                     <div style="font-size: 12px; color: #666666;">CAUTION</div>
                                                                 </td>
@@ -1046,13 +1048,13 @@ class WeatherMonitorService:
         html += """
                 <tr>
                     <td style="padding: 25px 25px 15px 25px;">
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FFFBEB; border-left: 5px solid #F59E0B; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(245, 158, 11, 0.15); border-radius: 4px;">
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FFFBEB; border-left: 5px solid #F59E0B; margin-bottom: 25px; border-radius: 4px;">
                             <tr>
                                 <td style="padding: 20px 22px;">
                                     <table border="0" cellpadding="0" cellspacing="0">
                                         <tr>
                                             <td style="font-size: 14px; line-height: 1.6;">
-                                                <div style="font-size: 15px; font-weight: 700; margin-bottom: 15px; color: #92400E; border-bottom: 1px solid rgba(146, 64, 14, 0.2); padding-bottom: 8px;">
+                                                <div style="font-size: 15px; font-weight: 700; margin-bottom: 15px; color: #92400E; border-bottom: 1px solid #F59E0B; padding-bottom: 8px;">
                                                     📋 船隊風險應對措施 Fleet Risk Response Actions:
                                                 </div>
                                                 
@@ -1092,10 +1094,10 @@ class WeatherMonitorService:
                         <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 25px 0;">
                             <tr>
                                 <td style="border-top: 3px dashed #D1D5DB; padding-top: 20px; text-align: center;">
-                                    <div style="font-size: 15px; color: #4B5563; font-weight: 700; letter-spacing: 1px;">
+                                    <div style="font-size: 15px; color: #4B5563; font-weight: 700;">
                                         ⬇️ 以下為各港口詳細氣象風險資料 ⬇️
                                     </div>
-                                    <div style="font-size: 12px; color: #9CA3AF; margin-top: 5px; font-weight: 600; letter-spacing: 0.5px;">
+                                    <div style="font-size: 12px; color: #9CA3AF; margin-top: 5px; font-weight: 600;">
                                         DETAILED WEATHER RISK DATA FOR EACH PORT
                                     </div>
                                 </td>
@@ -1270,48 +1272,48 @@ class WeatherMonitorService:
                             </td>
 
                             <td valign="top" style="padding: 15px; width: 30%;">
-                                <div style="margin-bottom: 10px; display: flex; align-items: flex-start;">
-                                    <div style="width: 24px; font-size: 16px; padding-top: 2px;">💨</div>
-                                    <div style="flex: 1;">
-                                        <span style="font-size: 11px; color: #6B7280; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px;">風速 Wind</span>
-                                        <div style="display: flex; align-items: baseline;">
-                                            <span style="{wind_style} font-size: 16px; font-weight: 700; white-space: nowrap;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <tr>
+                                        <td width="24" valign="top" style="font-size: 16px; padding-top: 2px;">💨</td>
+                                        <td valign="top">
+                                            <span style="font-size: 11px; color: #6B7280; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px;">風速 Wind</span>
+                                            <span style="{wind_style} font-size: 16px; font-weight: 700;">
                                                 {p.max_wind_kts:.0f} <span style="font-size: 12px; font-weight: 500;">kts</span>
                                             </span>
                                             <span style="font-size: 11px; color: {wind_level_color}; margin-left: 6px; font-weight: 600;">
                                                 {wind_level_text}
                                             </span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style="margin-bottom: 10px; display: flex; align-items: flex-start;">
-                                    <div style="width: 24px; font-size: 16px; padding-top: 2px;">🌪️</div>
-                                    <div style="flex: 1;">
-                                        <span style="font-size: 11px; color: #6B7280; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px;">陣風 Gust</span>
-                                        <div style="display: flex; align-items: baseline;">
-                                            <span style="{gust_style} font-size: 16px; font-weight: 700; white-space: nowrap;">
+                                        </td>
+                                    </tr>
+                                </table>
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 10px;">
+                                    <tr>
+                                        <td width="24" valign="top" style="font-size: 16px; padding-top: 2px;">🌪️</td>
+                                        <td valign="top">
+                                            <span style="font-size: 11px; color: #6B7280; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px;">陣風 Gust</span>
+                                            <span style="{gust_style} font-size: 16px; font-weight: 700;">
                                                 {p.max_gust_kts:.0f} <span style="font-size: 12px; font-weight: 500;">kts</span>
                                             </span>
                                             <span style="font-size: 11px; color: {gust_level_color}; margin-left: 6px; font-weight: 600;">
                                                 {gust_level_text}
                                             </span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style="display: flex; align-items: flex-start;">
-                                    <div style="width: 24px; font-size: 16px; padding-top: 2px;">🌊</div>
-                                    <div style="flex: 1;">
-                                        <span style="font-size: 11px; color: #6B7280; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px;">浪高 Wave</span>
-                                        <div style="display: flex; align-items: baseline;">
-                                            <span style="{wave_style} font-size: 16px; font-weight: 700; white-space: nowrap;">
+                                        </td>
+                                    </tr>
+                                </table>
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 10px;">
+                                    <tr>
+                                        <td width="24" valign="top" style="font-size: 16px; padding-top: 2px;">🌊</td>
+                                        <td valign="top">
+                                            <span style="font-size: 11px; color: #6B7280; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px;">浪高 Wave</span>
+                                            <span style="{wave_style} font-size: 16px; font-weight: 700;">
                                                 {p.max_wave:.1f} <span style="font-size: 12px; font-weight: 500;">m</span>
                                             </span>
                                             <span style="font-size: 11px; color: {wave_level_color}; margin-left: 6px; font-weight: 600;">
                                                 {wave_level_text}
                                             </span>
-                                        </div>
-                                    </div>
-                                </div>
+                                        </td>
+                                    </tr>
+                                </table>
                             </td>
 
                             <td valign="top" style="padding: 15px; width: 45%;">
@@ -1400,16 +1402,16 @@ class WeatherMonitorService:
                         <table border="0" cellpadding="0" cellspacing="0" width="100%">
                             <tr>
                                 <td align="left" valign="middle">
-                                    <font size="5" color="#ffffff" face="Arial"><b>
+                                    <font size="5" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
                                         ⛴️ WHL Port Weather Risk Monitor
                                     </b></font><br><br>
-                                    <font size="3" color="#ffffff" face="Arial"><b>
+                                    <font size="3" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
                                         WHL Port Weather Risk Notification
                                     </b></font><br><br>
                                     <table border="0" cellpadding="0" cellspacing="0">
                                         <tr>
                                             <td bgcolor="#0A5999" align="center" valign="middle" style="padding: 6px 12px; border: 1px solid #ffffff;">
-                                                <font size="2" color="#ffffff" face="Arial"><b>
+                                                <font size="2" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
                                                     📊  Weather Forecast System
                                                 </b></font>
                                             </td>
@@ -1421,13 +1423,13 @@ class WeatherMonitorService:
                                     <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#003366">
                                         <tr>
                                             <td align="right" valign="middle" style="padding: 10px 15px; border: 1px solid #ffffff;">
-                                                <font size="1" color="#ffffff" face="Arial"><b>
+                                                <font size="1" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
                                                     REPORT GENERATED
                                                 </b></font><br>
-                                                <font size="3" color="#ffffff" face="Arial"><b>
+                                                <font size="3" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
                                                     {now_str_TPE}
                                                 </b></font><br>
-                                                <font size="2" color="#ffffff" face="Arial">
+                                                <font size="2" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI">
                                                     {now_str_UTC}
                                                 </font>
                                             </td>
@@ -1444,26 +1446,26 @@ class WeatherMonitorService:
                         <table border="0" cellpadding="0" cellspacing="0" width="600">
                             <tr>
                                 <td align="center" valign="top">
-                                    <font size="4" color="#000000" face="Arial"><b>
+                                    <font size="4" color="#000000" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
                                         萬海航運股份有限公司
                                     </b></font><br>
-                                    <font size="3" color="#333333" face="Arial"><b>
+                                    <font size="3" color="#333333" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
                                         WAN HAI LINES LTD.
                                     </b></font><br><br>
                                     
                                     <hr width="100" size="1" color="#cccccc"><br>
                                     
-                                    <font size="2" color="#333333" face="Arial"><b>
+                                    <font size="2" color="#333333" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
                                         Marine Technology Division | Fleet Risk Management Dept.
                                     </b></font><br><br>
                                     
                                     <table border="1" cellpadding="10" cellspacing="0" width="100%" bgcolor="#F3F4F6" bordercolor="#cccccc">
                                         <tr>
                                             <td align="left" valign="top">
-                                                <font size="1" color="#333333" face="Arial"><b>
+                                                <font size="1" color="#333333" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
                                                     ⚠️ 免責聲明 Disclaimer
                                                 </b></font><br>
-                                                <font size="2" color="#666666" face="Arial">
+                                                <font size="2" color="#666666" face="Arial, Noto Sans TC, Microsoft JhengHei UI">
                                                     本信件內容僅供參考，船長仍應依據實際天候狀況與專業判斷採取適當措施。<br>
                                                     This report is for reference only. Captains should take appropriate actions based on actual weather conditions.
                                                 </font>
@@ -1471,7 +1473,7 @@ class WeatherMonitorService:
                                         </tr>
                                     </table>
                                     <br>
-                                    <font size="1" color="#999999" face="Arial">
+                                    <font size="1" color="#999999" face="Arial, Noto Sans TC, Microsoft JhengHei UI">
                                         &copy; {now_str_TPE[:4]} Wan Hai Lines Ltd. All Rights Reserved.
                                     </font>
                                 </td>
