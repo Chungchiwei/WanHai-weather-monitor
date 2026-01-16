@@ -981,14 +981,20 @@ class WeatherMonitorService:
                         </tr>
                             
                         <tr>
-                            <td style="padding: 0 25px;"> 
+                            <td style="padding: 0 25px;">
                                 <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                     <tr>
-                                        <td style="font-size: 13px; color: #FEE2E2; font-weight: bold;">
-                                            📅 最後更新時間 Last Updated:
-                                        </td>
-                                        <td bgcolor="#7F1D1D" style="padding: 10px 20px;">
-                                            {now_str_TPE} &nbsp;|&nbsp; {now_str_UTC}
+                                        <td bgcolor="#7F1D1D" style="padding: 8px 20px;">
+                                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                <tr>
+                                                    <td align="left" style="font-size: 13px; color: #FEE2E2; font-weight: bold;">
+                                                        📅 最後更新時間 Last Updated:
+                                                    </td>
+                                                    <td align="right" style="font-size: 13px; color: #ffffff; font-weight: bold;">
+                                                        {now_str_TPE} | {now_str_UTC}
+                                                    </td>
+                                                </tr>
+                                            </table>
                                         </td>
                                     </tr>
                                 </table>
@@ -1031,24 +1037,30 @@ class WeatherMonitorService:
                 port_codes = ', '.join([f"<strong style='font-size: 17px; color: {style['color']};'>{p.port_code}</strong>" for p in ports])
                 html += f"""
                                         <tr>
-                                            <td style="padding: 20px; border-bottom: 2px solid {style['border']}; background-color: {style['bg']};">
-                                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                                    <tr>
-                                                        <td width="220" valign="top">
-                                                            <div style="font-size: 20px; font-weight: bold; color: {style['color']}; line-height: 1.3;">
-                                                                {style['emoji']} {style['label_zh']} {style['label']}
-                                                            </div>
-                                                            <div style="font-size: 14px; color: #666; margin-top: 4px;">
-                                                                ({len(ports)} 個港口)
-                                                            </div>
-                                                        </td>
-                                                        <td style="font-size: 16px; color: #1F2937; line-height: 2;">
-                                                            {port_codes}
-                                                        </td>
-                                                    </tr>
-                                                </table>
-                                            </td>
-                                        </tr>
+                            <td style="padding: 0 25px;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <tr>
+                                        <td style="padding: 15px 20px; border-bottom: 2px solid {style['border']}; background-color: {style['bg']};">
+                                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                <tr>
+                                                    <td width="220" valign="top">
+                                                        <div style="font-size: 20px; font-weight: bold; color: {style['color']}; line-height: 1.3;">
+                                                            {style['emoji']} {style['label_zh']} {style['label']}
+                                                        </div>
+                                                        <div style="font-size: 14px; color: #666; margin-top: 4px;">
+                                                            ({len(ports)} 個港口)
+                                                        </div>
+                                                    </td>
+                                                    <td style="font-size: 16px; color: #1F2937; line-height: 1.6;">
+                                                        {port_codes}
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
                 """
         
         html += """
