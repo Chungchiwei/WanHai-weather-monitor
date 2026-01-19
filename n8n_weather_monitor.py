@@ -1272,24 +1272,23 @@ class WeatherMonitorService:
                         </td>
                     </tr>
                     
-                    <!-- ==================== 2. 港口清單總表標題 ==================== -->
-                    <tr>
-                        <td style="padding: 25px 25px 0 25px;">
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                <tr>
-                                    <td bgcolor="#1E3A8A" style="padding: 15px 20px; border-radius: 8px 8px 0 0;">
-                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                            <tr>
-                                                <td style="font-size: 22px; font-weight: bold; color: #ffffff;">
-                                                   WHL Port Weather Risk Monitor Weather Warning for Next 48 Hours 
-                                                </td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
+                   <!-- ==================== 2. 港口清單總表標題 ==================== -->
+                        <tr>
+                            <td style="padding: 25px 25px 0 25px;">
+                                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <tr>
+                                        <td bgcolor="#1E3A8A" style="padding: 20px 25px; border-radius: 8px 8px 0 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                            <h2 style="margin: 0; font-size: 24px; font-weight: 700; color: #ffffff; line-height: 1.4; letter-spacing: 0.3px;">
+                                                WHL Port Weather Risk Monitor
+                                            </h2>
+                                            <p style="margin: 8px 0 0 0; font-size: 16px; font-weight: 500; color: #E0E7FF; line-height: 1.3;">
+                                                Weather Warning for Next 48 Hours
+                                            </p>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
                     
                     <!-- ==================== 港口清單內容 ==================== -->
                     <tr>
@@ -1337,30 +1336,37 @@ class WeatherMonitorService:
                         </td>
                     </tr>
                     
+                    <!-- ==================== 3. 資料來源說明 ==================== -->
                     <tr>
                         <td style="padding: 0 25px 20px 25px;">
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#F3F4F6" style="border: 1px solid #D1D5DB; border-top: none; border-radius: 0 0 8px 8px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#F3F4F6">
                                 <tr>
-                                    <td style="padding: 12px 20px; font-size: 13px; color: #4B5563; text-align: center; font-weight: 600;">
-                                        資料來源: Weathernews Inc. (WNI) <br>
-                                        Data Source: Weathernews Inc. (WNI)
+                                    <td style="padding: 15px 20px; font-size: 13px; color: #6B7280; text-align: center; border: 1px solid #D1D5DB; border-top: none; border-radius: 0 0 8px 8px;">
+                                        <strong style="color: #374151;">資料來源: Weathernews Inc. (WNI)</strong><br>
+                                        <span style="color: #9CA3AF;">Data Source: Weathernews Inc. (WNI)</span>
                                     </td>
                                 </tr>
                             </table>
                         </td>
                     </tr>
-                    <tr>
+                    
                     <!-- ==================== 4. 風險提示 ==================== -->
                     <tr>
-                        <td style="padding: 0 25px;">
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                        <td style="padding: 0 25px 20px 25px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FEE2E2">
                                 <tr>
-                                    <td bgcolor="#FECACA" style="padding: 12px 20px; border-top: 1px solid #EF4444;">
-                                        <div style="font-size: 13px; color: #7F1D1D; line-height: 1.5; font-weight: bold; text-align: left;">
-                                            <strong style="color: #991B1B;">📢 Risk Advisory 風險提示：</strong><br>
-                                            請船長及相關人員密切關注天氣變化，評估風險後決定是否調整航行計劃或延遲靠港。<br>
-                                            <span style="color: #991B1B;">Captains and relevant personnel should closely monitor weather changes and assess risks regarding sailing plans or port calls.</span>
-                                        </div>
+                                    <td style="padding: 18px 22px; border-left: 4px solid #DC2626; border-radius: 4px;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                            <tr>
+                                                <td style="font-size: 14px; color: #7F1D1D; line-height: 1.6;">
+                                                    <strong style="font-size: 15px; color: #991B1B;">📢 Risk Advisory 風險提示</strong>
+                                                    <br><br>
+                                                    <span style="font-weight: 600;">請船長及相關人員密切關注天氣變化,評估風險後決定是否調整航行計劃或延遲靠港。</span>
+                                                    <br>
+                                                    <span style="color: #991B1B; font-weight: 500;">Captains and relevant personnel should closely monitor weather changes and assess risks regarding sailing plans or port calls.</span>
+                                                </td>
+                                            </tr>
+                                        </table>
                                     </td>
                                 </tr>
                             </table>
@@ -1369,59 +1375,81 @@ class WeatherMonitorService:
                     
                     <!-- ==================== 5. 應對措施 ==================== -->
                     <tr>
-                        <td style="padding: 25px 25px 15px 25px;">
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FFFBEB; border-left: 5px solid #F59E0B; margin-bottom: 25px; border-radius: 4px;">
+                        <td style="padding: 0 25px 25px 25px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FFFBEB">
                                 <tr>
-                                    <td style="padding: 20px 22px;">
-                                        <table border="0" cellpadding="0" cellspacing="0">
+                                    <td style="padding: 22px 25px; border-left: 5px solid #F59E0B; border-radius: 4px;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                            <!-- 標題 -->
                                             <tr>
-                                                <td style="font-size: 14px; line-height: 1.6;">
-                                                    <div style="font-size: 15px; font-weight: 700; margin-bottom: 15px; color: #92400E; border-bottom: 1px solid #F59E0B; padding-bottom: 8px;">
-                                                        📋 船隊風險應對措施 Fleet Risk Response Actions:
-                                                    </div>
-                                                    
-                                                    <div style="margin-bottom: 12px;">
-                                                        <div style="font-size: 14px; font-weight: 700; color: #451a03;">
-                                                            ✅ 請立即確認貴輪靠泊港口是否在風險名單中，並評估可能影響
-                                                        </div>
-                                                        <div style="font-size: 13px; color: #B45309; margin-top: 3px; font-weight: 500;">
-                                                            Immediately verify if your vessel's port of call is on the alert list and assess potential impacts.
-                                                        </div>
-                                                    </div>
+                                                <td style="padding-bottom: 18px; border-bottom: 2px solid #FCD34D;">
+                                                    <strong style="font-size: 16px; color: #78350F;">📋 船隊風險應對措施 Fleet Risk Response Actions</strong>
+                                                </td>
+                                            </tr>
+                                            
+                                            <!-- 措施 1 -->
+                                            <tr>
+                                                <td style="padding-top: 15px; padding-bottom: 12px;">
+                                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                        <tr>
+                                                            <td width="20" valign="top" style="font-size: 14px;">✅</td>
+                                                            <td>
+                                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">請立即確認貴輪靠泊港口是否在風險名單中,並評估可能影響</strong>
+                                                                <br>
+                                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Immediately verify if your vessel's port of call is on the alert list and assess potential impacts.</span>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
 
-                                                    <div style="margin-bottom: 12px;">
-                                                        <div style="font-size: 14px; font-weight: 700; color: #451a03;">
-                                                            ✅ 根據風險等級制定應對策略，包括可能的靠泊時間調整或替代方案
-                                                        </div>
-                                                        <div style="font-size: 13px; color: #B45309; margin-top: 3px; font-weight: 500;">
-                                                            Formulate response strategies based on risk levels, including schedule adjustments or berthing alternatives.
-                                                        </div>
-                                                    </div>
+                                            <!-- 措施 2 -->
+                                            <tr>
+                                                <td style="padding-bottom: 12px;">
+                                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                        <tr>
+                                                            <td width="20" valign="top" style="font-size: 14px;">✅</td>
+                                                            <td>
+                                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">根據風險等級制定應對策略,包括可能的靠泊時間調整或替代方案</strong>
+                                                                <br>
+                                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Formulate response strategies based on risk levels, including schedule adjustments or berthing alternatives.</span>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
 
-                                                    <div>
-                                                        <div style="font-size: 14px; font-weight: 700; color: #451a03;">
-                                                            ✅ 與船管PIC、當地代理保持密切聯繫，及時報告船舶狀態和決策
-                                                        </div>
-                                                        <div style="font-size: 13px; color: #B45309; margin-top: 3px; font-weight: 500;">
-                                                            Maintain close contact with the PIC and local agents; promptly report vessel status and decisions.
-                                                        </div>
-                                                    </div>
+                                            <!-- 措施 3 -->
+                                            <tr>
+                                                <td>
+                                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                        <tr>
+                                                            <td width="20" valign="top" style="font-size: 14px;">✅</td>
+                                                            <td>
+                                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">與船管PIC、當地代理保持密切聯繫,及時報告船舶狀態和決策</strong>
+                                                                <br>
+                                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Maintain close contact with the PIC and local agents; promptly report vessel status and decisions.</span>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
                                                 </td>
                                             </tr>
                                         </table>
                                     </td>
                                 </tr>
                             </table>
+                        </td>
+                    </tr>
 
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 25px 0;">
+                    <!-- ==================== 6. 分隔線與提示 ==================== -->
+                    <tr>
+                        <td style="padding: 0 25px 25px 25px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                 <tr>
-                                    <td style="border-top: 3px dashed #D1D5DB; padding-top: 20px; text-align: center;">
-                                        <div style="font-size: 15px; color: #4B5563; font-weight: 700;">
-                                            ⬇️ 以下為各港口詳細氣象風險資料 ⬇️
-                                        </div>
-                                        <div style="font-size: 12px; color: #9CA3AF; margin-top: 5px; font-weight: 600;">
-                                            DETAILED WEATHER RISK DATA FOR EACH PORT
-                                        </div>
+                                    <td style="padding-top: 20px; padding-bottom: 20px; border-top: 3px dashed #D1D5DB; text-align: center;">
+                                        <strong style="font-size: 16px; color: #374151;">⬇️ 以下為各港口詳細氣象風險資料 ⬇️</strong>
+                                        <br>
+                                        <span style="font-size: 12px; color: #9CA3AF; letter-spacing: 0.5px;">DETAILED WEATHER RISK DATA FOR EACH PORT</span>
                                     </td>
                                 </tr>
                             </table>
@@ -1741,94 +1769,91 @@ class WeatherMonitorService:
 
         # ==================== 7. 頁尾 ====================
         html += f"""
-                    <tr>
-                        <td bgcolor="#004B97" align="left" valign="top" style="padding: 30px 25px;">
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                <tr>
-                                    <td align="left" valign="middle">
-                                        <font size="5" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                            ⛴️ WHL Port Weather Risk Monitor
-                                        </b></font><br><br>
-                                        <font size="3" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                            WHL Port Weather Risk Notification
-                                        </b></font><br><br>
-                                        <table border="0" cellpadding="0" cellspacing="0">
-                                            <tr>
-                                                <td bgcolor="#0A5999" align="center" valign="middle" style="padding: 6px 12px; border: 1px solid #ffffff;">
-                                                    <font size="2" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                                        📊  Weather Forecast System
-                                                    </b></font>
-                                                </td>
-                                            </tr>
-                                        </table>
-                                    </td>
+                     <!-- ==================== Footer 頁尾區塊 ==================== -->
+                        <tr>
+                            <td bgcolor="#F8F9FA" align="center" style="padding: 40px 25px; border-top: 3px solid #D1D5DB;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="600">
+                                    <!-- 公司名稱 -->
+                                    <tr>
+                                        <td align="center" style="padding-bottom: 8px;">
+                                            <font size="5" color="#1F2937" face="Arial, Noto Sans TC, Microsoft JhengHei UI, sans-serif">
+                                                <strong>萬海航運股份有限公司</strong>
+                                            </font>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td align="center" style="padding-bottom: 20px;">
+                                            <font size="3" color="#4B5563" face="Arial, Noto Sans TC, Microsoft JhengHei UI, sans-serif">
+                                                <strong>WAN HAI LINES LTD.</strong>
+                                            </font>
+                                        </td>
+                                    </tr>
                                     
-                                    <td align="right" valign="bottom" width="220">
-                                        <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#003366">
-                                            <tr>
-                                                <td align="right" valign="middle" style="padding: 10px 15px; border: 1px solid #ffffff;">
-                                                    <font size="1" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                                        REPORT GENERATED
-                                                    </b></font><br>
-                                                    <font size="3" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                                        {now_str_TPE}
-                                                    </b></font><br>
-                                                    <font size="2" color="#ffffff" face="Arial, Noto Sans TC, Microsoft JhengHei UI">
-                                                        {now_str_UTC}
-                                                    </font>
-                                                </td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <td bgcolor="#F8F9FA" align="center" valign="top" style="padding: 30px 20px; border-top: 1px solid #cccccc;">
-                            <table border="0" cellpadding="0" cellspacing="0" width="600">
-                                <tr>
-                                    <td align="center" valign="top">
-                                        <font size="4" color="#000000" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                            萬海航運股份有限公司
-                                        </b></font><br>
-                                        <font size="3" color="#333333" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                            WAN HAI LINES LTD.
-                                        </b></font><br><br>
-                                        
-                                        <hr width="100" size="1" color="#cccccc"><br>
-                                        
-                                        <font size="2" color="#333333" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                            Marine Technology Division | Fleet Risk Management Dept.
-                                        </b></font><br><br>
-                                        
-                                        <table border="1" cellpadding="10" cellspacing="0" width="100%" bgcolor="#F3F4F6" bordercolor="#cccccc">
-                                            <tr>
-                                                <td align="left" valign="top">
-                                                    <font size="1" color="#333333" face="Arial, Noto Sans TC, Microsoft JhengHei UI"><b>
-                                                        ⚠️ 免責聲明 Disclaimer
-                                                    </b></font><br>
-                                                    <font size="2" color="#666666" face="Arial, Noto Sans TC, Microsoft JhengHei UI">
-                                                        本信件內容僅供參考，船長仍應依據實際天候狀況與專業判斷採取適當措施。<br>
-                                                        This report is for reference only. Captains should take appropriate actions based on actual weather conditions.
-                                                    </font>
-                                                </td>
-                                            </tr>
-                                        </table>
-                                        <br>
-                                        <font size="1" color="#999999" face="Arial, Noto Sans TC, Microsoft JhengHei UI">
-                                            &copy; {now_str_TPE[:4]} Wan Hai Lines Ltd. All Rights Reserved.
-                                        </font>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
+                                    <!-- 分隔線 -->
+                                    <tr>
+                                        <td align="center" style="padding-bottom: 20px;">
+                                            <table border="0" cellpadding="0" cellspacing="0" width="120">
+                                                <tr>
+                                                    <td style="border-top: 2px solid #9CA3AF;"></td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                    
+                                    <!-- 部門名稱 -->
+                                    <tr>
+                                        <td align="center" style="padding-bottom: 25px;">
+                                            <font size="2" color="#374151" face="Arial, Noto Sans TC, Microsoft JhengHei UI, sans-serif">
+                                                <strong>Marine Technology Division | Fleet Risk Management Dept.</strong>
+                                            </font>
+                                        </td>
+                                    </tr>
+                                    
+                                    <!-- 免責聲明 -->
+                                    <tr>
+                                        <td>
+                                            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FEF3C7">
+                                                <tr>
+                                                    <td style="padding: 18px 20px; border-left: 4px solid #F59E0B; border-radius: 4px;">
+                                                        <table border="0" cellpadding="0" cellspacing="0">
+                                                            <tr>
+                                                                <td style="padding-bottom: 8px;">
+                                                                    <font size="2" color="#78350F" face="Arial, Noto Sans TC, Microsoft JhengHei UI, sans-serif">
+                                                                        <strong>⚠️ 免責聲明 Disclaimer</strong>
+                                                                    </font>
+                                                                </td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>
+                                                                    <font size="2" color="#92400E" face="Arial, Noto Sans TC, Microsoft JhengHei UI, sans-serif">
+                                                                        本信件內容僅供參考,船長仍應依據實際天候狀況與專業判斷採取適當措施。
+                                                                        <br>
+                                                                        <span style="color: #B45309;">This report is for reference only. Captains should take appropriate actions based on actual weather conditions.</span>
+                                                                    </font>
+                                                                </td>
+                                                            </tr>
+                                                        </table>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                    
+                                    <!-- 版權聲明 -->
+                                    <tr>
+                                        <td align="center" style="padding-top: 25px;">
+                                            <font size="1" color="#9CA3AF" face="Arial, Noto Sans TC, Microsoft JhengHei UI, sans-serif">
+                                                &copy; {now_str_TPE[:4]} Wan Hai Lines Ltd. All Rights Reserved.
+                                            </font>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
                     </table>
-                    </center>
-                </body>
-                </html>
+                </center>
+            </body>
+            </html>
                 """
         
         return html
