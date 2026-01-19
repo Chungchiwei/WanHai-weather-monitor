@@ -1345,8 +1345,13 @@ class WeatherMonitorService:
                                                         {len(ports)}
                                                     </div>
                                                 </td>
-                                                <td style="font-size: 17px; color: #1F2937; line-height: 1.8; padding-left: 20px;">
-                                                    {port_codes}
+                                                <td style="padding-left: 20px;" valign="middle">
+                                                    <div style="font-size: 17px; color: #1F2937; line-height: 1.8; margin-bottom: 8px;">
+                                                        {port_codes}
+                                                    </div>
+                                                    <div style="font-size: 13px; color: #6B7280; line-height: 1.5; font-style: italic;">
+                                                        條件 Criteria: {style['criteria']}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         </table>
