@@ -1434,9 +1434,9 @@ class WeatherMonitorService:
                                                         <tr>
                                                             <td width="20" valign="top" style="font-size: 14px;">✅</td>
                                                             <td>
-                                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">根據風險等級制定應對策略,包括可能的靠泊時間調整或替代方案</strong>
+                                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">根據風險等級制定應對策略,增加靠泊期間纜繩配置、提前申請額外拖船協助，調整靠離泊時間等</strong>
                                                                 <br>
-                                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Formulate response strategies based on risk levels, including schedule adjustments or berthing alternatives.</span>
+                                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Formulate response strategies based on risk levels, including strengthening mooring lines, arranging extra tug assistance in advance, or adjusting berthing/unberthing schedules.</span>
                                                             </td>
                                                         </tr>
                                                     </table>
@@ -1482,7 +1482,7 @@ class WeatherMonitorService:
                 """
 
         # ==================== 6. 詳細港口資料區 ====================
-       styles_detail = {
+        styles_detail = {
                     3: {
                         'color': '#DC2626', 
                         'bg': '#FEF2F2', 
