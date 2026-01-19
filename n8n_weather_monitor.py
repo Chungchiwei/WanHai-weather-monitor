@@ -1113,7 +1113,6 @@ class WeatherMonitorService:
             print("   ⚠️ 沒有風險港口需要生成圖表")
             return
         
-        # 🔧 修正：為所有風險港口生成圖表（不限制等級）
         chart_targets = assessments[:20]  # 最多生成 20 個港口的圖表（避免郵件過大）
         
         print(f"   📊 準備為 {len(chart_targets)} 個港口生成圖表...")
@@ -1231,9 +1230,9 @@ class WeatherMonitorService:
 
         # ==================== 風險港口樣式定義 ====================
         summary_styles = {
-            3: {'emoji': '🔴', 'label': 'HIGHT Risk', 'label_zh': '高度風險', 'color': '#DC2626', 'bg': '#FEF2F2', 'border': '#FCA5A5'},
-            2: {'emoji': '🟠', 'label': 'MEDIUM Risk', 'label_zh': '中度風險', 'color': '#F59E0B', 'bg': '#FFFBEB', 'border': '#FCD34D'},
-            1: {'emoji': '🟡', 'label': 'LOW Risk', 'label_zh': '低度風險', 'color': '#0EA5E9', 'bg': '#F0F9FF', 'border': '#7DD3FC'}
+            3: {'emoji': '🔴', 'label': 'HIGHT RISK', 'label_zh': '高度風險', 'color': '#DC2626', 'bg': '#FEF2F2', 'border': '#FCA5A5'},
+            2: {'emoji': '🟠', 'label': 'MEDIUM RISK', 'label_zh': '中度風險', 'color': '#F59E0B', 'bg': '#FFFBEB', 'border': '#FCD34D'},
+            1: {'emoji': '🟡', 'label': 'LOW RISK', 'label_zh': '低度風險', 'color': '#0EA5E9', 'bg': '#F0F9FF', 'border': '#7DD3FC'}
         }
 
         # ==================== HTML 開始 ====================
@@ -1282,10 +1281,7 @@ class WeatherMonitorService:
                                         <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                             <tr>
                                                 <td style="font-size: 22px; font-weight: bold; color: #ffffff;">
-                                                    📋 風險港口清單總表 Risk Port Summary
-                                                </td>
-                                                <td align="right" style="font-size: 14px; color: #BFDBFE; font-weight: 600;">
-                                                    共 {len(assessments)} 個港口 | Total {len(assessments)} Ports
+                                                   WHL Port Weather Risk Monitor Weather Warning for Next 48 Hours 
                                                 </td>
                                             </tr>
                                         </table>
@@ -1325,9 +1321,6 @@ class WeatherMonitorService:
                                                     <div style="background-color: {style['color']}; color: #ffffff; font-size: 32px; font-weight: bold; padding: 8px 16px; border-radius: 8px; display: inline-block; min-width: 60px;">
                                                         {len(ports)}
                                                     </div>
-                                                    <div style="font-size: 12px; color: #666; margin-top: 4px; font-weight: 600;">
-                                                        個港口 Ports
-                                                    </div>
                                                 </td>
                                                 <td style="font-size: 17px; color: #1F2937; line-height: 1.8; padding-left: 20px;">
                                                     {port_codes}
@@ -1349,61 +1342,14 @@ class WeatherMonitorService:
                             <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#F3F4F6" style="border: 1px solid #D1D5DB; border-top: none; border-radius: 0 0 8px 8px;">
                                 <tr>
                                     <td style="padding: 12px 20px; font-size: 13px; color: #4B5563; text-align: center; font-weight: 600;">
-                                        ⚡ 快速統計：高度風險 {len(risk_groups[3])} 個 | 中度風險 {len(risk_groups[2])} 個 | 低度風險 {len(risk_groups[1])} 個
-                                        <span style="margin-left: 20px; color: #6B7280;">Quick Stats: HEIGHT {len(risk_groups[3])} | MEDIUM {len(risk_groups[2])} | LOW {len(risk_groups[1])}</span>
+                                        資料來源: Weathernews Inc. (WNI) <br>
+                                        Data Source: Weathernews Inc. (WNI)
                                     </td>
                                 </tr>
                             </table>
                         </td>
                     </tr>
-                    
-                    <!-- ==================== 3. 標題橫幅 ==================== -->
                     <tr>
-                        <td style="padding: 25px 25px 0 25px;">
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 4px solid #C8102E;">
-                                <tr>
-                                    <td bgcolor="#C8102E" style="padding: 25px 20px;">
-                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                            <tr>
-                                                <td width="70" valign="top" style="font-size: 48px; line-height: 1; color: #ffffff;">⚠️</td>
-                                                <td valign="middle">
-                                                    <div style="font-size: 26px; font-weight: bold; color: #ffffff; margin-bottom: 5px; line-height: 1.3;">
-                                                        WHL Port Weather Risk Monitor
-                                                    </div>
-                                                    <div style="font-size: 20px; font-weight: bold; color: #FFFFFF; margin-bottom: 12px; line-height: 1.3;">
-                                                        未來 48 小時港口惡劣天候預警系統 <br>
-                                                        Weather Warning for Next 48 Hours
-                                                    </div>
-                                                    <div style="font-size: 16px; color: #ffffff; margin-bottom: 12px;">
-                                                        資料來源: <span style="color: #ffffff; font-weight: bold;">Weathernews Inc. (WNI)</span>
-                                                    </div>
-                                                </td>
-                                                <td align="right" width="300">
-                                                    <table border="0" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="border-radius: 10px;">
-                                                        <tr>
-                                                            <td align="center" style="padding: 12px 15px; width: 33%;">
-                                                                <div style="font-size: 32px; font-weight: bold; color: #DC2626; line-height: 1;">{len(risk_groups[3])}</div>
-                                                                <div style="font-size: 12px; color: #666666;">HIGHT RISK</div>
-                                                            </td>
-                                                            <td align="center" style="padding: 12px 15px; border-left: 2px solid #F3F4F6; width: 33%;">
-                                                                <div style="font-size: 32px; font-weight: bold; color: #F59E0B; line-height: 1;">{len(risk_groups[2])}</div>
-                                                                <div style="font-size: 12px; color: #666666;">MEDIUM RISK</div>
-                                                            </td>
-                                                            <td align="center" style="padding: 12px 15px; border-left: 2px solid #F3F4F6; width: 33%;">
-                                                                <div style="font-size: 32px; font-weight: bold; color: #0EA5E9; line-height: 1;">{len(risk_groups[1])}</div>
-                                                                <div style="font-size: 12px; color: #666666;">LOW RISK</div>
-                                                            </td>
-                                                        </tr>
-                                                    </table>
-                                                </td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-                    
                     <!-- ==================== 4. 風險提示 ==================== -->
                     <tr>
                         <td style="padding: 0 25px;">
@@ -1617,8 +1563,23 @@ class WeatherMonitorService:
                     wave_level_color = "#333"
 
                 # 7. 風險持續時間
-                risk_periods_count = len(p.risk_periods)
-                risk_duration = f"{risk_periods_count * 3}" if risk_periods_count > 0 else "0"
+                if p.risk_periods:
+                    try:
+                        first_risk = datetime.strptime(p.risk_periods[0]['time'], '%Y-%m-%d %H:%M')
+                        last_risk = datetime.strptime(p.risk_periods[-1]['time'], '%Y-%m-%d %H:%M')
+                        duration_hours = int((last_risk - first_risk).total_seconds() / 3600) + 3
+                        
+                        # 限制最大 48 小時
+                        risk_duration = str(min(duration_hours, 48))
+                        
+                        # 如果超過 48 小時，記錄警告
+                        if duration_hours > 48:
+                            print(f"   ⚠️ {p.port_code} 風險持續時間異常: {duration_hours} 小時 (已限制為 48)")
+                    except Exception as e:
+                        print(f"   ❌ {p.port_code} 計算持續時間失敗: {e}")
+                        risk_duration = str(len(p.risk_periods) * 3)
+                else:
+                    risk_duration = "0"
 
                 # 8. 時間格式化
                 w_utc = format_time_display(p.max_wind_time_utc)

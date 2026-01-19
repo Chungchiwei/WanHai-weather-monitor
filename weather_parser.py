@@ -111,14 +111,7 @@ class WeatherParser:
 
     def parse_content(self, content: str, port_timezone: Optional[str] = None) -> Tuple[str, List[WeatherRecord], List[str]]:
         """
-        解析 WNI 氣象檔案內容
-        
-        Args:
-            content: WNI 氣象檔案的文字內容
-            port_timezone: 不使用（保留參數以相容舊版）
-            
-        Returns:
-            Tuple[港口名稱, 氣象記錄列表, 警告訊息列表]
+        解析 WNI 氣象檔案內容（限制 48 小時）
         """
         def _safe_float(val_str):
             clean = val_str.replace('*', '')
@@ -147,9 +140,11 @@ class WeatherParser:
         
         current_year = datetime.now().year
         prev_mmdd = None
-        
-        # ✅ 用於自動偵測 LCT 時區偏移
         lct_offset = None
+        
+        # 🔥 新增：計算 48 小時截止時間
+        now_utc = datetime.now(timezone.utc)
+        cutoff_time = now_utc + timedelta(hours=48)
         
         for line in lines[wind_section_start:]:
             line = line.strip()
@@ -168,35 +163,40 @@ class WeatherParser:
                     warnings.append(f"欄位不足: {line}")
                     continue
                 
-                # ✅ 直接使用 WNI 提供的 UTC 和 LCT 時間
-                utc_date = parts[0]   # 例如：1223
-                utc_time = parts[1]   # 例如：0000
-                local_date = parts[2] # 例如：1223
-                local_time = parts[3] # 例如：0800
+                # 解析時間
+                utc_date = parts[0]
+                utc_time = parts[1]
+                local_date = parts[2]
+                local_time = parts[3]
                 
                 # 處理跨年
                 if prev_mmdd and prev_mmdd > utc_date and prev_mmdd.startswith("12") and utc_date.startswith("01"):
                     current_year += 1
                 prev_mmdd = utc_date
                 
-                # ✅ 建立 naive datetime
+                # 建立 naive datetime
                 dt_utc_naive = datetime.strptime(f"{current_year}{utc_date}{utc_time}", "%Y%m%d%H%M")
                 dt_lct_naive = datetime.strptime(f"{current_year}{local_date}{local_time}", "%Y%m%d%H%M")
                 
-                # ✅ 第一筆資料時自動計算 LCT 時區偏移
+                # 第一筆資料時自動計算 LCT 時區偏移
                 if lct_offset is None:
                     time_diff = dt_lct_naive - dt_utc_naive
                     offset_hours = int(time_diff.total_seconds() / 3600)
                     lct_offset = timezone(timedelta(hours=offset_hours))
                 
-                # ✅ 只標記時區，不做任何轉換
+                # 標記時區
                 dt_utc = dt_utc_naive.replace(tzinfo=timezone.utc)
                 dt_lct = dt_lct_naive.replace(tzinfo=lct_offset)
                 
+                # 🔥 新增：檢查是否超過 48 小時
+                if dt_utc > cutoff_time:
+                    warnings.append(f"跳過超過 48 小時的數據: {dt_utc.strftime('%Y-%m-%d %H:%M')}")
+                    continue  # 跳過這筆記錄
+                
                 # 建立氣象記錄
                 record = WeatherRecord(
-                    time=dt_utc,        # UTC 時間（帶 UTC 時區標記）
-                    lct_time=dt_lct,    # LCT 時間（帶本地時區標記）
+                    time=dt_utc,
+                    lct_time=dt_lct,
                     wind_direction=parts[4],
                     wind_speed_kts=_safe_float(parts[5]),
                     wind_gust_kts=_safe_float(parts[6]),
@@ -213,6 +213,10 @@ class WeatherParser:
         
         if not records:
             raise ValueError("未成功解析任何氣象資料")
+        
+        # 🔥 新增：最終檢查記錄數量
+        if len(records) > 20:
+            warnings.append(f"⚠️ 記錄數量異常: {len(records)} 筆（預期 ≤ 16 筆）")
         
         return port_name, records, warnings
 
