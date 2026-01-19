@@ -1378,31 +1378,7 @@ class WeatherMonitorService:
                             </table>
                         </td>
                     </tr>
-                    
-                    <!-- ==================== 4. 風險提示 ==================== -->
-                    <tr>
-                        <td style="padding: 0 25px 20px 25px;">
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FEE2E2">
-                                <tr>
-                                    <td style="padding: 18px 22px; border-left: 4px solid #DC2626; border-radius: 4px;">
-                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                            <tr>
-                                                <td style="font-size: 14px; color: #7F1D1D; line-height: 1.6;">
-                                                    <strong style="font-size: 15px; color: #991B1B;">📢 Risk Advisory 風險提示</strong>
-                                                    <br><br>
-                                                    <span style="font-weight: 600;">請船長及相關人員密切關注天氣變化,評估風險後決定是否調整航行計劃或延遲靠港。</span>
-                                                    <br>
-                                                    <span style="color: #991B1B; font-weight: 500;">Captains and relevant personnel should closely monitor weather changes and assess risks regarding sailing plans or port calls.</span>
-                                                </td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-                    
-                    <!-- ==================== 5. 應對措施 ==================== -->
+                      <!-- ==================== 4. 應對措施 ==================== -->
                     <tr>
                         <td style="padding: 0 25px 25px 25px;">
                             <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FFFBEB">
