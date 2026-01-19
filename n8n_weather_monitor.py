@@ -1230,9 +1230,33 @@ class WeatherMonitorService:
 
         # ==================== 風險港口樣式定義 ====================
         summary_styles = {
-            3: {'emoji': '🔴', 'label': 'HIGHT RISK', 'label_zh': '高度風險', 'color': '#DC2626', 'bg': '#FEF2F2', 'border': '#FCA5A5'},
-            2: {'emoji': '🟠', 'label': 'MEDIUM RISK', 'label_zh': '中度風險', 'color': '#F59E0B', 'bg': '#FFFBEB', 'border': '#FCD34D'},
-            1: {'emoji': '🟡', 'label': 'LOW RISK', 'label_zh': '低度風險', 'color': '#0EA5E9', 'bg': '#F0F9FF', 'border': '#7DD3FC'}
+            3: {
+                'emoji': '🔴', 
+                'label': 'HIGH RISK', 
+                'label_zh': '高度風險', 
+                'color': '#DC2626', 
+                'bg': '#FEF2F2', 
+                'border': '#FCA5A5',
+                'criteria': '風速 Wind > 34 kts / 陣風 Gust > 41 kts / 浪高 Wave > 4.0 m'
+            },
+            2: {
+                'emoji': '🟠', 
+                'label': 'MEDIUM RISK', 
+                'label_zh': '中度風險', 
+                'color': '#F59E0B', 
+                'bg': '#FFFBEB', 
+                'border': '#FCD34D',
+                'criteria': '風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m'
+            },
+            1: {
+                'emoji': '🟡', 
+                'label': 'LOW RISK', 
+                'label_zh': '低度風險', 
+                'color': '#0EA5E9', 
+                'bg': '#F0F9FF', 
+                'border': '#7DD3FC',
+                'criteria': '風速 Wind > 22 kts / 陣風 Gust > 28 kts / 浪高 Wave > 2.5 m'
+            }
         }
 
         # ==================== HTML 開始 ====================
@@ -1458,35 +1482,35 @@ class WeatherMonitorService:
                 """
 
         # ==================== 6. 詳細港口資料區 ====================
-        styles_detail = {
-            3: {
-                'color': '#DC2626', 
-                'bg': '#FEF2F2', 
-                'title_zh': '🔴 危險等級港口', 
-                'title_en': 'HIGHT RISK LEVEL PORTS',
-                'border': '#DC2626', 
-                'header_bg': '#FEE2E2', 
-                'desc': '條件 Criteria: 風速 Wind > 34 kts / 陣風 Gust > 41 kts / 浪高 Wave > 4.0 m'
-            },
-            2: {
-                'color': '#F59E0B', 
-                'bg': '#FFFBEB', 
-                'title_zh': '🟠 警告等級港口', 
-                'title_en': 'MEDIUM RISK LEVEL PORTS',
-                'border': '#F59E0B', 
-                'header_bg': '#FEF3C7', 
-                'desc': '條件 Criteria: 風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m'
-            },
-            1: {
-                'color': '#0EA5E9', 
-                'bg': '#F0F9FF', 
-                'title_zh': '🟡 注意等級港口', 
-                'title_en': 'LOW RISK LEVEL PORTS',
-                'border': '#0EA5E9', 
-                'header_bg': '#E0F2FE', 
-                'desc': '條件 Criteria: 風速 Wind > 22 kts / 陣風 Gust > 28 kts / 浪高 Wave > 2.5 m'
-            }
-        }
+       styles_detail = {
+                    3: {
+                        'color': '#DC2626', 
+                        'bg': '#FEF2F2', 
+                        'title_zh': '🔴 危險等級港口', 
+                        'title_en': 'HIGH RISK LEVEL PORTS',
+                        'border': '#DC2626', 
+                        'header_bg': '#FEE2E2', 
+                        'desc': '條件 Criteria: 風速 Wind > 34 kts / 陣風 Gust > 41 kts / 浪高 Wave > 4.0 m'
+                    },
+                    2: {
+                        'color': '#F59E0B', 
+                        'bg': '#FFFBEB', 
+                        'title_zh': '🟠 警告等級港口', 
+                        'title_en': 'MEDIUM RISK LEVEL PORTS',
+                        'border': '#F59E0B', 
+                        'header_bg': '#FEF3C7', 
+                        'desc': '條件 Criteria: 風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m'
+                    },
+                    1: {
+                        'color': '#0EA5E9', 
+                        'bg': '#F0F9FF', 
+                        'title_zh': '🟡 注意等級港口', 
+                        'title_en': 'LOW RISK LEVEL PORTS',
+                        'border': '#0EA5E9', 
+                        'header_bg': '#E0F2FE', 
+                        'desc': '條件 Criteria: 風速 Wind > 22 kts / 陣風 Gust > 28 kts / 浪高 Wave > 2.5 m'
+                    }
+                }
 
         # 遍歷每個風險等級
         for level in [3, 2, 1]:
