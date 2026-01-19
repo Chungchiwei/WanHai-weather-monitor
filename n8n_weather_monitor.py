@@ -1415,7 +1415,7 @@ class WeatherMonitorService:
                                                         <tr>
                                                             <td width="20" valign="top" style="font-size: 14px;">✅</td>
                                                             <td>
-                                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">根據風險等級制定應對策略,增加靠泊期間纜繩配置、提前申請額外拖船協助，調整靠離泊時間等</strong>
+                                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">根據風險等級制定應對策略,如:拋錨候泊改為安全水域備車漂航、提前申請額外拖船協助、加強繫泊纜繩、或調整靠離泊計畫等</strong>
                                                                 <br>
                                                                 <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Formulate response strategies based on risk levels, including strengthening mooring lines, arranging extra tug assistance in advance, or adjusting berthing/unberthing schedules.</span>
                                                             </td>
