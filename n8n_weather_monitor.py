@@ -38,9 +38,9 @@ except ImportError as e:
 AEDYN_USERNAME = os.getenv('AEDYN_USERNAME', 'harry_chung@wanhai.com')
 AEDYN_PASSWORD = os.getenv('AEDYN_PASSWORD', 'wanhai888')
 
-# 2. Gmail 接力發信用
-MAIL_USER = os.getenv('MAIL_USER')
-MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')
+# 2. G 接力發信用
+MAIL_USER = os.getenv('MAIL_USER',"harry810403@gmail.com")
+MAIL_PASSWORD = os.getenv('MAIL_PASSWORD',"gezvuqtlpreffnmi")
 
 # 3. 接力信件的目標與暗號
 TARGET_EMAIL = os.getenv('TARGET_EMAIL', 'harry_chung@wanhai.com')
@@ -1926,4 +1926,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
