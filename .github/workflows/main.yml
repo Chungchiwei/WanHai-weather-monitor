@@ -32,11 +32,16 @@ jobs:
           pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      # 4. 執行主程式
+# 4. 執行主程式
       # 請確認這裡的檔名跟你上傳的一模一樣
       - name: Run Weather Script
         env:
           # 如果你有密碼或 Token，之後要設在 Secrets 裡，這裡是用來讀取的
           LINE_TOKEN: ${{ secrets.LINE_TOKEN }} 
+          
+          # ✅ 新增這兩行 (請注意縮排要跟上面的 LINE_TOKEN 對齊)
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          
         run: |
           python n8n_weather_monitor.py
