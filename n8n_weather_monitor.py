@@ -948,81 +948,81 @@ class GmailRelayNotifier:
 
     def send_trigger_email(self, report_data: dict, report_html: str, 
                        images: Dict[str, str] = None) -> bool:
-    """發送觸發信件"""
-    if not self.user or not self.password:
-        print("⚠️ 未設定 Gmail 帳密 (MAIL_USER / MAIL_PASSWORD)")
-        return False
-
-    # ✅ 新增:檢查密碼格式
-    print(f"🔍 Gmail 設定檢查:")
-    print(f"   帳號: {self.user}")
-    print(f"   密碼長度: {len(self.password)}")
-    print(f"   密碼格式: {'✅ 正確 (16字元)' if len(self.password) == 16 else '❌ 錯誤'}")
-    print(f"   密碼包含空格: {'❌ 是' if ' ' in self.password else '✅ 否'}")
-
-    msg = MIMEMultipart('alternative')
-    msg['From'] = self.user
-    msg['To'] = self.target
-    msg['Subject'] = self.subject_trigger
+        """發送觸發信件"""
+        if not self.user or not self.password:
+            print("⚠️ 未設定 Gmail 帳密 (MAIL_USER / MAIL_PASSWORD)")
+            return False
     
-    json_text = json.dumps(report_data, ensure_ascii=False, indent=2)
-    msg.attach(MIMEText(json_text, 'plain', 'utf-8'))
-    msg.attach(MIMEText(report_html, 'html', 'utf-8'))
-
-    try:
-        print(f"📧 正在透過 Gmail 發送報表給 {self.target}...")
-        
-        # ✅ 新增:更詳細的連線過程
-        print("   🔌 正在連線到 smtp.gmail.com:587...")
-        server = smtplib.SMTP("smtp.gmail.com", 587, timeout=30)
-        print("   ✅ 連線成功")
-        
-        print("   🤝 正在發送 EHLO...")
-        server.ehlo()
-        print("   ✅ EHLO 成功")
-        
-        print("   🔒 正在啟動 TLS 加密...")
-        server.starttls()
-        print("   ✅ TLS 啟動成功")
-        
-        print("   🤝 正在重新發送 EHLO...")
-        server.ehlo()
-        print("   ✅ EHLO 成功")
-        
-        print(f"   🔑 正在登入 {self.user}...")
-        server.login(self.user, self.password)
-        print("   ✅ 登入成功")
-        
-        print("   📨 正在傳送郵件...")
-        server.sendmail(self.user, self.target, msg.as_string())
-        print("   ✅ 郵件傳送成功")
-        
-        server.quit()
-        print(f"✅ Email 發送成功!")
-        return True
-        
-    except smtplib.SMTPAuthenticationError as e:
-        print(f"❌ Gmail 認證失敗: {e}")
-        print(f"   錯誤代碼: {e.smtp_code}")
-        print(f"   錯誤訊息: {e.smtp_error}")
-        print("\n   可能原因:")
-        print("   1. 應用程式密碼錯誤或已過期")
-        print("   2. 帳號被 Google 標記為可疑")
-        print("   3. 帳號曾被盜用,目前受限")
-        print("\n   解決方法:")
-        print("   → 前往: https://accounts.google.com/DisplayUnlockCaptcha")
-        print("   → 完成驗證後重新產生應用程式密碼")
-        return False
+        # ✅ 新增:檢查密碼格式
+        print(f"🔍 Gmail 設定檢查:")
+        print(f"   帳號: {self.user}")
+        print(f"   密碼長度: {len(self.password)}")
+        print(f"   密碼格式: {'✅ 正確 (16字元)' if len(self.password) == 16 else '❌ 錯誤'}")
+        print(f"   密碼包含空格: {'❌ 是' if ' ' in self.password else '✅ 否'}")
     
-    except smtplib.SMTPException as e:
-        print(f"❌ SMTP 錯誤: {e}")
-        return False
+        msg = MIMEMultipart('alternative')
+        msg['From'] = self.user
+        msg['To'] = self.target
+        msg['Subject'] = self.subject_trigger
         
-    except Exception as e:
-        print(f"❌ Gmail 發送失敗: {e}")
-        print(f"   錯誤類型: {type(e).__name__}")
-        traceback.print_exc()
-        return False
+        json_text = json.dumps(report_data, ensure_ascii=False, indent=2)
+        msg.attach(MIMEText(json_text, 'plain', 'utf-8'))
+        msg.attach(MIMEText(report_html, 'html', 'utf-8'))
+    
+        try:
+            print(f"📧 正在透過 Gmail 發送報表給 {self.target}...")
+            
+            # ✅ 新增:更詳細的連線過程
+            print("   🔌 正在連線到 smtp.gmail.com:587...")
+            server = smtplib.SMTP("smtp.gmail.com", 587, timeout=30)
+            print("   ✅ 連線成功")
+            
+            print("   🤝 正在發送 EHLO...")
+            server.ehlo()
+            print("   ✅ EHLO 成功")
+            
+            print("   🔒 正在啟動 TLS 加密...")
+            server.starttls()
+            print("   ✅ TLS 啟動成功")
+            
+            print("   🤝 正在重新發送 EHLO...")
+            server.ehlo()
+            print("   ✅ EHLO 成功")
+            
+            print(f"   🔑 正在登入 {self.user}...")
+            server.login(self.user, self.password)
+            print("   ✅ 登入成功")
+            
+            print("   📨 正在傳送郵件...")
+            server.sendmail(self.user, self.target, msg.as_string())
+            print("   ✅ 郵件傳送成功")
+            
+            server.quit()
+            print(f"✅ Email 發送成功!")
+            return True
+            
+        except smtplib.SMTPAuthenticationError as e:
+            print(f"❌ Gmail 認證失敗: {e}")
+            print(f"   錯誤代碼: {e.smtp_code}")
+            print(f"   錯誤訊息: {e.smtp_error}")
+            print("\n   可能原因:")
+            print("   1. 應用程式密碼錯誤或已過期")
+            print("   2. 帳號被 Google 標記為可疑")
+            print("   3. 帳號曾被盜用,目前受限")
+            print("\n   解決方法:")
+            print("   → 前往: https://accounts.google.com/DisplayUnlockCaptcha")
+            print("   → 完成驗證後重新產生應用程式密碼")
+            return False
+        
+        except smtplib.SMTPException as e:
+            print(f"❌ SMTP 錯誤: {e}")
+            return False
+            
+        except Exception as e:
+            print(f"❌ Gmail 發送失敗: {e}")
+            print(f"   錯誤類型: {type(e).__name__}")
+            traceback.print_exc()
+            return False
 
 
 # ================= 主服務類別 (修改版) =================
@@ -1952,5 +1952,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
