@@ -38,9 +38,9 @@ except ImportError as e:
 AEDYN_USERNAME = os.getenv('AEDYN_USERNAME', 'harry_chung@wanhai.com')
 AEDYN_PASSWORD = os.getenv('AEDYN_PASSWORD', 'wanhai888')
 
-# 2. G 接力發信用
-MAIL_USER = "harry810403@gmail.com"
-MAIL_PASSWORD = "gezvuqtlpreffnmi"
+# 2. Gmail 接力發信用
+MAIL_USER = os.getenv('MAIL_USER')
+MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')
 
 # 3. 接力信件的目標與暗號
 TARGET_EMAIL = os.getenv('TARGET_EMAIL', 'harry_chung@wanhai.com')
@@ -941,8 +941,8 @@ class GmailRelayNotifier:
     """Gmail 接力發信器"""
     
     def __init__(self):
-        self.user = "harry810403@gmail.com"
-        self.password = "gezvuqtlpreffnmi"
+        self.user = MAIL_USER
+        self.password = MAIL_PASSWORD
         self.target = TARGET_EMAIL
         self.subject_trigger = TRIGGER_SUBJECT
 
@@ -1926,6 +1926,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
 
