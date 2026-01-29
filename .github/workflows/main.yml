@@ -1,13 +1,11 @@
 name: Daily Weather Report
 
-# 設定觸發時間
 on:
   schedule:
-    # GitHub 用的是 UTC 時間 (台灣時間 -8小時)
-    # 台灣 08:00 = UTC 00:00
-    - cron: '0 0 * * *'  # ✅ 修正:移除逗號和多餘空格
+    # UTC 00:00 = 台灣時間 08:00 (UTC+8)
+    - cron: '0 0 * * *'
   
-  # 讓你也可以手動按按鈕執行 (測試用)
+  # 手動執行按鈕
   workflow_dispatch:
 
 jobs:
@@ -15,23 +13,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. 把你的程式碼下載到虛擬機
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 2. 設定 Python 環境
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      # 3. 安裝套件
       - name: Install dependencies
         run: |
           pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      # 4. 執行主程式
       - name: Run Weather Script
         env:
           LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
