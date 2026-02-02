@@ -1406,71 +1406,71 @@ class WeatherMonitorService:
                     </tr>
                       <!-- ==================== 4. 應對措施 ==================== -->
                     <tr>
-                        <td style="padding: 0 25px 25px 25px;">
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FFFBEB">
-                                <tr>
-                                    <td style="padding: 22px 25px; border-left: 5px solid #F59E0B; border-radius: 4px;">
-                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                            <!-- 標題 -->
-                                            <tr>
-                                                <td style="padding-bottom: 18px; border-bottom: 2px solid #FCD34D;">
-                                                    <strong style="font-size: 16px; color: #78350F;">📋 船隊風險應對措施 Fleet Risk Response Actions</strong>
-                                                </td>
-                                            </tr>
-                                            
-                                            <!-- 措施 1 -->
-                                            <tr>
-                                                <td style="padding-top: 15px; padding-bottom: 12px;">
-                                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                                        <tr>
-                                                            <td width="20" valign="top" style="font-size: 14px;">✅</td>
-                                                            <td>
-                                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">請立即確認貴輪靠泊港口是否在風險名單中,並評估可能影響</strong>
-                                                                <br>
-                                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Immediately verify if your vessel's port of call is on the alert list and assess potential impacts.</span>
-                                                            </td>
-                                                        </tr>
-                                                    </table>
-                                                </td>
-                                            </tr>
+    <td style="padding: 0 25px 25px 25px;">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FFFBEB">
+            <tr>
+                <td style="padding: 22px 25px; border-left: 5px solid #F59E0B; border-radius: 4px;">
+                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                        <!-- 標題 -->
+                        <tr>
+                            <td style="padding-bottom: 18px; border-bottom: 2px solid #FCD34D;">
+                                <strong style="font-size: 16px; color: #78350F;">📋 船隊風險應對措施 Fleet Risk Response Actions</strong>
+                            </td>
+                        </tr>
+                        
+                        <!-- 措施 1: 增加與代理核實氣象 -->
+                        <tr>
+                            <td style="padding-top: 15px; padding-bottom: 12px;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <tr>
+                                        <td width="20" valign="top" style="font-size: 14px;">✅</td>
+                                        <td>
+                                            <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">請立即確認貴輪靠泊港口是否在風險名單中。除參照氣象預報外，亦務必與當地代理核實港口現場天候，以綜合評估潛在影響。</strong>
+                                            <br>
+                                            <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Immediately verify if your vessel's port of call is on the alert list. In addition to weather forecasts, cross-check local weather conditions with the local agent to assess potential impacts.</span>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
 
-                                            <!-- 措施 2 -->
-                                            <tr>
-                                                <td style="padding-bottom: 12px;">
-                                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                                        <tr>
-                                                            <td width="20" valign="top" style="font-size: 14px;">✅</td>
-                                                            <td>
-                                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">根據風險等級制定應對策略,如:拋錨候泊改為安全水域備車漂航、提前申請額外拖船協助、加強繫泊纜繩、或調整靠離泊計畫等</strong>
-                                                                <br>
-                                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Formulate response strategies based on risk levels, including Drifting instant anchor, strengthening mooring lines, arranging extra tug assistance in advance, or adjusting berthing/unberthing schedules.</span>
-                                                            </td>
-                                                        </tr>
-                                                    </table>
-                                                </td>
-                                            </tr>
+                        <!-- 措施 2: 修正漂航英文術語 -->
+                        <tr>
+                            <td style="padding-bottom: 12px;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <tr>
+                                        <td width="20" valign="top" style="font-size: 14px;">✅</td>
+                                        <td>
+                                            <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">根據風險等級制定應對策略，如：改至安全水域備車漂航以替代拋錨、提前申請額外拖船協助、加強繫泊纜繩、或調整靠離泊計畫等。</strong>
+                                            <br>
+                                            <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Formulate response strategies based on risk levels, such as drifting in safe waters with engines on standby instead of anchoring, arranging extra tug assistance in advance, reinforcing mooring arrangements, or adjusting berthing/unberthing schedules.</span>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
 
-                                            <!-- 措施 3 -->
-                                            <tr>
-                                                <td>
-                                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                                        <tr>
-                                                            <td width="20" valign="top" style="font-size: 14px;">✅</td>
-                                                            <td>
-                                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">與船管PIC、當地代理保持密切聯繫,及時報告船舶狀態和決策</strong>
-                                                                <br>
-                                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Maintain close contact with the PIC and local agents; promptly report vessel status and decisions.</span>
-                                                            </td>
-                                                        </tr>
-                                                    </table>
-                                                </td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
+                        <!-- 措施 3: 優化溝通決策用語 -->
+                        <tr>
+                            <td>
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <tr>
+                                        <td width="20" valign="top" style="font-size: 14px;">✅</td>
+                                        <td>
+                                            <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">與船管PIC、當地代理保持密切聯繫，及時報告船舶狀態和決策。</strong>
+                                            <br>
+                                            <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Maintain close contact with the PIC and local agents; promptly report vessel status and operational decisions.</span>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    </td>
+</tr>
 
                     <!-- ==================== 6. 分隔線與提示 ==================== -->
                     <tr>
@@ -1952,6 +1952,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
