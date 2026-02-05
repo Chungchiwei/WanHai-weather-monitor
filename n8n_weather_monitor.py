@@ -571,8 +571,9 @@ class ChartGenerator:
         try:
             df = self._prepare_weather_dataframe(assessment.weather_records)
             
-            # ✅ 過濾有效能見度資料
+            # ✅ 過濾有效能見度資料（加入 visibility_km 欄位）
             df = df[df['visibility_m'].notna()]
+            df['visibility_km'] = df['visibility_m'] / 1000  # 轉換為 km
             df['visibility_nm'] = df['visibility_m'] / 1852  # 轉換為海浬
             
             if df.empty:
@@ -689,6 +690,7 @@ class ChartGenerator:
             print(f"      ❌ 繪製48h能見度圖失敗 {port_code}: {e}")
             traceback.print_exc()
             return None
+
 
 
         

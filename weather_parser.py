@@ -238,7 +238,7 @@ class WeatherParser:
             return '48h'
 
     def parse_content(self, content: str, port_timezone: Optional[str] = None, 
-                     max_hours: Optional[int] = 48) -> Tuple[str, List[WeatherRecord], List[WeatherConditionRecord], List[str]]:
+                    max_hours: Optional[int] = 48) -> Tuple[str, List[WeatherRecord], List[WeatherConditionRecord], List[str]]:
         """
         解析 WNI 氣象檔案內容(包含風浪 + 天氣狀況)
         
@@ -260,10 +260,7 @@ class WeatherParser:
             except ValueError:
                 return default
 
-        # 在解析天氣資料時
-        temp = _safe_float(parts[4], default=None)  # ✅ 無效時回傳 None
-        precip = _safe_float(parts[5], default=0.0)  # 降雨量預設 0.0
-        pressure = _safe_float(parts[6], default=None)  # ✅ 無效時回傳 None
+        # ✅ 移除錯誤的三行程式碼
         lines = content.strip().split('\n')
         warnings = []
         wind_wave_records = []
@@ -344,12 +341,12 @@ class WeatherParser:
                     time=dt_utc,
                     lct_time=dt_lct,
                     wind_direction=parts[4],
-                    wind_speed_kts=_safe_float(parts[5]),
-                    wind_gust_kts=_safe_float(parts[6]),
+                    wind_speed_kts=_safe_float(parts[5], default=0.0),
+                    wind_gust_kts=_safe_float(parts[6], default=0.0),
                     wave_direction=parts[7],
-                    wave_height=_safe_float(parts[8]),
-                    wave_max=_safe_float(parts[9]),
-                    wave_period=_safe_float(parts[10])
+                    wave_height=_safe_float(parts[8], default=0.0),
+                    wave_max=_safe_float(parts[9], default=0.0),
+                    wave_period=_safe_float(parts[10], default=0.0)
                 )
                 wind_wave_records.append(record)
                 
@@ -414,10 +411,10 @@ class WeatherParser:
                         warnings.append(f"跳過超過 {max_hours} 小時的天氣數據: {dt_utc.strftime('%Y-%m-%d %H:%M')}")
                         continue
                     
-                    # 解析天氣資料
-                    temp = _safe_float(parts[4])
-                    precip = _safe_float(parts[5])
-                    pressure = _safe_float(parts[6])
+                    # ✅ 正確位置：在迴圈內部解析天氣資料
+                    temp = _safe_float(parts[4], default=None)
+                    precip = _safe_float(parts[5], default=0.0)
+                    pressure = _safe_float(parts[6], default=None)
                     visibility = parts[7]
                     weather_code = parts[8] if len(parts) > 8 else "N/A"
                     
@@ -449,6 +446,7 @@ class WeatherParser:
             warnings.append(f"⚠️ 天氣記錄數量異常: {len(weather_records)} 筆(預期 ≤ {expected_weather_records} 筆)")
         
         return port_name, wind_wave_records, weather_records, warnings
+
 
     def parse_content_7d(self, content: str, port_timezone: Optional[str] = None) -> Tuple[str, List[WeatherRecord], List[WeatherConditionRecord], List[str]]:
         """
