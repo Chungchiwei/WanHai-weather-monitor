@@ -109,7 +109,11 @@ class RiskAssessment:
     min_pressure_time_utc: str = ""
     min_pressure_time_lct: str = ""
     
-    # ✅ 能見度不良時段列表（改為時段格式）
+    # ✅ 新增：能見度時間欄位（這兩行是關鍵！）
+    min_visibility_time_utc: str = ""
+    min_visibility_time_lct: str = ""
+    
+    # ✅ 能見度不良時段列表
     poor_visibility_periods: List[Dict[str, Any]] = field(default_factory=list)
     
     raw_records: Optional[List[WeatherRecord]] = None
@@ -121,6 +125,7 @@ class RiskAssessment:
         for key in ['raw_records', 'weather_records', 'chart_base64_list']:
             d.pop(key, None)
         return d
+
     
     
 # ================= 繪圖模組 =================
@@ -1456,56 +1461,60 @@ class WeatherMonitorService:
         return report_data
 
     def _analyze_temperature_ports(self) -> List[RiskAssessment]:
-        """✅ 專門分析低溫港口（獨立於主風險分析）- 修正版"""
+        """✅ 專門分析低溫港口（獨立於主風險分析）- 完整修正版"""
         temp_assessments = []
         total = len(self.crawler.port_list)
         
+        print(f"   🔍 開始分析 {total} 個港口的溫度資料...")
+        
         for i, port_code in enumerate(self.crawler.port_list, 1):
             try:
-                # 取得 7d 天氣資料
-                data_7d = self.db.get_latest_content_7d(port_code)
-                if not data_7d:
-                    continue
+                # ✅ 優先使用 7d 資料，無則用 48h
+                data = self.db.get_latest_content_7d(port_code)
+                if not data:
+                    data = self.db.get_latest_content(port_code)
+                    if not data:
+                        continue
                 
-                content_7d, issued_7d, name_7d = data_7d
+                content, issued, name = data
                 
                 info = self.crawler.get_port_info(port_code)
                 if not info:
                     continue
                 
-                # ✅ 修正：正確呼叫解析函式
+                # ✅ 自動偵測並解析
                 parser = WeatherParser()
-                port_name_7d, wind_records_7d, weather_records_7d, warnings_7d = parser.parse_content_7d(content_7d)
+                forecast_type = parser.detect_forecast_type(content)
                 
-                if not weather_records_7d:
-                    print(f"   [{i}/{total}] ⚠️ {port_code}: 無天氣記錄")
+                if forecast_type == '7d':
+                    port_name, wind_records, weather_records, warnings = parser.parse_content_7d(content)
+                else:
+                    port_name, wind_records, weather_records, warnings = parser.parse_content_48h(content)
+                
+                if not weather_records:
                     continue
                 
-                # ✅ 修正：過濾有效的溫度記錄
+                # ✅ 過濾有效的溫度記錄
                 valid_temp_records = [
-                    r for r in weather_records_7d 
+                    r for r in weather_records 
                     if r.temperature is not None 
                     and isinstance(r.temperature, (int, float))
-                    and r.temperature > -100  # 排除異常值
-                    and r.temperature < 100
+                    and -100 < r.temperature < 100
                 ]
                 
                 if not valid_temp_records:
-                    print(f"   [{i}/{total}] ⚠️ {port_code}: 無有效溫度資料")
                     continue
                 
                 # 檢查是否有低溫記錄
                 min_temp_record = min(valid_temp_records, key=lambda r: r.temperature)
                 
-                print(f"   [{i}/{total}] 🔍 {port_code}: 檢查溫度 {min_temp_record.temperature:.1f}°C (閾值: {RISK_THRESHOLDS['temp_freezing']}°C)")
-                
                 if min_temp_record.temperature < RISK_THRESHOLDS['temp_freezing']:
                     # 建立低溫評估
                     assessment = RiskAssessment(
                         port_code=port_code,
-                        port_name=info.get('port_name', port_name_7d),
+                        port_name=info.get('port_name', port_name),
                         country=info.get('country', 'N/A'),
-                        risk_level=0,  # 低溫不計入風險等級
+                        risk_level=0,
                         risk_factors=[f"低溫 {min_temp_record.temperature:.1f}°C"],
                         
                         max_wind_kts=0,
@@ -1526,10 +1535,10 @@ class WeatherMonitorService:
                         min_temp_time_lct=f"{min_temp_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
                         
                         risk_periods=[],
-                        issued_time=issued_7d,
+                        issued_time=issued,
                         latitude=info.get('latitude', 0.0),
                         longitude=info.get('longitude', 0.0),
-                        weather_records=weather_records_7d
+                        weather_records=weather_records
                     )
                     
                     temp_assessments.append(assessment)
@@ -1541,6 +1550,7 @@ class WeatherMonitorService:
         
         print(f"\n✅ 低溫分析完成：共找到 {len(temp_assessments)} 個低溫港口")
         return temp_assessments
+
 
 
     def _analyze_visibility_ports(self) -> List[RiskAssessment]:
