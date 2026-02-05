@@ -74,6 +74,7 @@ RISK_THRESHOLDS = {
 @dataclass
 class RiskAssessment:
     """風險評估結果資料結構"""
+    # 必填欄位
     port_code: str
     port_name: str
     country: str
@@ -92,10 +93,15 @@ class RiskAssessment:
     max_wave_time_utc: str
     max_wave_time_lct: str
     
-    # ✅ 新增：天氣狀況欄位
-    min_temperature: float = 0.0
-    min_pressure: float = 0.0
-    min_visibility: float = 0.0
+    risk_periods: List[Dict[str, Any]]
+    issued_time: str
+    latitude: float
+    longitude: float
+    
+    # ✅ 選填欄位（有預設值）
+    min_temperature: float = 999.0
+    min_pressure: float = 9999.0
+    min_visibility: float = 99999.0
     min_temp_time_utc: str = ""
     min_temp_time_lct: str = ""
     min_pressure_time_utc: str = ""
@@ -103,14 +109,16 @@ class RiskAssessment:
     min_vis_time_utc: str = ""
     min_vis_time_lct: str = ""
     
-    risk_periods: List[Dict[str, Any]]
-    issued_time: str
-    latitude: float
-    longitude: float
-    
     raw_records: Optional[List[WeatherRecord]] = None
-    weather_records: Optional[List] = None  # ✅ 新增：天氣狀況記錄
+    weather_records: Optional[List] = None
     chart_base64_list: List[str] = field(default_factory=list)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        d = asdict(self)
+        for key in ['raw_records', 'weather_records', 'chart_base64_list']:
+            d.pop(key, None)
+        return d
+
     
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
