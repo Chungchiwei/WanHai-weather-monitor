@@ -109,7 +109,7 @@ class RiskAssessment:
     min_pressure_time_utc: str = ""
     min_pressure_time_lct: str = ""
     
-    # ✅ 新增：能見度時間欄位（這兩行是關鍵！）
+    # ✅ 能見度時間欄位（必須在這裡）
     min_visibility_time_utc: str = ""
     min_visibility_time_lct: str = ""
     
@@ -977,46 +977,40 @@ class WeatherRiskAnalyzer:
             # 計算 LCT 時區偏移
             lct_offset_hours = int(max_wind_record.lct_time.utcoffset().total_seconds() / 3600)
             
-            # 建立 RiskAssessment
+           # 建立能見度評估
             assessment = RiskAssessment(
                 port_code=port_code,
-                port_name=port_info.get('port_name', port_name_48h),
-                country=port_info.get('country', 'N/A'),
-                risk_level=max_level,
-                risk_factors=risk_factors,
+                port_name=info.get('port_name', port_name_48h),
+                country=info.get('country', 'N/A'),
+                risk_level=0,
+                risk_factors=[f"能見度不良 {min_vis_record.visibility_meters / 1000:.2f} km"],
                 
-                max_wind_kts=max_wind_record.wind_speed_kts,
-                max_wind_bft=max_wind_record.wind_speed_bft,
-                max_gust_kts=max_gust_record.wind_gust_kts,
-                max_gust_bft=max_gust_record.wind_gust_bft,
-                max_wave=max_wave_record.wave_height,
+                # ✅ 必填欄位（風浪相關，設為 0）
+                max_wind_kts=0,
+                max_wind_bft=0,
+                max_gust_kts=0,
+                max_gust_bft=0,
+                max_wave=0,
                 
-                max_wind_time_utc=f"{max_wind_record.time.strftime('%m/%d %H:%M')} (UTC)",
-                max_gust_time_utc=f"{max_gust_record.time.strftime('%m/%d %H:%M')} (UTC)",
-                max_wave_time_utc=f"{max_wave_record.time.strftime('%m/%d %H:%M')} (UTC)",
+                max_wind_time_utc="",
+                max_wind_time_lct="",
+                max_gust_time_utc="",
+                max_gust_time_lct="",
+                max_wave_time_utc="",
+                max_wave_time_lct="",
                 
-                max_wind_time_lct=f"{max_wind_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
-                max_gust_time_lct=f"{max_gust_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
-                max_wave_time_lct=f"{max_wave_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
+                # ✅ 能見度相關欄位（明確指定參數名稱）
+                min_visibility=min_vis_record.visibility_meters,
+                min_visibility_time_utc=f"{min_vis_record.time.strftime('%m/%d %H:%M')} (UTC)",
+                min_visibility_time_lct=f"{min_vis_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
                 
-                min_temperature=min_temp_record.temperature if min_temp_record else 999,
-                min_pressure=min_pressure_record.pressure if min_pressure_record else 9999,
-                min_visibility=min(p['min_visibility_km'] for p in poor_visibility_periods) * 1000 if poor_visibility_periods else 99999,
+                poor_visibility_periods=poor_vis_periods,
                 
-                min_temp_time_utc=f"{min_temp_record.time.strftime('%m/%d %H:%M')} (UTC)" if min_temp_record else "",
-                min_temp_time_lct=f"{min_temp_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)" if min_temp_record else "",
-                
-                min_pressure_time_utc=f"{min_pressure_record.time.strftime('%m/%d %H:%M')} (UTC)" if min_pressure_record else "",
-                min_pressure_time_lct=f"{min_pressure_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)" if min_pressure_record else "",
-                
-                poor_visibility_periods=poor_visibility_periods,  # ✅ 保留能見度資料供獨立報告使用
-                
-                risk_periods=risk_periods,
-                issued_time=issued_time,
-                latitude=port_info.get('latitude', 0.0),
-                longitude=port_info.get('longitude', 0.0),
-                raw_records=wind_records_48h,  # 風浪用 48h
-                weather_records=weather_records  # ✅ 天氣用 7d
+                risk_periods=[],
+                issued_time=issued_48h,
+                latitude=info.get('latitude', 0.0),
+                longitude=info.get('longitude', 0.0),
+                weather_records=weather_records_48h
             )
             
             return assessment
