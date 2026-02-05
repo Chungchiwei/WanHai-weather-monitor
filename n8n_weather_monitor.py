@@ -2741,14 +2741,14 @@ class WeatherMonitorService:
                 min_vis_km = period['min_visibility_km']
                 min_vis_nm = min_vis_km / 1.852  # 轉換為海浬
                 
-                # 計算時段長度
-                try:
-                    from datetime import datetime
-                    start_dt = datetime.strptime(period['start_utc'], '%Y-%m-%d %H:%M')
-                    end_dt = datetime.strptime(period['end_utc'], '%Y-%m-%d %H:%M')
-                    duration_hours = (end_dt - start_dt).total_seconds() / 3600
-                except:
-                    duration_hours = 0
+            # 計算時段長度
+            try:
+                start_dt = datetime.strptime(period['start_utc'], '%Y-%m-%d %H:%M')
+                end_dt = datetime.strptime(period['end_utc'], '%Y-%m-%d %H:%M')
+                duration_hours = (end_dt - start_dt).total_seconds() / 3600
+            except Exception as e:
+                print(f"      ⚠️ 計算時段長度失敗: {e}")
+                duration_hours = 0
                 
                 if i > 0:
                     vis_periods_html += "<br>"
