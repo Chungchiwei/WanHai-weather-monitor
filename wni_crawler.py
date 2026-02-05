@@ -97,7 +97,7 @@ class AedynLoginManager:
                 print(f"ℹ️ 上次 Cookie 更新時間: {self.cookie_timestamp.strftime('%Y-%m-%d %H:%M:%S')} ({age.total_seconds() / 3600:.1f} 小時前)")
                 
                 if age > timedelta(hours=COOKIE_EXPIRY_HOURS):
-                    print(f"⚠️ Cookie 已過期（超過 {COOKIE_EXPIRY_HOURS} 小時）")
+                    print(f"⚠️ Cookie 已過期(超過 {COOKIE_EXPIRY_HOURS} 小時)")
                     return False
             
             print(f"✅ 已載入 Cookie (數量: {len(self.cookies)})")
@@ -129,7 +129,7 @@ class AedynLoginManager:
             if response.status_code == 200:
                 user_data = response.json()
                 user_name = user_data.get('user_disp_name', 'Unknown User')
-                print(f"✅ Cookie 有效！使用者: {user_name}")
+                print(f"✅ Cookie 有效!使用者: {user_name}")
                 return True
             else:
                 print(f"❌ Cookie 無效 (HTTP {response.status_code})")
@@ -144,7 +144,7 @@ class AedynLoginManager:
         使用 Selenium 登入 Aedyn 並取得 Cookie 和 JWT Token
         
         Args:
-            headless: 是否使用無頭模式（預設 True）
+            headless: 是否使用無頭模式(預設 True)
             
         Returns:
             dict: 包含 cookies 和 jwt_token 的字典
@@ -185,10 +185,10 @@ class AedynLoginManager:
                 # 等待跳轉到主頁面
                 wait.until(lambda d: "aedyn.weathernews.com" in d.current_url and "redirect_uri" not in d.current_url)
                 
-                print("✅ 登入成功，正在取得 Cookie...")
+                print("✅ 登入成功,正在取得 Cookie...")
                 
             except TimeoutException:
-                # 可能已經登入過了，直接檢查是否在正確頁面
+                # 可能已經登入過了,直接檢查是否在正確頁面
                 if "aedyn.weathernews.com" in driver.current_url:
                     print("✅ 檢測到已登入狀態")
                 else:
@@ -214,7 +214,7 @@ class AedynLoginManager:
             driver.get("https://aedyn.weathernews.com/api/account/user")
             time.sleep(2)
             
-            # 再次取得 Cookie（可能有更新）
+            # 再次取得 Cookie(可能有更新)
             selenium_cookies = driver.get_cookies()
             for cookie in selenium_cookies:
                 cookie_dict[cookie['name']] = cookie['value']
@@ -228,7 +228,7 @@ class AedynLoginManager:
             except Exception:
                 print("⚠️ 無法從 localStorage 取得 JWT Token")
             
-            # 如果 localStorage 沒有，嘗試從 Cookie 中找 jwt
+            # 如果 localStorage 沒有,嘗試從 Cookie 中找 jwt
             if not self.jwt_token and 'jwt' in cookie_dict:
                 self.jwt_token = cookie_dict['jwt']
                 print(f"✅ 已從 Cookie 取得 JWT Token (長度: {len(self.jwt_token)})")
@@ -259,7 +259,7 @@ class AedynLoginManager:
                     if response.status_code == 200:
                         user_data = response.json()
                         user_name = user_data.get('user_disp_name', 'Unknown User')
-                        print(f"✅ Cookie 驗證成功！使用者: {user_name}")
+                        print(f"✅ Cookie 驗證成功!使用者: {user_name}")
                     else:
                         print(f"⚠️ Cookie 驗證失敗 (HTTP {response.status_code})")
                         
@@ -303,7 +303,7 @@ class AedynLoginManager:
     
     def get_headers(self) -> Dict[str, str]:
         """
-        取得完整的 HTTP Headers（包含 Cookie 和 JWT Token）
+        取得完整的 HTTP Headers(包含 Cookie 和 JWT Token)
         
         Returns:
             dict: HTTP Headers
@@ -347,6 +347,8 @@ class WeatherDatabase:
         """建立資料庫表格"""
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
+            
+            # 原有的 48 小時預報表
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS weather_data (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -361,11 +363,28 @@ class WeatherDatabase:
                     UNIQUE(whl_port_code, issued_time)
                 )
             ''')
+            
+            # ✅ 新增: 7 天預報表
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS weather_data_7d (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    port_name TEXT NOT NULL,
+                    wni_port_code TEXT NOT NULL,
+                    whl_port_code TEXT,
+                    country TEXT NOT NULL,
+                    station_id TEXT NOT NULL,
+                    issued_time TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    download_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(whl_port_code, issued_time)
+                )
+            ''')
+            
             conn.commit()
 
     def get_latest_content(self, whl_port_code: str) -> Optional[Tuple[str, str, str]]:
         """
-        取得指定港口最新的氣象內容
+        取得指定港口最新的氣象內容 (48小時)
         
         Args:
             whl_port_code: 港口代碼
@@ -383,9 +402,30 @@ class WeatherDatabase:
             ''', (whl_port_code,))
             return cursor.fetchone()
 
+    # ✅ 新增: 取得 7 天預報內容
+    def get_latest_content_7d(self, whl_port_code: str) -> Optional[Tuple[str, str, str]]:
+        """
+        取得指定港口最新的 7 天氣象內容
+        
+        Args:
+            whl_port_code: 港口代碼
+            
+        Returns:
+            Tuple[content, issued_time, port_name] 或 None
+        """
+        with sqlite3.connect(self.db_file) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT content, issued_time, port_name FROM weather_data_7d 
+                WHERE whl_port_code = ? 
+                ORDER BY issued_time DESC 
+                LIMIT 1
+            ''', (whl_port_code,))
+            return cursor.fetchone()
+
     def get_latest_time(self, whl_port_code: str) -> Optional[str]:
         """
-        取得指定港口最新的發布時間
+        取得指定港口最新的發布時間 (48小時)
         
         Args:
             whl_port_code: 港口代碼
@@ -402,10 +442,30 @@ class WeatherDatabase:
             res = cursor.fetchone()
             return res[0] if res else None
 
+    # ✅ 新增: 取得 7 天預報最新時間
+    def get_latest_time_7d(self, whl_port_code: str) -> Optional[str]:
+        """
+        取得指定港口最新的 7 天預報發布時間
+        
+        Args:
+            whl_port_code: 港口代碼
+            
+        Returns:
+            發布時間字串或 None
+        """
+        with sqlite3.connect(self.db_file) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'SELECT issued_time FROM weather_data_7d WHERE whl_port_code = ? ORDER BY issued_time DESC LIMIT 1',
+                (whl_port_code,)
+            )
+            res = cursor.fetchone()
+            return res[0] if res else None
+
     def save_weather(self, wni_port_code: str, whl_port_code: str, port_name: str, 
                     port_id: str, country: str, issued_time: str, content: str) -> bool:
         """
-        儲存氣象資料到資料庫
+        儲存氣象資料到資料庫 (48小時)
         
         Args:
             wni_port_code: WNI 港口代碼
@@ -433,6 +493,38 @@ class WeatherDatabase:
             print(f"❌ 資料庫錯誤: {e}")
             return False
 
+    # ✅ 新增: 儲存 7 天預報資料
+    def save_weather_7d(self, wni_port_code: str, whl_port_code: str, port_name: str, 
+                       port_id: str, country: str, issued_time: str, content: str) -> bool:
+        """
+        儲存 7 天氣象資料到資料庫
+        
+        Args:
+            wni_port_code: WNI 港口代碼
+            whl_port_code: 萬海港口代碼
+            port_name: 港口名稱
+            port_id: 站點 ID
+            country: 國家
+            issued_time: 發布時間
+            content: 氣象內容
+            
+        Returns:
+            bool: 儲存成功返回 True
+        """
+        try:
+            with sqlite3.connect(self.db_file) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT OR REPLACE INTO weather_data_7d 
+                    (port_name, wni_port_code, whl_port_code, country, station_id, issued_time, content, download_time)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ''', (port_name, wni_port_code, whl_port_code, country, port_id, issued_time, content))
+                conn.commit()
+            return True
+        except Exception as e:
+            print(f"❌ 資料庫錯誤: {e}")
+            return False
+
 
 class PortWeatherCrawler:
     """港口氣象資料爬蟲"""
@@ -451,7 +543,7 @@ class PortWeatherCrawler:
         self.db = WeatherDatabase()
         self.session = self._create_session()
         self.port_map: Dict[str, Dict[str, Any]] = {}
-        self.ports_data: Dict[str, Dict[str, Any]] = {}  # ✅ 新增這行
+        self.ports_data: Dict[str, Dict[str, Any]] = {}
         self.port_list: List[str] = []
         self.login_manager = AedynLoginManager(username, password)
         self.headers: Dict[str, str] = {}
@@ -459,20 +551,20 @@ class PortWeatherCrawler:
         # 載入港口資料
         self._load_port_map()
         
-        # 智能登入：先嘗試載入舊 Cookie，如果無效才重新登入
+        # 智能登入:先嘗試載入舊 Cookie,如果無效才重新登入
         self._smart_login(force_login=auto_login)
 
     def _load_port_map(self) -> None:
-        """一次性讀取 Excel 並載入所有港口資訊（含經緯度）"""
+        """一次性讀取 Excel 並載入所有港口資訊(含經緯度)"""
         if not os.path.exists(self.excel_path):
-            print(f"⚠️ 找不到 {self.excel_path}，請確認檔案位置。")
+            print(f"⚠️ 找不到 {self.excel_path},請確認檔案位置。")
             return
 
         try:
             print("⏳ 正在載入港口資料...")
             df = pd.read_excel(self.excel_path, sheet_name='all_ports_list')
             
-            # 清理欄位名稱（去除前後空格）
+            # 清理欄位名稱(去除前後空格)
             df.columns = df.columns.str.strip()
             
             for _, row in df.iterrows():
@@ -480,7 +572,7 @@ class PortWeatherCrawler:
                 obj_id = str(row['Station ID (Object_ID)']).strip()
                 
                 if code and obj_id and obj_id != 'nan':
-                    # 處理經緯度：先轉為 float，若為 NaN 則設為 0.0
+                    # 處理經緯度:先轉為 float,若為 NaN 則設為 0.0
                     try:
                         lat = float(row.get('Lat', 0.0))
                         lat = 0.0 if np.isnan(lat) else lat
@@ -504,7 +596,7 @@ class PortWeatherCrawler:
                     
                     self.port_map[code] = port_info
                     
-                    # ✅ 同時建立 ports_data（與 port_map 相同結構）
+                    # 同時建立 ports_data(與 port_map 相同結構)
                     self.ports_data[code] = {
                         'port_name': port_info['name'],
                         'wni_code': port_info['wni_code'],
@@ -525,7 +617,7 @@ class PortWeatherCrawler:
 
     def _smart_login(self, force_login: bool = False) -> None:
         """
-        智能登入：只在需要時才登入
+        智能登入:只在需要時才登入
         
         Args:
             force_login: 是否強制重新登入
@@ -545,9 +637,9 @@ class PortWeatherCrawler:
                 self.headers = self.login_manager.get_headers()
                 return
             else:
-                print("⚠️ Cookie 已失效，需要重新登入")
+                print("⚠️ Cookie 已失效,需要重新登入")
         
-        # 3. Cookie 不存在或已失效，執行登入
+        # 3. Cookie 不存在或已失效,執行登入
         print("🔐 執行登入流程...")
         self.refresh_cookies()
 
@@ -598,54 +690,6 @@ class PortWeatherCrawler:
             print(f"❌ Cookie 更新失敗: {e}")
             return False
 
-    def _load_port_map(self) -> None:
-        """一次性讀取 Excel 並載入所有港口資訊（含經緯度）"""
-        if not os.path.exists(self.excel_path):
-            print(f"⚠️ 找不到 {self.excel_path}，請確認檔案位置。")
-            return
-
-        try:
-            print("⏳ 正在載入港口資料...")
-            df = pd.read_excel(self.excel_path, sheet_name='all_ports_list')
-            
-            # 清理欄位名稱（去除前後空格）
-            df.columns = df.columns.str.strip()
-            
-            for _, row in df.iterrows():
-                code = str(row['Port_Code_5']).strip()
-                obj_id = str(row['Station ID (Object_ID)']).strip()
-                
-                if code and obj_id and obj_id != 'nan':
-                    # 處理經緯度：先轉為 float，若為 NaN 則設為 0.0
-                    try:
-                        lat = float(row.get('Lat', 0.0))
-                        lat = 0.0 if np.isnan(lat) else lat
-                    except (ValueError, TypeError):
-                        lat = 0.0
-                        
-                    try:
-                        lon = float(row.get('Lon', 0.0))
-                        lon = 0.0 if np.isnan(lon) else lon
-                    except (ValueError, TypeError):
-                        lon = 0.0
-
-                    self.port_map[code] = {
-                        'id': obj_id,
-                        'name': str(row['Port Name']).strip(),
-                        'wni_code': str(row.get('WNI Port Code', code)).strip(),
-                        'country': str(row.get('Country', 'N/A')),
-                        'latitude': lat,
-                        'longitude': lon
-                    }
-                    self.port_list.append(code)
-            
-            print(f"✅ 已載入 {len(self.port_map)} 個港口資料")
-            
-        except Exception as e:
-            print(f"❌ 讀取 Excel 失敗: {e}")
-            import traceback
-            traceback.print_exc()
-
     def get_all_ports_display(self) -> List[str]:
         """
         回傳給 UI 下拉選單用的清單
@@ -674,7 +718,7 @@ class PortWeatherCrawler:
 
     def fetch_port_data(self, whl_port_code: str, retry_login: bool = True) -> Tuple[bool, str]:
         """
-        下載指定港口的氣象資料
+        下載指定港口的氣象資料 (48小時)
         
         Args:
             whl_port_code: 港口代碼
@@ -689,7 +733,7 @@ class PortWeatherCrawler:
         p_info = self.port_map[whl_port_code]
         url = f"https://aedyn.weathernews.com/api/business/sea/portstatus/content/48h/{p_info['id']}.txt"
         
-        print(f"📡 正在下載 {whl_port_code} ({p_info['name']})...")
+        print(f"📡 正在下載 {whl_port_code} ({p_info['name']}) - 48小時預報...")
         
         try:
             response = self.session.get(url, headers=self.headers, verify=False, timeout=TIMEOUT)
@@ -700,40 +744,95 @@ class PortWeatherCrawler:
                 cached_time = self.db.get_latest_time(whl_port_code)
 
                 if cached_time == issued_time:
-                    return True, f"天氣資料已是最新 ({issued_time})"
+                    return True, f"48h 天氣資料已是最新 ({issued_time})"
                 
                 if self.db.save_weather(
                     p_info['wni_code'], whl_port_code, p_info['name'], 
                     p_info['id'], p_info['country'], issued_time, content
                 ):
-                    return True, f"更新成功 ({issued_time})"
+                    return True, f"48h 更新成功 ({issued_time})"
                 else:
                     return False, "資料庫寫入失敗"
                     
             elif response.status_code in [401, 403]:
-                # Cookie 過期，嘗試重新登入
+                # Cookie 過期,嘗試重新登入
                 if retry_login:
-                    print("⚠️ Cookie 已過期，正在重新登入...")
+                    print("⚠️ Cookie 已過期,正在重新登入...")
                     if self.refresh_cookies():
-                        # 重新嘗試下載（但不再重試登入，避免無限迴圈）
+                        # 重新嘗試下載(但不再重試登入,避免無限迴圈)
                         return self.fetch_port_data(whl_port_code, retry_login=False)
                 return False, f"權限不足 (HTTP {response.status_code}) - Cookie 已過期"
             else:
                 return False, f"下載失敗 (HTTP {response.status_code})"
                 
         except requests.exceptions.Timeout:
-            return False, f"連線逾時（超過 {TIMEOUT} 秒）"
+            return False, f"連線逾時(超過 {TIMEOUT} 秒)"
+        except Exception as e:
+            return False, f"連線錯誤: {str(e)}"
+
+    # ✅ 新增: 下載 7 天預報資料
+    def fetch_port_data_7d(self, whl_port_code: str, retry_login: bool = True) -> Tuple[bool, str]:
+        """
+        下載指定港口的 7 天氣象資料
+        
+        Args:
+            whl_port_code: 港口代碼
+            retry_login: 當遇到權限錯誤時是否自動重新登入
+            
+        Returns:
+            Tuple[bool, str]: (成功與否, 訊息)
+        """
+        if whl_port_code not in self.port_map:
+            return False, f"找不到港口代碼: {whl_port_code}"
+
+        p_info = self.port_map[whl_port_code]
+        url = f"https://aedyn.weathernews.com/api/business/sea/portstatus/content/7d/{p_info['id']}.txt"
+        
+        print(f"📡 正在下載 {whl_port_code} ({p_info['name']}) - 7天預報...")
+        
+        try:
+            response = self.session.get(url, headers=self.headers, verify=False, timeout=TIMEOUT)
+            
+            if response.status_code == 200:
+                content = response.text
+                issued_time = self.parse_issued_time(content)
+                cached_time = self.db.get_latest_time_7d(whl_port_code)
+
+                if cached_time == issued_time:
+                    return True, f"7d 天氣資料已是最新 ({issued_time})"
+                
+                if self.db.save_weather_7d(
+                    p_info['wni_code'], whl_port_code, p_info['name'], 
+                    p_info['id'], p_info['country'], issued_time, content
+                ):
+                    return True, f"7d 更新成功 ({issued_time})"
+                else:
+                    return False, "資料庫寫入失敗"
+                    
+            elif response.status_code in [401, 403]:
+                # Cookie 過期,嘗試重新登入
+                if retry_login:
+                    print("⚠️ Cookie 已過期,正在重新登入...")
+                    if self.refresh_cookies():
+                        # 重新嘗試下載(但不再重試登入,避免無限迴圈)
+                        return self.fetch_port_data_7d(whl_port_code, retry_login=False)
+                return False, f"權限不足 (HTTP {response.status_code}) - Cookie 已過期"
+            else:
+                return False, f"下載失敗 (HTTP {response.status_code})"
+                
+        except requests.exceptions.Timeout:
+            return False, f"連線逾時(超過 {TIMEOUT} 秒)"
         except Exception as e:
             return False, f"連線錯誤: {str(e)}"
 
     def fetch_all_ports(self) -> Dict[str, int]:
         """
-        批次下載所有港口資料
+        批次下載所有港口資料 (48小時)
         
         Returns:
             Dict[str, int]: 統計結果 {'success': n, 'skip': n, 'fail': n}
         """
-        print(f"\n🚀 開始更新全部港口資訊，預計更新 {len(self.port_list)} 個港口資料...\n")
+        print(f"\n🚀 開始更新全部港口資訊 (48小時),預計更新 {len(self.port_list)} 個港口資料...\n")
         
         success_count = 0
         fail_count = 0
@@ -753,7 +852,7 @@ class PortWeatherCrawler:
                 
             print(f"   {message}")
         
-        print(f"\n📊 下載完成！")
+        print(f"\n📊 48小時預報下載完成!")
         print(f"   ✅ 成功: {success_count}")
         print(f"   ⏭️  略過: {skip_count}")
         print(f"   ❌ 失敗: {fail_count}")
@@ -762,6 +861,101 @@ class PortWeatherCrawler:
             'success': success_count,
             'skip': skip_count,
             'fail': fail_count
+        }
+
+    # ✅ 新增: 批次下載所有港口 7 天預報
+    def fetch_all_ports_7d(self) -> Dict[str, int]:
+        """
+        批次下載所有港口 7 天預報資料
+        
+        Returns:
+            Dict[str, int]: 統計結果 {'success': n, 'skip': n, 'fail': n}
+        """
+        print(f"\n🚀 開始更新全部港口資訊 (7天預報),預計更新 {len(self.port_list)} 個港口資料...\n")
+        
+        success_count = 0
+        fail_count = 0
+        skip_count = 0
+        
+        for i, whl_port_code in enumerate(self.port_list, 1):
+            print(f"[{i}/{len(self.port_list)}] ", end="")
+            success, message = self.fetch_port_data_7d(whl_port_code)
+            
+            if success:
+                if "已是最新" in message:
+                    skip_count += 1
+                else:
+                    success_count += 1
+            else:
+                fail_count += 1
+                
+            print(f"   {message}")
+        
+        print(f"\n📊 7天預報下載完成!")
+        print(f"   ✅ 成功: {success_count}")
+        print(f"   ⏭️  略過: {skip_count}")
+        print(f"   ❌ 失敗: {fail_count}")
+        
+        return {
+            'success': success_count,
+            'skip': skip_count,
+            'fail': fail_count
+        }
+
+    # ✅ 新增: 同時下載 48h 和 7d 預報
+    def fetch_all_ports_both(self) -> Dict[str, Dict[str, int]]:
+        """
+        批次下載所有港口的 48小時 和 7天 預報資料
+        
+        Returns:
+            Dict[str, Dict[str, int]]: 統計結果 {'48h': {...}, '7d': {...}}
+        """
+        print(f"\n🚀 開始更新全部港口資訊 (48h + 7d),預計更新 {len(self.port_list)} 個港口資料...\n")
+        
+        # 48小時預報統計
+        stats_48h = {'success': 0, 'skip': 0, 'fail': 0}
+        # 7天預報統計
+        stats_7d = {'success': 0, 'skip': 0, 'fail': 0}
+        
+        for i, whl_port_code in enumerate(self.port_list, 1):
+            print(f"\n[{i}/{len(self.port_list)}] {whl_port_code}")
+            
+            # 下載 48小時預報
+            success_48h, message_48h = self.fetch_port_data(whl_port_code)
+            if success_48h:
+                if "已是最新" in message_48h:
+                    stats_48h['skip'] += 1
+                else:
+                    stats_48h['success'] += 1
+            else:
+                stats_48h['fail'] += 1
+            print(f"   48h: {message_48h}")
+            
+            # 下載 7天預報
+            success_7d, message_7d = self.fetch_port_data_7d(whl_port_code)
+            if success_7d:
+                if "已是最新" in message_7d:
+                    stats_7d['skip'] += 1
+                else:
+                    stats_7d['success'] += 1
+            else:
+                stats_7d['fail'] += 1
+            print(f"   7d:  {message_7d}")
+        
+        print(f"\n📊 全部下載完成!")
+        print(f"\n48小時預報:")
+        print(f"   ✅ 成功: {stats_48h['success']}")
+        print(f"   ⏭️  略過: {stats_48h['skip']}")
+        print(f"   ❌ 失敗: {stats_48h['fail']}")
+        
+        print(f"\n7天預報:")
+        print(f"   ✅ 成功: {stats_7d['success']}")
+        print(f"   ⏭️  略過: {stats_7d['skip']}")
+        print(f"   ❌ 失敗: {stats_7d['fail']}")
+        
+        return {
+            '48h': stats_48h,
+            '7d': stats_7d
         }
 
     def test_api_connection(self) -> None:
@@ -795,7 +989,7 @@ class PortWeatherCrawler:
 
     def get_data_from_db(self, whl_port_code: str) -> Optional[Tuple[str, str, str]]:
         """
-        從資料庫讀取指定港口的最新氣象內容
+        從資料庫讀取指定港口的最新氣象內容 (48小時)
         
         Args:
             whl_port_code: 港口代碼
@@ -804,6 +998,19 @@ class PortWeatherCrawler:
             Tuple[content, issued_time, port_name] 或 None
         """
         return self.db.get_latest_content(whl_port_code)
+
+    # ✅ 新增: 從資料庫讀取 7 天預報
+    def get_data_from_db_7d(self, whl_port_code: str) -> Optional[Tuple[str, str, str]]:
+        """
+        從資料庫讀取指定港口的最新 7 天氣象內容
+        
+        Args:
+            whl_port_code: 港口代碼
+            
+        Returns:
+            Tuple[content, issued_time, port_name] 或 None
+        """
+        return self.db.get_latest_content_7d(whl_port_code)
 
     def get_port_info(self, whl_port_code: str) -> Optional[Dict[str, Any]]:
         """
@@ -834,11 +1041,11 @@ class PortWeatherCrawler:
 
 # ================= 使用範例 =================
 if __name__ == "__main__":
-    # 從環境變數或設定檔讀取帳號密碼（更安全的做法）
+    # 從環境變數或設定檔讀取帳號密碼(更安全的做法)
     AEDYN_USERNAME = os.getenv('AEDYN_USERNAME', 'your_username@example.com')
     AEDYN_PASSWORD = os.getenv('AEDYN_PASSWORD', 'your_password')
     
-    # 初始化爬蟲（會自動檢查 Cookie，只在需要時才登入）
+    # 初始化爬蟲(會自動檢查 Cookie,只在需要時才登入)
     print("=" * 60)
     print("初始化爬蟲系統")
     print("=" * 60)
@@ -852,16 +1059,23 @@ if __name__ == "__main__":
     # 測試 API 連線
     crawler.test_api_connection()
     
-    # 範例 1: 下載單一港口
+    # 範例 1: 下載單一港口 48小時預報
     print("\n" + "=" * 60)
-    print("範例 1: 下載單一港口資料")
+    print("範例 1: 下載單一港口 48小時預報")
     print("=" * 60)
     success, message = crawler.fetch_port_data("TWKHH")
     print(f"結果: {message}")
     
-    # 範例 2: 從資料庫讀取資料
+    # ✅ 範例 2: 下載單一港口 7天預報
     print("\n" + "=" * 60)
-    print("範例 2: 從資料庫讀取資料")
+    print("範例 2: 下載單一港口 7天預報")
+    print("=" * 60)
+    success, message = crawler.fetch_port_data_7d("TWKHH")
+    print(f"結果: {message}")
+    
+    # 範例 3: 從資料庫讀取 48小時預報
+    print("\n" + "=" * 60)
+    print("範例 3: 從資料庫讀取 48小時預報")
     print("=" * 60)
     data = crawler.get_data_from_db("TWKHH")
     if data:
@@ -872,10 +1086,35 @@ if __name__ == "__main__":
     else:
         print("❌ 找不到資料")
     
-    # 範例 3: 取得港口資訊
+    # ✅ 範例 4: 從資料庫讀取 7天預報
     print("\n" + "=" * 60)
-    print("範例 3: 取得港口資訊")
+    print("範例 4: 從資料庫讀取 7天預報")
+    print("=" * 60)
+    data_7d = crawler.get_data_from_db_7d("TWKHH")
+    if data_7d:
+        content, issued_time, port_name = data_7d
+        print(f"港口: {port_name}")
+        print(f"發布時間: {issued_time}")
+        print(f"內容預覽: {content[:200]}...")
+    else:
+        print("❌ 找不到資料")
+    
+    # 範例 5: 取得港口資訊
+    print("\n" + "=" * 60)
+    print("範例 5: 取得港口資訊")
     print("=" * 60)
     port_info = crawler.get_port_info("TWKHH")
     if port_info:
         print(json.dumps(port_info, indent=2, ensure_ascii=False))
+    
+    # ✅ 範例 6: 批次下載所有港口 7天預報
+    print("\n" + "=" * 60)
+    print("範例 6: 批次下載所有港口 7天預報 (取消註解以執行)")
+    print("=" * 60)
+    # stats_7d = crawler.fetch_all_ports_7d()
+    
+    # ✅ 範例 7: 同時下載所有港口的 48h 和 7d 預報
+    print("\n" + "=" * 60)
+    print("範例 7: 同時下載所有港口的 48h 和 7d 預報 (取消註解以執行)")
+    print("=" * 60)
+    # stats_both = crawler.fetch_all_ports_both()

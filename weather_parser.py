@@ -13,7 +13,7 @@ from constant import (
 
 @dataclass
 class WeatherRecord:
-    """氣象記錄資料結構（風浪資料）"""
+    """氣象記錄資料結構(風浪資料)"""
     time: datetime              # UTC 時間
     lct_time: datetime          # LCT 當地時間
     wind_direction: str         # 風向 (例如: NNE)
@@ -112,7 +112,7 @@ class WeatherRecord:
 
 @dataclass
 class WeatherConditionRecord:
-    """天氣狀況記錄資料結構（溫度、降雨、氣壓、能見度等）"""
+    """天氣狀況記錄資料結構(溫度、降雨、氣壓、能見度等)"""
     time: datetime              # UTC 時間
     lct_time: datetime          # LCT 當地時間
     temperature: float          # 溫度 (°C)
@@ -131,7 +131,7 @@ class WeatherConditionRecord:
     
     @property
     def visibility_meters(self) -> Optional[float]:
-        """能見度轉換為公尺（若可解析）"""
+        """能見度轉換為公尺(若可解析)"""
         vis = self.visibility.replace('<', '').replace('>', '').strip()
         
         if vis == "100":
@@ -189,19 +189,40 @@ class WeatherConditionRecord:
 
 
 class WeatherParser:    
-    """WNI 氣象資料解析器 (Enhanced with Weather Conditions)"""
+    """WNI 氣象資料解析器 (支援 48h 和 7d 預報)"""
     
     LINE_PATTERN = re.compile(r'^\s*\d{4}\s+\d{4}\s+\d{4}\s+\d{4}')
     WIND_BLOCK_KEY = "WIND kts"
     WEATHER_BLOCK_KEY = "2. WEATHER"
 
-    def parse_content(self, content: str, port_timezone: Optional[str] = None) -> Tuple[str, List[WeatherRecord], List[WeatherConditionRecord], List[str]]:
+    def detect_forecast_type(self, content: str) -> str:
         """
-        解析 WNI 氣象檔案內容（包含風浪 + 天氣狀況，限制 48 小時）
+        自動偵測預報類型
         
         Args:
             content: 氣象檔案內容
-            port_timezone: 港口時區（保留參數，目前自動偵測）
+            
+        Returns:
+            '48h' 或 '7d'
+        """
+        first_line = content.strip().split('\n')[0].upper()
+        if '7 DAY' in first_line or '7-DAY' in first_line or '7DAY' in first_line:
+            return '7d'
+        elif '48 HOUR' in first_line or '48-HOUR' in first_line or '48HOUR' in first_line:
+            return '48h'
+        else:
+            # 預設為 48h
+            return '48h'
+
+    def parse_content(self, content: str, port_timezone: Optional[str] = None, 
+                     max_hours: Optional[int] = 48) -> Tuple[str, List[WeatherRecord], List[WeatherConditionRecord], List[str]]:
+        """
+        解析 WNI 氣象檔案內容(包含風浪 + 天氣狀況)
+        
+        Args:
+            content: 氣象檔案內容
+            port_timezone: 港口時區(保留參數,目前自動偵測)
+            max_hours: 最大時數限制 (None 表示不限制,用於 7 天預報)
             
         Returns:
             Tuple[港口名稱, 風浪記錄列表, 天氣狀況記錄列表, 警告訊息列表]
@@ -237,7 +258,7 @@ class WeatherParser:
         prev_mmdd = None
         lct_offset = None
         now_utc = datetime.now(timezone.utc)
-        cutoff_time = now_utc + timedelta(hours=48)
+        cutoff_time = now_utc + timedelta(hours=max_hours) if max_hours else None
         
         for line in lines[wind_section_start:]:
             line = line.strip()
@@ -281,9 +302,9 @@ class WeatherParser:
                 dt_utc = dt_utc_naive.replace(tzinfo=timezone.utc)
                 dt_lct = dt_lct_naive.replace(tzinfo=lct_offset)
                 
-                # 檢查是否超過 48 小時
-                if dt_utc > cutoff_time:
-                    warnings.append(f"跳過超過 48 小時的風浪數據: {dt_utc.strftime('%Y-%m-%d %H:%M')}")
+                # 檢查是否超過時間限制 (僅在有限制時)
+                if cutoff_time and dt_utc > cutoff_time:
+                    warnings.append(f"跳過超過 {max_hours} 小時的風浪數據: {dt_utc.strftime('%Y-%m-%d %H:%M')}")
                     continue
                 
                 # 建立氣象記錄
@@ -335,7 +356,7 @@ class WeatherParser:
                 
                 try:
                     parts = line.split()
-                    if len(parts) < 8:  # 至少需要 8 個欄位（時間4 + 資料4）
+                    if len(parts) < 8:  # 至少需要 8 個欄位(時間4 + 資料4)
                         warnings.append(f"天氣欄位不足: {line}")
                         continue
                     
@@ -356,9 +377,9 @@ class WeatherParser:
                     dt_utc = dt_utc_naive.replace(tzinfo=timezone.utc)
                     dt_lct = dt_lct_naive.replace(tzinfo=lct_offset if lct_offset else timezone.utc)
                     
-                    # 檢查是否超過 48 小時
-                    if dt_utc > cutoff_time:
-                        warnings.append(f"跳過超過 48 小時的天氣數據: {dt_utc.strftime('%Y-%m-%d %H:%M')}")
+                    # 檢查是否超過時間限制 (僅在有限制時)
+                    if cutoff_time and dt_utc > cutoff_time:
+                        warnings.append(f"跳過超過 {max_hours} 小時的天氣數據: {dt_utc.strftime('%Y-%m-%d %H:%M')}")
                         continue
                     
                     # 解析天氣資料
@@ -385,28 +406,65 @@ class WeatherParser:
         else:
             warnings.append("⚠️ 未找到 WEATHER 資料區段")
         
-        # 最終檢查記錄數量
-        if len(wind_wave_records) > 20:
-            warnings.append(f"⚠️ 風浪記錄數量異常: {len(wind_wave_records)} 筆（預期 ≤ 16 筆）")
+        # 最終檢查記錄數量 (根據預報類型調整)
+        expected_wind_records = 56 if max_hours is None or max_hours > 48 else 20  # 7d: ~56筆, 48h: ~16筆
+        expected_weather_records = 56 if max_hours is None or max_hours > 48 else 20
         
-        if len(weather_records) > 20:
-            warnings.append(f"⚠️ 天氣記錄數量異常: {len(weather_records)} 筆（預期 ≤ 16 筆）")
+        if len(wind_wave_records) > expected_wind_records:
+            warnings.append(f"⚠️ 風浪記錄數量異常: {len(wind_wave_records)} 筆(預期 ≤ {expected_wind_records} 筆)")
+        
+        if len(weather_records) > expected_weather_records:
+            warnings.append(f"⚠️ 天氣記錄數量異常: {len(weather_records)} 筆(預期 ≤ {expected_weather_records} 筆)")
         
         return port_name, wind_wave_records, weather_records, warnings
+
+    def parse_content_7d(self, content: str, port_timezone: Optional[str] = None) -> Tuple[str, List[WeatherRecord], List[WeatherConditionRecord], List[str]]:
+        """
+        解析 7 天預報資料 (無時間限制)
+        
+        Args:
+            content: 氣象檔案內容
+            port_timezone: 港口時區(保留參數,目前自動偵測)
+            
+        Returns:
+            Tuple[港口名稱, 風浪記錄列表, 天氣狀況記錄列表, 警告訊息列表]
+        """
+        return self.parse_content(content, port_timezone, max_hours=None)
     
-    def parse_file(self, file_path: str) -> Tuple[str, List[WeatherRecord], List[WeatherConditionRecord], List[str]]:
+    def parse_content_48h(self, content: str, port_timezone: Optional[str] = None) -> Tuple[str, List[WeatherRecord], List[WeatherConditionRecord], List[str]]:
+        """
+        解析 48 小時預報資料 (限制 48 小時)
+        
+        Args:
+            content: 氣象檔案內容
+            port_timezone: 港口時區(保留參數,目前自動偵測)
+            
+        Returns:
+            Tuple[港口名稱, 風浪記錄列表, 天氣狀況記錄列表, 警告訊息列表]
+        """
+        return self.parse_content(content, port_timezone, max_hours=48)
+    
+    def parse_file(self, file_path: str, forecast_type: str = 'auto') -> Tuple[str, List[WeatherRecord], List[WeatherConditionRecord], List[str]]:
         """
         從檔案解析氣象資料
         
         Args:
             file_path: 檔案路徑
+            forecast_type: 預報類型 ('48h', '7d', 'auto')
             
         Returns:
             Tuple[港口名稱, 風浪記錄列表, 天氣狀況記錄列表, 警告訊息列表]
         """
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
-        return self.parse_content(content)
+        
+        if forecast_type == 'auto':
+            forecast_type = self.detect_forecast_type(content)
+        
+        if forecast_type == '7d':
+            return self.parse_content_7d(content)
+        else:
+            return self.parse_content_48h(content)
     
     @staticmethod
     def filter_high_risk_records(records: List[WeatherRecord], 
@@ -416,7 +474,7 @@ class WeatherParser:
                                  gust_bft_threshold: int = HIGH_GUST_SPEED_Bft,
                                  wave_threshold: float = HIGH_WAVE_SIG) -> List[WeatherRecord]:
         """
-        篩選高風險時段（風浪）
+        篩選高風險時段(風浪)
         
         Args:
             records: 氣象記錄列表
@@ -535,8 +593,8 @@ class WeatherParser:
 
 # ================= 測試範例 =================
 if __name__ == "__main__":
-    # 使用您提供的實際資料測試
-    sample_content = """48 hour GLOBAL PORT FORECAST WEATHERNEWS.INC
+    # 測試 48 小時預報
+    sample_content_48h = """48 hour GLOBAL PORT FORECAST WEATHERNEWS.INC
 PORT NAME: DALIAN
 PORT CODE: DLN
 COUNTRY  : CHINA
@@ -562,98 +620,79 @@ UTC       LCT       TEMP PRCP   PRES VIS     Wx
 0205 0400 0205 1200   -4    0   1026 10km<   CLR 
 """
     
+    # 測試 7 天預報
+    sample_content_7d = """7 day GLOBAL PORT FORECAST WEATHERNEWS.INC
+PORT NAME: KAOHSIUNG
+PORT CODE: TWKHH
+COUNTRY  : TAIWAN
+         : 22-36.6N 120-16.2E
+ISSUED AT: 20260205 0000 UTC
+
+1. WINDS and WAVES
+                    WIND kts        WAVE  m            seconds
+UTC       LCT       DIR  SPEED GUST DIR   SIG     MAX  PERIOD 
+0205 0000 0205 0800 NE    15   22   NE     0.8     1.3       4
+0205 0300 0205 1100 NE    16   24   NE     0.9     1.4       4
+0205 0600 0205 1400 NE    17   25   NE     1.0     1.6       4
+0205 0900 0205 1700 ENE   18   27   ENE    1.1     1.7       5
+0205 1200 0205 2000 ENE   19   28   ENE    1.2     1.9       5
+
+2. WEATHER
+                    deg  mm/h   hPa  m           
+UTC       LCT       TEMP PRCP   PRES VIS     Wx  
+0205 0000 0205 0800   18    0   1018 10km<   CLR 
+0205 0300 0205 1100   19    0   1017 10km<   CLR 
+0205 0600 0205 1400   22    0   1016 10km<   CLR 
+0205 0900 0205 1700   24    0   1015 10km<   CLR 
+0205 1200 0205 2000   23    0   1015 10km<   CLR 
+"""
+    
     parser = WeatherParser()
+    
+    print("=" * 80)
+    print("測試 48 小時預報解析")
+    print("=" * 80)
     try:
-        port_name, wind_records, weather_records, warnings = parser.parse_content(sample_content)
+        port_name, wind_records, weather_records, warnings = parser.parse_content_48h(sample_content_48h)
         
-        print("=" * 80)
         print(f"🏙️  港口: {port_name}")
         print(f"📊 風浪記錄: {len(wind_records)} 筆")
         print(f"🌡️  天氣記錄: {len(weather_records)} 筆")
         print(f"⚠️  警告: {len(warnings)} 個")
-        print("=" * 80)
         
-        # 顯示風浪資料
         if wind_records:
-            print("\n" + "=" * 80)
-            print("風浪資料（前 3 筆）:")
-            print("=" * 80)
-            for i, record in enumerate(wind_records[:3], 1):
-                print(f"\n{i}. {record}")
-                print(f"   風速: {record.wind_speed_kts:.1f} kts = {record.wind_speed_ms:.1f} m/s = BFT {record.wind_speed_bft}")
-                print(f"   陣風: {record.wind_gust_kts:.1f} kts = {record.wind_gust_ms:.1f} m/s = BFT {record.wind_gust_bft}")
-                print(f"   浪高: 顯著 {record.wave_height:.1f}m / 最大 {record.wave_max:.1f}m")
-            
-            # 風浪統計
+            print(f"\n時間範圍: {wind_records[0].time.strftime('%Y-%m-%d %H:%M')} ~ {wind_records[-1].time.strftime('%Y-%m-%d %H:%M')}")
             wind_stats = parser.get_statistics(wind_records)
-            print("\n" + "=" * 80)
-            print("風浪統計:")
-            print("=" * 80)
-            print(f"  總記錄數: {wind_stats['total_records']}")
-            print(f"  時間範圍: {wind_stats['time_range']['start'].strftime('%Y-%m-%d %H:%M')} ~ {wind_stats['time_range']['end'].strftime('%Y-%m-%d %H:%M')}")
-            print(f"  風速範圍: {wind_stats['wind']['min_kts']:.1f} - {wind_stats['wind']['max_kts']:.1f} kts (BFT {wind_stats['wind']['min_bft']} - {wind_stats['wind']['max_bft']})")
-            print(f"  平均風速: {wind_stats['wind']['avg_kts']:.1f} kts ({wind_stats['wind']['avg_ms']:.1f} m/s)")
-            print(f"  最大陣風: {wind_stats['wind']['max_gust_kts']:.1f} kts (BFT {wind_stats['wind']['max_gust_bft']})")
-            print(f"  浪高範圍: {wind_stats['wave']['min']:.1f} - {wind_stats['wave']['max']:.1f} m")
-            print(f"  平均浪高: {wind_stats['wave']['avg']:.1f} m")
-            print(f"  最大浪高: {wind_stats['wave']['max_wave']:.1f} m")
-            
-            # 高風險時段
-            high_risk = parser.filter_high_risk_records(wind_records)
-            print(f"\n  高風險時段: {len(high_risk)} 筆")
-            for record in high_risk:
-                print(f"    - {record.time.strftime('%m-%d %H:%M')} | 風速 {record.wind_speed_kts:.1f}kts (BFT{record.wind_speed_bft}) | 陣風 {record.wind_gust_kts:.1f}kts | 浪高 {record.wave_height:.1f}m")
-        
-        # 顯示天氣資料
-        if weather_records:
-            print("\n" + "=" * 80)
-            print("天氣狀況資料（前 5 筆）:")
-            print("=" * 80)
-            for i, record in enumerate(weather_records[:5], 1):
-                print(f"\n{i}. {record}")
-                print(f"   溫度: {record.temperature}°C")
-                print(f"   降雨: {record.precipitation} mm/h")
-                print(f"   氣壓: {record.pressure} hPa")
-                print(f"   能見度: {record.visibility} ({record.visibility_meters}m)")
-                print(f"   天氣: {record.weather_description} ({record.weather_code})")
-            
-            # 天氣統計
-            wx_stats = parser.get_weather_statistics(weather_records)
-            print("\n" + "=" * 80)
-            print("天氣統計:")
-            print("=" * 80)
-            print(f"  總記錄數: {wx_stats['total_records']}")
-            print(f"  時間範圍: {wx_stats['time_range']['start'].strftime('%Y-%m-%d %H:%M')} ~ {wx_stats['time_range']['end'].strftime('%Y-%m-%d %H:%M')}")
-            print(f"  溫度範圍: {wx_stats['temperature']['min']:.1f}°C ~ {wx_stats['temperature']['max']:.1f}°C")
-            print(f"  平均溫度: {wx_stats['temperature']['avg']:.1f}°C")
-            print(f"  總降雨量: {wx_stats['precipitation']['total']:.1f} mm")
-            print(f"  最大降雨: {wx_stats['precipitation']['max']:.1f} mm/h")
-            print(f"  降雨時數: {wx_stats['precipitation']['rainy_hours']} 小時")
-            print(f"  氣壓範圍: {wx_stats['pressure']['min']:.0f} ~ {wx_stats['pressure']['max']:.0f} hPa")
-            print(f"  平均氣壓: {wx_stats['pressure']['avg']:.0f} hPa")
-            print(f"  天氣分布:")
-            for code, count in wx_stats['weather_codes'].items():
-                desc = WeatherConditionRecord(
-                    time=datetime.now(timezone.utc),
-                    lct_time=datetime.now(timezone.utc),
-                    temperature=0, precipitation=0, pressure=0,
-                    visibility="", weather_code=code
-                ).weather_description
-                print(f"    - {desc} ({code}): {count} 次")
-        
-        # 顯示警告
-        if warnings:
-            print("\n" + "=" * 80)
-            print("警告訊息:")
-            print("=" * 80)
-            for warning in warnings:
-                print(f"  ⚠️  {warning}")
-        
-        print("\n" + "=" * 80)
-        print("測試完成！")
-        print("=" * 80)
+            print(f"風速範圍: {wind_stats['wind']['min_kts']:.1f} - {wind_stats['wind']['max_kts']:.1f} kts")
+            print(f"浪高範圍: {wind_stats['wave']['min']:.1f} - {wind_stats['wave']['max']:.1f} m")
         
     except Exception as e:
         print(f"❌ 錯誤: {e}")
-        import traceback
-        traceback.print_exc()
+    
+    print("\n" + "=" * 80)
+    print("測試 7 天預報解析")
+    print("=" * 80)
+    try:
+        port_name, wind_records, weather_records, warnings = parser.parse_content_7d(sample_content_7d)
+        
+        print(f"🏙️  港口: {port_name}")
+        print(f"📊 風浪記錄: {len(wind_records)} 筆")
+        print(f"🌡️  天氣記錄: {len(weather_records)} 筆")
+        print(f"⚠️  警告: {len(warnings)} 個")
+        
+        if wind_records:
+            print(f"\n時間範圍: {wind_records[0].time.strftime('%Y-%m-%d %H:%M')} ~ {wind_records[-1].time.strftime('%Y-%m-%d %H:%M')}")
+            wind_stats = parser.get_statistics(wind_records)
+            print(f"風速範圍: {wind_stats['wind']['min_kts']:.1f} - {wind_stats['wind']['max_kts']:.1f} kts")
+            print(f"浪高範圍: {wind_stats['wave']['min']:.1f} - {wind_stats['wave']['max']:.1f} m")
+        
+    except Exception as e:
+        print(f"❌ 錯誤: {e}")
+    
+    print("\n" + "=" * 80)
+    print("測試自動偵測預報類型")
+    print("=" * 80)
+    print(f"48h 內容偵測結果: {parser.detect_forecast_type(sample_content_48h)}")
+    print(f"7d 內容偵測結果: {parser.detect_forecast_type(sample_content_7d)}")
+    
+    print("\n✅ 測試完成!")
