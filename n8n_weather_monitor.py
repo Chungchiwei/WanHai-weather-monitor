@@ -1473,11 +1473,12 @@ class WeatherMonitorService:
                 if not info:
                     continue
                 
-                # 解析 7d 資料
+                # ✅ 修正：正確呼叫解析函式
                 parser = WeatherParser()
                 port_name_7d, wind_records_7d, weather_records_7d, warnings_7d = parser.parse_content_7d(content_7d)
                 
                 if not weather_records_7d:
+                    print(f"   [{i}/{total}] ⚠️ {port_code}: 無天氣記錄")
                     continue
                 
                 # ✅ 修正：過濾有效的溫度記錄
@@ -1541,6 +1542,7 @@ class WeatherMonitorService:
         print(f"\n✅ 低溫分析完成：共找到 {len(temp_assessments)} 個低溫港口")
         return temp_assessments
 
+
     def _analyze_visibility_ports(self) -> List[RiskAssessment]:
         """✅ 專門分析能見度不良港口（改用 48h 資料）"""
         vis_assessments = []
@@ -1559,11 +1561,12 @@ class WeatherMonitorService:
                 if not info:
                     continue
                 
-                # ✅ 解析 48h 資料
+                # ✅ 修正：正確呼叫 48h 解析函式
                 parser = WeatherParser()
-                port_name_48h, wind_records_48h, weather_records_48h, warnings_48h = parser.parse_content(content_48h)
+                port_name_48h, wind_records_48h, weather_records_48h, warnings_48h = parser.parse_content_48h(content_48h)
                 
                 if not weather_records_48h:
+                    print(f"   [{i}/{total}] ⚠️ {port_code}: 無天氣記錄")
                     continue
                 
                 # 過濾有效的能見度記錄
@@ -1579,6 +1582,8 @@ class WeatherMonitorService:
                 
                 # 找出最低能見度
                 min_vis_record = min(valid_vis_records, key=lambda r: r.visibility_meters)
+                
+                print(f"   [{i}/{total}] 🔍 {port_code}: 檢查能見度 {min_vis_record.visibility_meters / 1000:.2f} km (閾值: {RISK_THRESHOLDS['visibility_poor'] / 1000:.2f} km)")
                 
                 # 檢查是否低於閾值
                 if min_vis_record.visibility_meters < RISK_THRESHOLDS['visibility_poor']:
@@ -1601,11 +1606,12 @@ class WeatherMonitorService:
                         else:
                             if in_poor_vis:
                                 # 結束時段
+                                prev_record = valid_vis_records[valid_vis_records.index(r) - 1]
                                 poor_vis_periods.append({
                                     'start_utc': period_start.time.strftime('%Y-%m-%d %H:%M'),
-                                    'end_utc': valid_vis_records[valid_vis_records.index(r) - 1].time.strftime('%Y-%m-%d %H:%M'),
+                                    'end_utc': prev_record.time.strftime('%Y-%m-%d %H:%M'),
                                     'start_lct': period_start.lct_time.strftime('%Y-%m-%d %H:%M'),
-                                    'end_lct': valid_vis_records[valid_vis_records.index(r) - 1].lct_time.strftime('%Y-%m-%d %H:%M'),
+                                    'end_lct': prev_record.lct_time.strftime('%Y-%m-%d %H:%M'),
                                     'min_visibility_m': period_min_vis,
                                     'min_visibility_km': period_min_vis / 1000
                                 })
@@ -1665,6 +1671,7 @@ class WeatherMonitorService:
         
         print(f"\n✅ 能見度分析完成：共找到 {len(vis_assessments)} 個能見度不良港口")
         return vis_assessments
+
 
 
     def _analyze_all_ports(self) -> List[RiskAssessment]:
