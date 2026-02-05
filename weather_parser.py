@@ -113,19 +113,42 @@ class WeatherRecord:
 @dataclass
 class WeatherConditionRecord:
     """天氣狀況記錄資料結構(溫度、降雨、氣壓、能見度等)"""
-    time: datetime              # UTC 時間
-    lct_time: datetime          # LCT 當地時間
-    temperature: float          # 溫度 (°C)
-    precipitation: float        # 降雨量 (mm/h)
-    pressure: float             # 氣壓 (hPa)
-    visibility: str             # 能見度 (例如: "10km<", "100")
-    weather_code: str           # 天氣代碼 (例如: "CLR", "FOG")
+    time: datetime
+    lct_time: datetime
+    temperature: Optional[float]  # ✅ 改為 Optional
+    precipitation: float
+    pressure: Optional[float]     # ✅ 改為 Optional
+    visibility: str
+    weather_code: str
     
     def __post_init__(self):
         """資料驗證與轉換"""
-        self.temperature = float(self.temperature)
-        self.precipitation = float(self.precipitation)
-        self.pressure = float(self.pressure)
+        # ✅ 溫度驗證（允許 None，但排除異常值）
+        if self.temperature is not None:
+            try:
+                self.temperature = float(self.temperature)
+                # 排除異常值（地球表面溫度範圍約 -90°C ~ 60°C）
+                if self.temperature < -100 or self.temperature > 100:
+                    self.temperature = None
+            except (ValueError, TypeError):
+                self.temperature = None
+        
+        # 降雨量（不允許 None，預設 0.0）
+        try:
+            self.precipitation = float(self.precipitation) if self.precipitation is not None else 0.0
+        except (ValueError, TypeError):
+            self.precipitation = 0.0
+        
+        # ✅ 氣壓驗證（允許 None，但排除異常值）
+        if self.pressure is not None:
+            try:
+                self.pressure = float(self.pressure)
+                # 排除異常值（地球表面氣壓範圍約 870 ~ 1085 hPa）
+                if self.pressure < 800 or self.pressure > 1100:
+                    self.pressure = None
+            except (ValueError, TypeError):
+                self.pressure = None
+        
         self.visibility = str(self.visibility).strip()
         self.weather_code = str(self.weather_code).strip().upper()
     
@@ -227,11 +250,20 @@ class WeatherParser:
         Returns:
             Tuple[港口名稱, 風浪記錄列表, 天氣狀況記錄列表, 警告訊息列表]
         """
-        def _safe_float(val_str):
-            """安全轉換為浮點數"""
+        def _safe_float(val_str, default=None):
+            """安全轉換為浮點數（支援自訂預設值）"""
             clean = val_str.replace('*', '').strip()
-            return float(clean) if clean and clean != '-' else 0.0
-        
+            if not clean or clean == '-':
+                return default
+            try:
+                return float(clean)
+            except ValueError:
+                return default
+
+        # 在解析天氣資料時
+        temp = _safe_float(parts[4], default=None)  # ✅ 無效時回傳 None
+        precip = _safe_float(parts[5], default=0.0)  # 降雨量預設 0.0
+        pressure = _safe_float(parts[6], default=None)  # ✅ 無效時回傳 None
         lines = content.strip().split('\n')
         warnings = []
         wind_wave_records = []

@@ -1339,7 +1339,7 @@ class WeatherMonitorService:
         return report_data
 
     def _analyze_temperature_ports(self) -> List[RiskAssessment]:
-        """✅ 專門分析低溫港口（獨立於主風險分析）"""
+        """✅ 專門分析低溫港口（獨立於主風險分析）- 修正版"""
         temp_assessments = []
         total = len(self.crawler.port_list)
         
@@ -1363,8 +1363,23 @@ class WeatherMonitorService:
                 if not weather_records_7d:
                     continue
                 
+                # ✅ 修正：過濾有效的溫度記錄
+                valid_temp_records = [
+                    r for r in weather_records_7d 
+                    if r.temperature is not None 
+                    and isinstance(r.temperature, (int, float))
+                    and r.temperature > -100  # 排除異常值
+                    and r.temperature < 100
+                ]
+                
+                if not valid_temp_records:
+                    print(f"   [{i}/{total}] ⚠️ {port_code}: 無有效溫度資料")
+                    continue
+                
                 # 檢查是否有低溫記錄
-                min_temp_record = min(weather_records_7d, key=lambda r: r.temperature)
+                min_temp_record = min(valid_temp_records, key=lambda r: r.temperature)
+                
+                print(f"   [{i}/{total}] 🔍 {port_code}: 檢查溫度 {min_temp_record.temperature:.1f}°C (閾值: {RISK_THRESHOLDS['temp_freezing']}°C)")
                 
                 if min_temp_record.temperature < RISK_THRESHOLDS['temp_freezing']:
                     # 建立低溫評估
@@ -1400,16 +1415,17 @@ class WeatherMonitorService:
                     )
                     
                     temp_assessments.append(assessment)
-                    print(f"   [{i}/{total}] ❄️ {port_code}: 低溫 {min_temp_record.temperature:.1f}°C")
+                    print(f"   [{i}/{total}] ❄️ {port_code}: 低溫警報 {min_temp_record.temperature:.1f}°C")
                     
             except Exception as e:
                 print(f"   [{i}/{total}] ❌ {port_code}: {e}")
                 traceback.print_exc()
         
+        print(f"\n✅ 低溫分析完成：共找到 {len(temp_assessments)} 個低溫港口")
         return temp_assessments
 
     def _analyze_visibility_ports(self) -> List[RiskAssessment]:
-        """✅ 專門分析能見度不良港口（獨立於主風險分析）"""
+        """✅ 專門分析能見度不良港口（獨立於主風險分析）- 修正版"""
         visibility_assessments = []
         total = len(self.crawler.port_list)
         
@@ -1433,10 +1449,16 @@ class WeatherMonitorService:
                 if not weather_records_7d:
                     continue
                 
-                # 收集能見度不良時間點
+                # ✅ 修正：收集能見度不良時間點（加強驗證）
                 poor_visibility_points = []
                 for wr in weather_records_7d:
-                    if wr.visibility_meters is not None and wr.visibility_meters < RISK_THRESHOLDS['visibility_poor']:
+                    # 檢查 visibility_meters 是否有效
+                    if (wr.visibility_meters is not None 
+                        and isinstance(wr.visibility_meters, (int, float))
+                        and wr.visibility_meters > 0  # 排除負值
+                        and wr.visibility_meters < 50000  # 排除異常大值
+                        and wr.visibility_meters < RISK_THRESHOLDS['visibility_poor']):
+                        
                         poor_visibility_points.append({
                             'time_utc': wr.time.strftime('%Y-%m-%d %H:%M'),
                             'time_lct': wr.lct_time.strftime('%Y-%m-%d %H:%M'),
@@ -1445,6 +1467,8 @@ class WeatherMonitorService:
                         })
                 
                 if poor_visibility_points:
+                    print(f"   [{i}/{total}] 🔍 {port_code}: 找到 {len(poor_visibility_points)} 個能見度不良時間點")
+                    
                     # 合併時段
                     poor_visibility_periods = self.analyzer.merge_visibility_periods(poor_visibility_points)
                     
@@ -1481,13 +1505,15 @@ class WeatherMonitorService:
                     
                     visibility_assessments.append(assessment)
                     min_vis_km = min(p['min_visibility_km'] for p in poor_visibility_periods)
-                    print(f"   [{i}/{total}] 🌫️ {port_code}: 最低能見度 {min_vis_km:.1f} km ({len(poor_visibility_periods)} 時段)")
+                    print(f"   [{i}/{total}] 🌫️ {port_code}: 能見度警報 {min_vis_km:.1f} km ({len(poor_visibility_periods)} 時段)")
                     
             except Exception as e:
                 print(f"   [{i}/{total}] ❌ {port_code}: {e}")
                 traceback.print_exc()
         
+        print(f"\n✅ 能見度分析完成：共找到 {len(visibility_assessments)} 個能見度不良港口")
         return visibility_assessments
+
     def _analyze_all_ports(self) -> List[RiskAssessment]:
         """✅ 分析所有港口（風浪用 48h, 天氣用 7d）- 能見度不計入主報告"""
         assessments = []
