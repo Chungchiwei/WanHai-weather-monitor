@@ -69,7 +69,7 @@ RISK_THRESHOLDS = {
     # 天氣狀況閾值
     'temp_freezing': 0,          # 氣溫 < 0°C
     'pressure_low': 1000,        # 氣壓 < 1000 hPa
-    'visibility_poor': 5552      # ✅ 能見度 < 3.0 海里 (約 5552 公尺)
+    'visibility_poor': 2778      # ✅ 能見度 < 1.5 海浬 (約 2778 公尺)
 }
 
 @dataclass
@@ -667,7 +667,7 @@ class WeatherRiskAnalyzer:
                 risks.append(f"🌀 低氣壓警告: {weather_record.pressure:.0f} hPa")
                 risk_level = max(risk_level, 2)
             
-            # 能見度檢查（< 5552m）
+            # 能見度檢查（< 2778m）
             vis_m = weather_record.visibility_meters
             if vis_m is not None and vis_m < RISK_THRESHOLDS['visibility_poor']:
                 risks.append(f"🌫️ 能見度不良: {vis_m:.0f} m")
@@ -803,7 +803,7 @@ class WeatherRiskAnalyzer:
                 min_temp_record = min(weather_records, key=lambda r: r.temperature)
                 min_pressure_record = min(weather_records, key=lambda r: r.pressure)
                 
-                # 收集所有能見度 < 5552m 的時間點
+                # 收集所有能見度 < 2778m 的時間點
                 for wr in weather_records:
                     if wr.visibility_meters is not None and wr.visibility_meters < RISK_THRESHOLDS['visibility_poor']:
                         poor_visibility_points.append({
@@ -1548,7 +1548,7 @@ class WeatherMonitorService:
                 'color': '#F59E0B', 
                 'bg': '#FFFBEB', 
                 'border': '#FCD34D',
-                'criteria': '風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m / 氣壓 < 1000 hPa / 能見度 < 3 NM'  # ✅ 移除「氣溫 < 0°C」
+                'criteria': '風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m / 氣壓 < 1000 hPa / 能見度 < 1.5 NM'  # ✅ 移除「氣溫 < 0°C」
             },
             1: {
                 'emoji': '🟡', 
