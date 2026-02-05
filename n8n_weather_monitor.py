@@ -6,7 +6,7 @@ import traceback
 import smtplib
 import io
 import base64
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta  # ✅ 確認這裡已 import
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict, field
 
@@ -14,7 +14,7 @@ from dataclasses import dataclass, asdict, field
 import requests
 import pandas as pd
 import matplotlib
-matplotlib.use('Agg')  # 非互動模式
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from dotenv import load_dotenv
@@ -875,8 +875,8 @@ class WeatherRiskAnalyzer:
 
     @classmethod
     def analyze_port_risk_combined(cls, port_code: str, port_info: Dict[str, Any],
-                                   content_48h: str, content_7d: str, 
-                                   issued_time: str) -> Optional[RiskAssessment]:
+                                content_48h: str, content_7d: str, 
+                                issued_time: str) -> Optional[RiskAssessment]:
         """✅ 分析港口風險（風浪用 48h, 天氣用 7d）- 低溫與能見度不計入風險等級"""
         try:
             parser = WeatherParser()
@@ -910,29 +910,15 @@ class WeatherRiskAnalyzer:
             # ✅ 天氣狀況極值（使用 7d 資料）
             min_temp_record = None
             min_pressure_record = None
-            poor_visibility_points = []  # 原始時間點
             
             if weather_records:
                 min_temp_record = min(weather_records, key=lambda r: r.temperature)
                 min_pressure_record = min(weather_records, key=lambda r: r.pressure)
-                
-                # 收集所有能見度 < 2778m 的時間點
-                for wr in weather_records:
-                    if wr.visibility_meters is not None and wr.visibility_meters < RISK_THRESHOLDS['visibility_poor']:
-                        poor_visibility_points.append({
-                            'time_utc': wr.time.strftime('%Y-%m-%d %H:%M'),
-                            'time_lct': wr.lct_time.strftime('%Y-%m-%d %H:%M'),
-                            'visibility_m': wr.visibility_meters,
-                            'visibility_km': wr.visibility_meters / 1000
-                        })
-            
-            # ✅ 合併能見度不良時段
-            poor_visibility_periods = cls.merge_visibility_periods(poor_visibility_points)
             
             # ✅ 分析每個時段（使用 48h 風浪資料，能見度不計入風險等級）
             for record in wind_records_48h:
                 wx_record = weather_dict.get(record.time)
-                analyzed = cls.analyze_record(record, wx_record, include_temp=False, include_visibility=False)  # ✅ 低溫與能見度都不計入
+                analyzed = cls.analyze_record(record, wx_record, include_temp=False, include_visibility=False)
                 
                 if analyzed['risks']:
                     period_data = {
@@ -977,40 +963,40 @@ class WeatherRiskAnalyzer:
             # 計算 LCT 時區偏移
             lct_offset_hours = int(max_wind_record.lct_time.utcoffset().total_seconds() / 3600)
             
-           # 建立能見度評估
+            # ✅ 建立正確的風險評估
             assessment = RiskAssessment(
                 port_code=port_code,
-                port_name=info.get('port_name', port_name_48h),
-                country=info.get('country', 'N/A'),
-                risk_level=0,
-                risk_factors=[f"能見度不良 {min_vis_record.visibility_meters / 1000:.2f} km"],
+                port_name=port_info.get('port_name', port_name_48h),
+                country=port_info.get('country', 'N/A'),
+                risk_level=max_level,
+                risk_factors=risk_factors,
                 
-                # ✅ 必填欄位（風浪相關，設為 0）
-                max_wind_kts=0,
-                max_wind_bft=0,
-                max_gust_kts=0,
-                max_gust_bft=0,
-                max_wave=0,
+                max_wind_kts=max_wind_record.wind_speed_kts,
+                max_wind_bft=max_wind_record.wind_speed_bft,
+                max_gust_kts=max_gust_record.wind_gust_kts,
+                max_gust_bft=max_gust_record.wind_gust_bft,
+                max_wave=max_wave_record.wave_height,
                 
-                max_wind_time_utc="",
-                max_wind_time_lct="",
-                max_gust_time_utc="",
-                max_gust_time_lct="",
-                max_wave_time_utc="",
-                max_wave_time_lct="",
+                max_wind_time_utc=f"{max_wind_record.time.strftime('%m/%d %H:%M')} (UTC)",
+                max_wind_time_lct=f"{max_wind_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT+{lct_offset_hours})",
+                max_gust_time_utc=f"{max_gust_record.time.strftime('%m/%d %H:%M')} (UTC)",
+                max_gust_time_lct=f"{max_gust_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT+{lct_offset_hours})",
+                max_wave_time_utc=f"{max_wave_record.time.strftime('%m/%d %H:%M')} (UTC)",
+                max_wave_time_lct=f"{max_wave_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT+{lct_offset_hours})",
                 
-                # ✅ 能見度相關欄位（明確指定參數名稱）
-                min_visibility=min_vis_record.visibility_meters,
-                min_visibility_time_utc=f"{min_vis_record.time.strftime('%m/%d %H:%M')} (UTC)",
-                min_visibility_time_lct=f"{min_vis_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
+                min_temperature=min_temp_record.temperature if min_temp_record else 999.0,
+                min_pressure=min_pressure_record.pressure if min_pressure_record else 9999.0,
+                min_temp_time_utc=f"{min_temp_record.time.strftime('%m/%d %H:%M')} (UTC)" if min_temp_record else "",
+                min_temp_time_lct=f"{min_temp_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT+{lct_offset_hours})" if min_temp_record else "",
+                min_pressure_time_utc=f"{min_pressure_record.time.strftime('%m/%d %H:%M')} (UTC)" if min_pressure_record else "",
+                min_pressure_time_lct=f"{min_pressure_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT+{lct_offset_hours})" if min_pressure_record else "",
                 
-                poor_visibility_periods=poor_vis_periods,
-                
-                risk_periods=[],
-                issued_time=issued_48h,
-                latitude=info.get('latitude', 0.0),
-                longitude=info.get('longitude', 0.0),
-                weather_records=weather_records_48h
+                risk_periods=risk_periods,
+                issued_time=issued_time,
+                latitude=port_info.get('latitude', 0.0),
+                longitude=port_info.get('longitude', 0.0),
+                raw_records=wind_records_48h,
+                weather_records=weather_records
             )
             
             return assessment
@@ -2539,13 +2525,15 @@ class WeatherMonitorService:
         # --- 時間與環境設定 ---
         base_font = "font-family: 'Microsoft JhengHei', 'Heiti TC', Arial, sans-serif;"
         
+        # ✅ 修正：使用全域的 timezone，不要局部 import
         try:
             from zoneinfo import ZoneInfo
             taipei_tz = ZoneInfo('Asia/Taipei')
         except ImportError:
-            from datetime import timedelta, timezone
+            # ✅ 使用全域已 import 的 timezone 和 timedelta
             taipei_tz = timezone(timedelta(hours=8))
         
+        # ✅ 使用全域的 datetime 和 timezone
         utc_now = datetime.now(timezone.utc)
         tpe_now = utc_now.astimezone(taipei_tz)
         
@@ -2554,91 +2542,94 @@ class WeatherMonitorService:
 
         # --- HTML 本體 ---
         html = f"""
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>WHL Poor Visibility Alert</title>
-</head>
-<body bgcolor="#F2F4F8" style="margin: 0; padding: 0; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%;">
-    <center>
-    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 900px; margin: 0 auto;">
-        <tr>
-            <td align="center" valign="top" style="padding: 20px 10px;">
-                
-                <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FFFFFF" style="border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
-                    
-                    <!-- 頂部時間列 -->
+            <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+            <html xmlns="http://www.w3.org/1999/xhtml">
+            <head>
+                <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+                <title>WHL Poor Visibility Alert</title>
+            </head>
+            <body bgcolor="#F2F4F8" style="margin: 0; padding: 0; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%;">
+                <center>
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 900px; margin: 0 auto;">
                     <tr>
-                        <td bgcolor="#1E3A8A" style="padding: 12px 20px;">
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                        <td align="center" valign="top" style="padding: 20px 10px;">
+                            
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FFFFFF" style="border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+                                
+                                <!-- 頂部時間列 -->
                                 <tr>
-                                    <td align="left" style="{base_font} color: #93C5FD; font-size: 12px; font-weight: bold;">
-                                        FLEET RISK MANAGEMENT
-                                    </td>
-                                    <td align="right" style="{base_font} color: #FFFFFF; font-size: 12px; font-weight: bold;">
-                                        Last Updated: {now_str_TPE}
+                                    <td bgcolor="#1E3A8A" style="padding: 12px 20px;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                            <tr>
+                                                <td align="left" style="{base_font} color: #93C5FD; font-size: 12px; font-weight: bold;">
+                                                    FLEET RISK MANAGEMENT
+                                                </td>
+                                                <td align="right" style="{base_font} color: #FFFFFF; font-size: 12px; font-weight: bold;">
+                                                    Last Updated: {now_str_TPE}
+                                                </td>
+                                            </tr>
+                                        </table>
                                     </td>
                                 </tr>
-                            </table>
-                        </td>
-                    </tr>
 
-                    <!-- 主標題區 -->
-                    <tr>
-                        <td bgcolor="#7C3AED" style="padding: 25px 30px; border-bottom: 4px solid #5B21B6;">
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <!-- 主標題區 -->
                                 <tr>
-                                    <td align="left">
-                                        <h1 style="margin: 0; color: #FFFFFF; font-size: 26px; font-weight: 800; letter-spacing: 0.5px; line-height: 1.4; {base_font}">
-                                            🌫️ WHL Port Poor Visibility Alert
-                                        </h1>
-                                        <p style="margin: 8px 0 0 0; color: #EDE9FE; font-size: 16px; font-weight: 500; {base_font}">
-                                            能見度不良警報：未來 48 小時能見度低於 1.5 海浬之港口預報
-                                        </p>
+                                    <td bgcolor="#7C3AED" style="padding: 25px 30px; border-bottom: 4px solid #5B21B6;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                            <tr>
+                                                <td align="left">
+                                                    <h1 style="margin: 0; color: #FFFFFF; font-size: 26px; font-weight: 800; letter-spacing: 0.5px; line-height: 1.4; {base_font}">
+                                                        🌫️ WHL Port Poor Visibility Alert
+                                                    </h1>
+                                                    <p style="margin: 8px 0 0 0; color: #EDE9FE; font-size: 16px; font-weight: 500; {base_font}">
+                                                        能見度不良警報：未來 48 小時能見度低於 1.5 海浬之港口預報
+                                                    </p>
+                                                </td>
+                                                <td align="right" width="80">
+                                                    <div style="background-color: #FFFFFF; color: #7C3AED; font-size: 24px; font-weight: 800; width: 50px; height: 50px; line-height: 50px; border-radius: 50%; text-align: center; {base_font}">
+                                                        {len(vis_assessments)}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </table>
                                     </td>
-                                    <td align="right" width="80">
-                                        <div style="background-color: #FFFFFF; color: #7C3AED; font-size: 24px; font-weight: 800; width: 50px; height: 50px; line-height: 50px; border-radius: 50%; text-align: center; {base_font}">
-                                            {len(vis_assessments)}
+                                </tr>
+
+                                <!-- 受影響港口摘要 -->
+                                <tr>
+                                    <td bgcolor="#F3E8FF" style="padding: 15px 30px; border-bottom: 1px solid #DDD6FE;">
+                                        <span style="color: #6B21A8; font-weight: bold; font-size: 14px; {base_font}">⚠️ 受影響港口 Affected Ports:</span>
+                                        <br>
+                                        <div style="margin-top: 5px; color: #333333; font-size: 15px; line-height: 1.5; {base_font}">
+                                            {', '.join([f"<b>{p.port_code}</b>" for p in vis_assessments])}
                                         </div>
                                     </td>
                                 </tr>
-                            </table>
-                        </td>
-                    </tr>
 
-                    <!-- 受影響港口摘要 -->
-                    <tr>
-                        <td bgcolor="#F3E8FF" style="padding: 15px 30px; border-bottom: 1px solid #DDD6FE;">
-                            <span style="color: #6B21A8; font-weight: bold; font-size: 14px; {base_font}">⚠️ 受影響港口 Affected Ports:</span>
-                            <br>
-                            <div style="margin-top: 5px; color: #333333; font-size: 15px; line-height: 1.5; {base_font}">
-                                {', '.join([f"<b>{p.port_code}</b>" for p in vis_assessments])}
-                            </div>
-                        </td>
-                    </tr>
-
-                    <!-- ✅ 2010-006 案例警示區 -->
-                    <tr>
-                        <td style="padding: 30px;">
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FEF2F2" style="border: 2px solid #DC2626; border-radius: 6px;">
+                                <!-- ✅ 2010-006 案例警示區 -->
                                 <tr>
-                                    <td style="padding: 20px;">
-                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <td style="padding: 30px;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FEF2F2" style="border: 2px solid #DC2626; border-radius: 6px;">
                                             <tr>
-                                                <td style="padding-bottom: 15px; border-bottom: 2px solid #FCA5A5;">
-                                                    <strong style="color: #991B1B; font-size: 18px; {base_font}">⚠️ 案例警示 Case Study Alert (Ref: 2010-006)</strong>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td style="padding-top: 15px;">
+                                                <td style="padding: 20px;">
                                                     <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                                         <tr>
-                                                            <td width="30" valign="top" style="font-size: 18px;">⚓</td>
-                                                            <td valign="top" style="{base_font} color: #7F1D1D; font-size: 14px; line-height: 1.6; padding-bottom: 12px;">
-                                                                <strong style="color: #991B1B;">2010年威海碰撞事故：</strong>一艘香港籍散裝船與貝里斯籍雜貨船在能見度僅約 <span style="background-color: #FEE2E2; padding: 2px 6px; border-radius: 3px; font-weight: bold;">20 公尺</span> 的極端惡劣條件下相撞，導致雜貨船沉沒、數人罹難。<br>
-                                                                <span style="color: #991B1B; font-size: 13px;">In 2010, a Hong Kong bulk carrier collided with a Belizean cargo ship off Weihai in visibility of only <strong>20 meters</strong>, resulting in the sinking of the cargo ship and loss of lives.</span>
+                                                            <td style="padding-bottom: 15px; border-bottom: 2px solid #FCA5A5;">
+                                                                <strong style="color: #991B1B; font-size: 18px; {base_font}">⚠️ 案例警示 Case Study Alert (Ref: 2010-006)</strong>
+                                                            </td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td style="padding-top: 15px;">
+                                                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                                    <tr>
+                                                                        <td width="30" valign="top" style="font-size: 18px;">⚓</td>
+                                                                        <td valign="top" style="{base_font} color: #7F1D1D; font-size: 14px; line-height: 1.6; padding-bottom: 12px;">
+                                                                            <strong style="color: #991B1B;">2010年威海碰撞事故：</strong>一艘香港籍散裝船與貝里斯籍雜貨船在能見度僅約 <span style="background-color: #FEE2E2; padding: 2px 6px; border-radius: 3px; font-weight: bold;">20 公尺</span> 的極端惡劣條件下相撞，導致雜貨船沉沒、數人罹難。<br>
+                                                                            <span style="color: #991B1B; font-size: 13px;">In 2010, a Hong Kong bulk carrier collided with a Belizean cargo ship off Weihai in visibility of only <strong>20 meters</strong>, resulting in the sinking of the cargo ship and loss of lives.</span>
+                                                                        </td>
+                                                                    </tr>
+                                                                </table>
                                                             </td>
                                                         </tr>
                                                     </table>
@@ -2647,85 +2638,82 @@ class WeatherMonitorService:
                                         </table>
                                     </td>
                                 </tr>
-                            </table>
-                        </td>
-                    </tr>
 
-                    <!-- ✅ 能見度不良應對措施（參考 2010-006 調查結果） -->
-                    <tr>
-                        <td style="padding: 0 30px 30px 30px;">
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#F9FAFB" style="border: 1px solid #E0E0E0; border-radius: 6px;">
+                                <!-- ✅ 能見度不良應對措施（參考 2010-006 調查結果） -->
                                 <tr>
-                                    <td style="padding: 15px 20px; border-bottom: 1px solid #E0E0E0; background-color: #F0F4F8;">
-                                        <strong style="color: #2C3E50; font-size: 16px; {base_font}">📋 能見度不良航行安全措施 (Reference: COLREG Rule 19 & Case 2010-006)</strong>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td style="padding: 20px;">
-                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <td style="padding: 0 30px 30px 30px;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#F9FAFB" style="border: 1px solid #E0E0E0; border-radius: 6px;">
                                             <tr>
-                                                <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">👀</td>
-                                                <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
-                                                    <strong style="color: #7C3AED;">加強瞭望 (Proper Look-out)：</strong>使用一切可用手段保持適當瞭望，包括<span style="background-color: #F3E8FF; padding: 2px 6px; border-radius: 3px; font-weight: bold;">正確使用雷達與 AIS</span>，調整雷達至最佳狀態以偵測小目標。<br>
-                                                    <span style="color: #777777; font-size: 13px;">Maintain proper look-out by all available means, especially proper use of Radar and AIS. Adjust radar functions to optimum settings to detect even small targets.</span>
+                                                <td style="padding: 15px 20px; border-bottom: 1px solid #E0E0E0; background-color: #F0F4F8;">
+                                                    <strong style="color: #2C3E50; font-size: 16px; {base_font}">📋 能見度不良航行安全措施 (Reference: COLREG Rule 19 & Case 2010-006)</strong>
                                                 </td>
                                             </tr>
                                             <tr>
-                                                <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">🐢</td>
-                                                <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
-                                                    <strong style="color: #7C3AED;">保持安全速度 (Safe Speed)：</strong>依 COLREG Rule 19 規定，在能見度受限時必須以安全速度行駛，確保能在適當距離內停船。<br>
-                                                    <span style="color: #777777; font-size: 13px;">Proceed at a safe speed as per COLREG Rule 19. Ensure the vessel can take proper action to avoid collision and stop within appropriate distance.</span>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">📡</td>
-                                                <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
-                                                    <strong style="color: #7C3AED;">雙雷達運作 (Dual Radar Operation)：</strong>開啟第二部雷達（尤其是 S-Band），配合 AIS 快速識別目標船名、航向、船速，以便及時採取有效避讓行動。<br>
-                                                    <span style="color: #777777; font-size: 13px;">Switch on another radar (especially S-band) to easily locate small targets. Use AIS to promptly identify target ship's name, course, and speed for effective collision avoidance.</span>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">🔄</td>
-                                                <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
-                                                    <strong style="color: #7C3AED;">避免小角度轉向 (Avoid Small Alterations)：</strong>採取<span style="background-color: #FEF3C7; padding: 2px 6px; border-radius: 3px; font-weight: bold;">明顯且足夠大的轉向角度</span>，避免連續小角度轉向導致對方船舶無法察覺。<br>
-                                                    <span style="color: #777777; font-size: 13px;">Take substantial and obvious alterations of course. Avoid a succession of small alterations which may not be detected by other vessels.</span>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">📢</td>
-                                                <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
-                                                    <strong style="color: #7C3AED;">鳴放霧號 (Sound Signals)：</strong>依規定鳴放霧號，提醒周圍船舶注意；必要時使用 VHF 與附近船舶溝通確認動態。<br>
-                                                    <span style="color: #777777; font-size: 13px;">Sound appropriate fog signals as required. Use VHF to communicate with nearby vessels when necessary to confirm intentions.</span>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td width="25" valign="top" style="font-size: 16px;">⚓</td>
-                                                <td valign="top" style="{base_font} color: #444444; font-size: 14px; line-height: 1.5;">
-                                                    <strong style="color: #7C3AED;">考慮延遲進港或錨泊候泊 (Consider Delay or Anchoring)：</strong>若能見度極差（< 500m），考慮在安全水域錨泊候泊或延遲進港，直到能見度改善。<br>
-                                                    <span style="color: #777777; font-size: 13px;">If visibility is extremely poor (< 500m), consider anchoring in safe waters or delaying port entry until visibility improves.</span>
+                                                <td style="padding: 20px;">
+                                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                        <tr>
+                                                            <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">👀</td>
+                                                            <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                                <strong style="color: #7C3AED;">加強瞭望 (Proper Look-out)：</strong>使用一切可用手段保持適當瞭望，包括<span style="background-color: #F3E8FF; padding: 2px 6px; border-radius: 3px; font-weight: bold;">正確使用雷達與 AIS</span>，調整雷達至最佳狀態以偵測小目標。<br>
+                                                                <span style="color: #777777; font-size: 13px;">Maintain proper look-out by all available means, especially proper use of Radar and AIS. Adjust radar functions to optimum settings to detect even small targets.</span>
+                                                            </td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">🐢</td>
+                                                            <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                                <strong style="color: #7C3AED;">保持安全速度 (Safe Speed)：</strong>依 COLREG Rule 19 規定，在能見度受限時必須以安全速度行駛，確保能在適當距離內停船。<br>
+                                                                <span style="color: #777777; font-size: 13px;">Proceed at a safe speed as per COLREG Rule 19. Ensure the vessel can take proper action to avoid collision and stop within appropriate distance.</span>
+                                                            </td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">📡</td>
+                                                            <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                                <strong style="color: #7C3AED;">雙雷達運作 (Dual Radar Operation)：</strong>開啟第二部雷達（尤其是 S-Band），配合 AIS 快速識別目標船名、航向、船速，以便及時採取有效避讓行動。<br>
+                                                                <span style="color: #777777; font-size: 13px;">Switch on another radar (especially S-band) to easily locate small targets. Use AIS to promptly identify target ship's name, course, and speed for effective collision avoidance.</span>
+                                                            </td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">🔄</td>
+                                                            <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                                <strong style="color: #7C3AED;">避免小角度轉向 (Avoid Small Alterations)：</strong>採取<span style="background-color: #FEF3C7; padding: 2px 6px; border-radius: 3px; font-weight: bold;">明顯且足夠大的轉向角度</span>，避免連續小角度轉向導致對方船舶無法察覺。<br>
+                                                                <span style="color: #777777; font-size: 13px;">Take substantial and obvious alterations of course. Avoid a succession of small alterations which may not be detected by other vessels.</span>
+                                                            </td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">📢</td>
+                                                            <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                                <strong style="color: #7C3AED;">鳴放霧號 (Sound Signals)：</strong>依規定鳴放霧號，提醒周圍船舶注意；必要時使用 VHF 與附近船舶溝通確認動態。<br>
+                                                                <span style="color: #777777; font-size: 13px;">Sound appropriate fog signals as required. Use VHF to communicate with nearby vessels when necessary to confirm intentions.</span>
+                                                            </td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td width="25" valign="top" style="font-size: 16px;">⚓</td>
+                                                            <td valign="top" style="{base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                                <strong style="color: #7C3AED;">考慮延遲進港或錨泊候泊 (Consider Delay or Anchoring)：</strong>若能見度極差（< 500m），考慮在安全水域錨泊候泊或延遲進港，直到能見度改善。<br>
+                                                                <span style="color: #777777; font-size: 13px;">If visibility is extremely poor (< 500m), consider anchoring in safe waters or delaying port entry until visibility improves.</span>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
                                                 </td>
                                             </tr>
                                         </table>
                                     </td>
                                 </tr>
-                            </table>
-                        </td>
-                    </tr>
 
-                    <!-- 分隔線 -->
-                    <tr>
-                        <td style="padding: 0 30px 15px 30px; text-align: center;">
-                            <div style="border-top: 1px dashed #CCCCCC; height: 1px; width: 100%; margin-bottom: 20px;"></div>
-                            <strong style="color: #333333; font-size: 18px; {base_font}">⬇️ 各港口詳細能見度預報 Detailed Forecast ⬇️</strong>
-                            <div style="font-size: 12px; color: #888888; margin-top: 5px; {base_font}">Data Source: Weathernews Inc. (WNI)</div>
-                        </td>
-                    </tr>
+                                <!-- 分隔線 -->
+                                <tr>
+                                    <td style="padding: 0 30px 15px 30px; text-align: center;">
+                                        <div style="border-top: 1px dashed #CCCCCC; height: 1px; width: 100%; margin-bottom: 20px;"></div>
+                                        <strong style="color: #333333; font-size: 18px; {base_font}">⬇️ 各港口詳細能見度預報 Detailed Forecast ⬇️</strong>
+                                        <div style="font-size: 12px; color: #888888; margin-top: 5px; {base_font}">Data Source: Weathernews Inc. (WNI)</div>
+                                    </td>
+                                </tr>
 
-                    <!-- 港口詳細資料 -->
-                    <tr>
-                        <td style="padding: 0 20px 40px 20px;">
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse;">
-        """
+                                <!-- 港口詳細資料 -->
+                                <tr>
+                                    <td style="padding: 0 20px 40px 20px;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse;">
+                    """
 
         # --- 迴圈生成港口數據 ---
         for index, p in enumerate(vis_assessments):
@@ -2900,43 +2888,43 @@ class WeatherMonitorService:
         return html
 
     def _generate_temperature_html_report(self, temp_assessments: List[RiskAssessment]) -> str:
-            """✅ 生成低溫警報專用 HTML 報告（完全 Inline Style 優化版）- 適用於 Outlook/Gmail"""
-            
-            # --- 輔助函式 ---
-            def format_time_display(time_str):
-                if not time_str: return "N/A"
-                try:
-                    # 移除括號後的時區資訊，保持版面簡潔
-                    return time_str.split('(')[0].strip() if '(' in time_str else time_str
-                except:
-                    return time_str
-            
-            def find_first_freezing_time(weather_records):
-                """找出第一次低於 0°C 的時間"""
-                for record in weather_records:
-                    if record.temperature < RISK_THRESHOLDS['temp_freezing']:
-                        return record.time
-                return None
-            
-            # --- 時間與環境設定 ---
-            # 定義統一字體，避免 Outlook 預設字體問題
-            base_font = "font-family: 'Microsoft JhengHei', 'Heiti TC', Arial, sans-serif;"
-            
+        """✅ 生成低溫警報專用 HTML 報告（完全 Inline Style 優化版）- 適用於 Outlook/Gmail"""
+        
+        # --- 輔助函式 ---
+        def format_time_display(time_str):
+            if not time_str: return "N/A"
             try:
-                from zoneinfo import ZoneInfo
-                taipei_tz = ZoneInfo('Asia/Taipei')
-            except ImportError:
-                from datetime import timedelta, timezone
-                taipei_tz = timezone(timedelta(hours=8))
-            
-            utc_now = datetime.now(timezone.utc)
-            tpe_now = utc_now.astimezone(taipei_tz)
-            
-            now_str_TPE = f"{tpe_now.strftime('%Y-%m-%d %H:%M')} (TPE)"
-            now_str_UTC = f"{utc_now.strftime('%Y-%m-%d %H:%M')} (UTC)"
+                return time_str.split('(')[0].strip() if '(' in time_str else time_str
+            except:
+                return time_str
+        
+        def find_first_freezing_time(weather_records):
+            """找出第一次低於 0°C 的時間"""
+            for record in weather_records:
+                if record.temperature < RISK_THRESHOLDS['temp_freezing']:
+                    return record.time
+            return None
+        
+        # --- 時間與環境設定 ---
+        base_font = "font-family: 'Microsoft JhengHei', 'Heiti TC', Arial, sans-serif;"
+        
+        # ✅ 修正：不要局部 import timezone
+        try:
+            from zoneinfo import ZoneInfo
+            taipei_tz = ZoneInfo('Asia/Taipei')
+        except ImportError:
+            # ✅ 使用全域已 import 的 timezone 和 timedelta
+            taipei_tz = timezone(timedelta(hours=8))
+        
+        # ✅ 使用全域的 datetime 和 timezone
+        utc_now = datetime.now(timezone.utc)
+        tpe_now = utc_now.astimezone(taipei_tz)
+        
+        now_str_TPE = f"{tpe_now.strftime('%Y-%m-%d %H:%M')} (TPE)"
+        now_str_UTC = f"{utc_now.strftime('%Y-%m-%d %H:%M')} (UTC)"
 
-            # --- HTML 本體 ---
-            html = f"""
+        # --- HTML 本體 ---
+        html = f"""
     <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
     <html xmlns="http://www.w3.org/1999/xhtml">
     <head>
@@ -3056,37 +3044,37 @@ class WeatherMonitorService:
                         <tr>
                             <td style="padding: 0 20px 40px 20px;">
                                 <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse;">
-            """
+        """
 
-            # --- 迴圈生成港口數據 ---
-            for index, p in enumerate(temp_assessments):
-                # 斑馬紋背景色設定
-                row_bg = "#FFFFFF" if index % 2 == 0 else "#F7F9FA"
-                border_color = "#E0E0E0"
-                
-                # 計算時間
-                first_freezing_time = find_first_freezing_time(p.weather_records) if p.weather_records else None
-                
-                if first_freezing_time:
-                    try:
-                        first_freeze_utc = first_freezing_time.strftime('%Y-%m-%d %H:%M')
-                        if hasattr(p, 'weather_records') and p.weather_records:
-                            lct_offset = p.weather_records[0].lct_time.utcoffset()
-                            first_freeze_lct = (first_freezing_time + lct_offset).strftime('%Y-%m-%d %H:%M')
-                        else:
-                            first_freeze_lct = "N/A"
-                    except:
-                        first_freeze_utc = "N/A"
+        # --- 迴圈生成港口數據 ---
+        for index, p in enumerate(temp_assessments):
+            # 斑馬紋背景色設定
+            row_bg = "#FFFFFF" if index % 2 == 0 else "#F7F9FA"
+            border_color = "#E0E0E0"
+            
+            # 計算時間
+            first_freezing_time = find_first_freezing_time(p.weather_records) if p.weather_records else None
+            
+            if first_freezing_time:
+                try:
+                    first_freeze_utc = first_freezing_time.strftime('%Y-%m-%d %H:%M')
+                    if hasattr(p, 'weather_records') and p.weather_records:
+                        lct_offset = p.weather_records[0].lct_time.utcoffset()
+                        first_freeze_lct = (first_freezing_time + lct_offset).strftime('%Y-%m-%d %H:%M')
+                    else:
                         first_freeze_lct = "N/A"
-                else:
+                except:
                     first_freeze_utc = "N/A"
                     first_freeze_lct = "N/A"
-                
-                temp_utc = format_time_display(p.min_temp_time_utc) if p.min_temp_time_utc else "N/A"
-                temp_lct = format_time_display(p.min_temp_time_lct) if p.min_temp_time_lct else "N/A"
-                
-                # 組合單一港口的 HTML
-                html += f"""
+            else:
+                first_freeze_utc = "N/A"
+                first_freeze_lct = "N/A"
+            
+            temp_utc = format_time_display(p.min_temp_time_utc) if p.min_temp_time_utc else "N/A"
+            temp_lct = format_time_display(p.min_temp_time_lct) if p.min_temp_time_lct else "N/A"
+            
+            # 組合單一港口的 HTML
+            html += f"""
                                     <tr bgcolor="{row_bg}">
                                         <td style="padding: 20px; border: 1px solid {border_color}; border-bottom: none;">
                                             <table border="0" cellpadding="0" cellspacing="0" width="100%">
@@ -3140,19 +3128,20 @@ class WeatherMonitorService:
                                             </table>
                                         </td>
                                     </tr>
-                """
-                # --- 溫度圖表 (確保在同一區塊背景色中) ---
-                if hasattr(p, 'chart_base64_list') and p.chart_base64_list:
-                    temp_chart = None
-                    for b64 in p.chart_base64_list:
-                        if len(b64) > 0:
-                            temp_chart = b64
-                            break # 找到第一張圖就跳出
-                    
-                    if temp_chart:
-                        # 清理 Base64 字串，避免 Outlook 渲染錯誤
-                        b64_clean = temp_chart.replace('\n', '').replace('\r', '').replace(' ', '')
-                        html += f"""
+            """
+            
+            # --- 溫度圖表 (確保在同一區塊背景色中) ---
+            if hasattr(p, 'chart_base64_list') and p.chart_base64_list:
+                temp_chart = None
+                for b64 in p.chart_base64_list:
+                    if len(b64) > 0:
+                        temp_chart = b64
+                        break  # 找到第一張圖就跳出
+                
+                if temp_chart:
+                    # 清理 Base64 字串，避免 Outlook 渲染錯誤
+                    b64_clean = temp_chart.replace('\n', '').replace('\r', '').replace(' ', '')
+                    html += f"""
                                     <tr bgcolor="{row_bg}">
                                         <td align="center" style="padding: 10px 20px 20px 20px; border: 1px solid {border_color}; border-top: none;">
                                             <div style="font-size: 12px; color: #888888; margin-bottom: 5px; text-align: left; width: 100%; {base_font}">
@@ -3164,13 +3153,13 @@ class WeatherMonitorService:
                                                 alt="Temperature Chart for {p.port_code}" border="0">
                                         </td>
                                     </tr>
-                        """
-                
-                # 增加間距列 (Spacer Row)
-                html += '<tr><td height="20" style="font-size: 0; line-height: 0;">&nbsp;</td></tr>'
+            """
+            
+            # 增加間距列 (Spacer Row)
+            html += '<tr><td height="20" style="font-size: 0; line-height: 0;">&nbsp;</td></tr>'
 
-            # --- Footer 結尾 ---
-            html += f"""
+        # --- Footer 結尾 ---
+        html += f"""
                                 </table>
                             </td>
                         </tr>
@@ -3200,15 +3189,15 @@ class WeatherMonitorService:
                         </tr>
                         
                     </table>
-                    </td>
+                </td>
             </tr>
         </table>
         </center>
     </body>
     </html>
-            """
-            
-            return html
+        """
+        
+        return html
     
     def save_report_to_file(self, report, output_dir='reports'):
         """儲存報告到檔案"""
