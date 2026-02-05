@@ -121,6 +121,8 @@ class RiskAssessment:
         for key in ['raw_records', 'weather_records', 'chart_base64_list']:
             d.pop(key, None)
         return d
+    
+    
 # ================= 繪圖模組 =================
 
 class ChartGenerator:
@@ -147,6 +149,7 @@ class ChartGenerator:
             print("⚠️ 無法設定中文字體")
 
     def _prepare_dataframe(self, records: List[WeatherRecord]) -> pd.DataFrame:
+        """準備風浪資料的 DataFrame"""
         data = []
         for r in records:
             data.append({
@@ -154,6 +157,20 @@ class ChartGenerator:
                 'wind_speed': r.wind_speed_kts,
                 'wind_gust': r.wind_gust_kts,
                 'wave_height': r.wave_height
+            })
+        return pd.DataFrame(data)
+    
+    def _prepare_weather_dataframe(self, records: List) -> pd.DataFrame:
+        """✅ 準備天氣資料的 DataFrame（溫度、降雨、能見度）"""
+        data = []
+        for wr in records:
+            data.append({
+                'time': wr.time,
+                'lct_time': wr.lct_time,
+                'temperature': wr.temperature,
+                'precipitation': wr.precipitation,
+                'pressure': wr.pressure,
+                'visibility_m': wr.visibility_meters if wr.visibility_meters else None
             })
         return pd.DataFrame(data)
 
@@ -167,7 +184,7 @@ class ChartGenerator:
         return img_str
 
     def generate_wind_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
-        """繪製風速趨勢圖，回傳 Base64 字串（專業優化版）"""
+        """繪製風速趨勢圖，回傳 Base64 字串（48h 資料）"""
         if not assessment.raw_records:
             print(f"      ⚠️ {port_code} 沒有原始資料記錄")
             return None
@@ -299,7 +316,7 @@ class ChartGenerator:
             return None
 
     def generate_wave_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
-        """繪製浪高趨勢圖，回傳 Base64 字串（專業優化版）"""
+        """繪製浪高趨勢圖，回傳 Base64 字串（48h 資料）"""
         if not assessment.raw_records:
             return None
             
@@ -408,21 +425,15 @@ class ChartGenerator:
             return None
 
     def generate_temperature_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
-        """✅ 繪製溫度趨勢圖（使用 7 天資料）- 優化版"""
+        """✅ 繪製溫度趨勢圖（使用 7 天資料，僅用於低溫警報）"""
         if not assessment.weather_records:
             return None
         
         try:
-            # 準備溫度資料
-            temp_data = []
-            for wr in assessment.weather_records:
-                temp_data.append({
-                    'time': wr.time,
-                    'temperature': wr.temperature,
-                    'precipitation': wr.precipitation
-                })
+            df = self._prepare_weather_dataframe(assessment.weather_records)
             
-            df = pd.DataFrame(temp_data)
+            # ✅ 過濾有效溫度資料
+            df = df[df['temperature'].notna()]
             
             if df.empty or df['temperature'].min() >= RISK_THRESHOLDS['temp_freezing']:
                 return None
@@ -430,8 +441,6 @@ class ChartGenerator:
             print(f"      📊 準備繪製 {port_code} 的溫度圖 (7天資料點數: {len(df)})")
             
             plt.style.use('default')
-            
-            # 設定圖表尺寸（雙Y軸）
             fig, ax1 = plt.subplots(figsize=(16, 7), dpi=120)
             
             fig.patch.set_facecolor('#FFFFFF')
@@ -479,43 +488,6 @@ class ChartGenerator:
                         edgecolor=color_temp, linewidth=2.5),
                         arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0.2', 
                                     color=color_temp, lw=2.5))
-            
-            # 標註所有低於 0°C 的時段
-            freezing_periods = []
-            in_freezing = False
-            start_time = None
-            
-            for idx, row in df.iterrows():
-                if row['temperature'] < RISK_THRESHOLDS['temp_freezing']:
-                    if not in_freezing:
-                        start_time = row['time']
-                        in_freezing = True
-                else:
-                    if in_freezing:
-                        end_time = df.loc[idx - 1, 'time']
-                        freezing_periods.append((start_time, end_time))
-                        in_freezing = False
-            
-            # 如果最後還在冰點以下
-            if in_freezing:
-                freezing_periods.append((start_time, df['time'].iloc[-1]))
-            
-            # 在圖上標註冰點時段
-            for i, (start, end) in enumerate(freezing_periods[:3]):  # 最多標註3個時段
-                mid_time = start + (end - start) / 2
-                closest_idx = (df['time'] - mid_time).abs().idxmin()
-                mid_temp = df.loc[closest_idx, 'temperature']
-                
-                duration_hours = (end - start).total_seconds() / 3600
-                
-                ax1.annotate(f'Freezing Period {i+1}\n{duration_hours:.1f} hrs',
-                            xy=(mid_time, mid_temp),
-                            xytext=(0, 15 + i*10), textcoords='offset points', 
-                            fontsize=10, fontweight='600',
-                            color='#1E40AF', 
-                            bbox=dict(boxstyle='round,pad=0.4', facecolor='#EFF6FF', 
-                                    edgecolor='#3B82F6', linewidth=1.5, alpha=0.9),
-                            ha='center')
             
             # 次Y軸：降雨量
             ax2 = ax1.twinx()
@@ -590,6 +562,137 @@ class ChartGenerator:
             print(f"      ❌ 繪製7天溫度圖失敗 {port_code}: {e}")
             traceback.print_exc()
             return None
+
+    def generate_visibility_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
+        """✅ 繪製能見度趨勢圖（改用 48h 資料）"""
+        if not assessment.weather_records:
+            return None
+        
+        try:
+            df = self._prepare_weather_dataframe(assessment.weather_records)
+            
+            # ✅ 過濾有效能見度資料
+            df = df[df['visibility_m'].notna()]
+            df['visibility_nm'] = df['visibility_m'] / 1852  # 轉換為海浬
+            
+            if df.empty:
+                return None
+            
+            # 檢查是否有能見度不良時段
+            threshold_m = RISK_THRESHOLDS['visibility_poor']
+            if df['visibility_m'].min() >= threshold_m:
+                return None
+            
+            print(f"      📊 準備繪製 {port_code} 的能見度圖 (48h資料點數: {len(df)})")
+            
+            plt.style.use('default')
+            fig, ax = plt.subplots(figsize=(16, 7), dpi=120)
+            
+            fig.patch.set_facecolor('#FFFFFF')
+            ax.set_facecolor('#F3F4F6')
+            
+            # 繪製能見度不良的背景區域
+            threshold_km = threshold_m / 1000
+            ax.axhspan(0, threshold_km, 
+                    facecolor='#FEE2E2', alpha=0.3, zorder=0, label='Poor Visibility Zone')
+            
+            # 主線：能見度（km）
+            color_vis = '#7C3AED'
+            line = ax.plot(df['time'], df['visibility_km'], 
+                        color=color_vis, linewidth=3.5, marker='o', markersize=7,
+                        markerfacecolor='#A78BFA', markeredgecolor=color_vis,
+                        markeredgewidth=1.5, label='Visibility', zorder=5, alpha=0.9)
+            
+            # 填充能見度不良區域
+            poor_vis_mask = df['visibility_km'] < threshold_km
+            if poor_vis_mask.any():
+                ax.fill_between(df['time'], df['visibility_km'], threshold_km,
+                            where=poor_vis_mask, interpolate=True, color='#DC2626',
+                            alpha=0.35, label='Poor Visibility Period', zorder=3)
+            
+            # 閾值線（1.5 NM = 2.778 km）
+            ax.axhline(threshold_km, color="#DC2626", linestyle='--', linewidth=2.5, 
+                    label=f'⚠️ Visibility Threshold ({threshold_km:.2f} km / 1.5 NM)', 
+                    zorder=4, alpha=0.8)
+            
+            # 標註最低能見度點
+            min_vis_idx = df['visibility_km'].idxmin()
+            min_vis_time = df.loc[min_vis_idx, 'time']
+            min_vis_km = df.loc[min_vis_idx, 'visibility_km']
+            min_vis_nm = df.loc[min_vis_idx, 'visibility_nm']
+            
+            ax.annotate(f'Min: {min_vis_km:.2f} km\n({min_vis_nm:.2f} NM)',
+                    xy=(min_vis_time, min_vis_km),
+                    xytext=(10, 20), textcoords='offset points', fontsize=12, fontweight='bold',
+                    color=color_vis, bbox=dict(boxstyle='round,pad=0.6', facecolor='#EDE9FE', 
+                    edgecolor=color_vis, linewidth=2.5),
+                    arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0.2', 
+                                color=color_vis, lw=2.5))
+            
+            # ✅ 標題改為 48-Hour
+            ax.set_title(f"🌫️ Visibility Forecast (48-Hour) - {assessment.port_name} ({assessment.port_code})", 
+                        fontsize=22, fontweight='bold', pad=20, color='#1F2937', fontfamily='sans-serif')
+            
+            fig.text(0.5, 0.94, '48-Hour Weather Monitoring | Data Source: WNI', 
+                    ha='center', fontsize=12, color='#6B7280', style='italic')
+            
+            ax.set_ylabel('Visibility (kilometers)', fontsize=15, fontweight='600', color='#374151', labelpad=10)
+            ax.set_xlabel('Date / Time (UTC)', fontsize=15, fontweight='600', color='#374151', labelpad=10)
+            
+            # 圖例
+            legend = ax.legend(loc='upper left', frameon=True, fontsize=12, shadow=True, fancybox=True,
+                            framealpha=0.95, edgecolor='#D1D5DB', facecolor='#FFFFFF')
+            legend.get_frame().set_linewidth(1.5)
+            
+            # 網格
+            ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.8, color='#9CA3AF', zorder=1)
+            ax.set_axisbelow(True)
+            
+            # ✅ X軸格式（48h 資料，間隔調整為 6 小時）
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d\n%H:%M'))
+            ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
+            ax.xaxis.set_minor_locator(mdates.HourLocator(interval=3))
+            
+            plt.setp(ax.xaxis.get_majorticklabels(), rotation=0, ha='center', fontsize=11, fontweight='500')
+            plt.setp(ax.yaxis.get_majorticklabels(), fontsize=11, fontweight='500')
+            
+            # 邊框美化
+            for spine in ['top', 'right']:
+                ax.spines[spine].set_visible(False)
+            
+            for spine in ['bottom', 'left']:
+                ax.spines[spine].set_edgecolor('#9CA3AF')
+                ax.spines[spine].set_linewidth(2)
+            
+            # Y軸範圍
+            y_max = max(df['visibility_km'].max(), threshold_km * 2)
+            ax.set_ylim(0, y_max)
+            
+            # 水印
+            fig.text(0.99, 0.01, 'WHL Marine Technology Division', 
+                    ha='right', va='bottom', fontsize=9, color='#9CA3AF', alpha=0.6, style='italic')
+            
+            plt.tight_layout(rect=[0, 0.02, 1, 0.96])
+            
+            # 儲存與轉換
+            filepath = os.path.join(self.output_dir, f"visibility_48h_{port_code}.png")
+            fig.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white', edgecolor='none', pad_inches=0.1)
+            print(f"      💾 48h能見度圖已存檔: {filepath}")
+            
+            base64_str = self._fig_to_base64(fig, dpi=150)
+            print(f"      ✅ 48h能見度圖 Base64 轉換成功 (長度: {len(base64_str)} 字元)")
+            
+            plt.close(fig)
+            return base64_str
+            
+        except Exception as e:
+            print(f"      ❌ 繪製48h能見度圖失敗 {port_code}: {e}")
+            traceback.print_exc()
+            return None
+
+
+        
+        
 # ================= 風險分析模組 =================
 
 class WeatherRiskAnalyzer:
@@ -1254,6 +1357,18 @@ class WeatherMonitorService:
                 )
                 if b64_temp:
                     assessment.chart_base64_list.append(b64_temp)
+                    print(f"      ✅ {assessment.port_code} 溫度圖已生成")
+
+        # ✅ 6.5. 為能見度不良港口生成能見度圖
+        if visibility_assessments:
+            print(f"\n🌫️ 步驟 6.5: 為 {len(visibility_assessments)} 個能見度不良港口生成能見度圖（48h）...")
+            for assessment in visibility_assessments:
+                b64_vis = self.chart_generator.generate_visibility_chart(
+                    assessment, assessment.port_code
+                )
+                if b64_vis:
+                    assessment.chart_base64_list.append(b64_vis)
+            print(f"      ✅ {assessment.port_code} 能見度圖已生成")
         
         # 7. 發送 Teams 通知
         teams_sent = False
@@ -1425,60 +1540,93 @@ class WeatherMonitorService:
         return temp_assessments
 
     def _analyze_visibility_ports(self) -> List[RiskAssessment]:
-        """✅ 專門分析能見度不良港口（獨立於主風險分析）- 修正版"""
-        visibility_assessments = []
+        """✅ 專門分析能見度不良港口（改用 48h 資料）"""
+        vis_assessments = []
         total = len(self.crawler.port_list)
         
         for i, port_code in enumerate(self.crawler.port_list, 1):
             try:
-                # 取得 7d 天氣資料
-                data_7d = self.db.get_latest_content_7d(port_code)
-                if not data_7d:
+                # ✅ 改用 48h 資料
+                data_48h = self.db.get_latest_content(port_code)
+                if not data_48h:
                     continue
                 
-                content_7d, issued_7d, name_7d = data_7d
+                content_48h, issued_48h, name_48h = data_48h
                 
                 info = self.crawler.get_port_info(port_code)
                 if not info:
                     continue
                 
-                # 解析 7d 資料
+                # ✅ 解析 48h 資料
                 parser = WeatherParser()
-                port_name_7d, wind_records_7d, weather_records_7d, warnings_7d = parser.parse_content_7d(content_7d)
+                port_name_48h, wind_records_48h, weather_records_48h, warnings_48h = parser.parse_content(content_48h)
                 
-                if not weather_records_7d:
+                if not weather_records_48h:
                     continue
                 
-                # ✅ 修正：收集能見度不良時間點（加強驗證）
-                poor_visibility_points = []
-                for wr in weather_records_7d:
-                    # 檢查 visibility_meters 是否有效
-                    if (wr.visibility_meters is not None 
-                        and isinstance(wr.visibility_meters, (int, float))
-                        and wr.visibility_meters > 0  # 排除負值
-                        and wr.visibility_meters < 50000  # 排除異常大值
-                        and wr.visibility_meters < RISK_THRESHOLDS['visibility_poor']):
-                        
-                        poor_visibility_points.append({
-                            'time_utc': wr.time.strftime('%Y-%m-%d %H:%M'),
-                            'time_lct': wr.lct_time.strftime('%Y-%m-%d %H:%M'),
-                            'visibility_m': wr.visibility_meters,
-                            'visibility_km': wr.visibility_meters / 1000
-                        })
+                # 過濾有效的能見度記錄
+                valid_vis_records = []
+                for r in weather_records_48h:
+                    vis_m = r.visibility_meters
+                    if vis_m is not None and isinstance(vis_m, (int, float)) and vis_m > 0:
+                        valid_vis_records.append(r)
                 
-                if poor_visibility_points:
-                    print(f"   [{i}/{total}] 🔍 {port_code}: 找到 {len(poor_visibility_points)} 個能見度不良時間點")
+                if not valid_vis_records:
+                    print(f"   [{i}/{total}] ⚠️ {port_code}: 無有效能見度資料")
+                    continue
+                
+                # 找出最低能見度
+                min_vis_record = min(valid_vis_records, key=lambda r: r.visibility_meters)
+                
+                # 檢查是否低於閾值
+                if min_vis_record.visibility_meters < RISK_THRESHOLDS['visibility_poor']:
+                    # 找出所有能見度不良時段
+                    poor_vis_periods = []
+                    in_poor_vis = False
+                    period_start = None
+                    period_min_vis = float('inf')
                     
-                    # 合併時段
-                    poor_visibility_periods = self.analyzer.merge_visibility_periods(poor_visibility_points)
+                    for r in valid_vis_records:
+                        if r.visibility_meters < RISK_THRESHOLDS['visibility_poor']:
+                            if not in_poor_vis:
+                                # 開始新時段
+                                period_start = r
+                                period_min_vis = r.visibility_meters
+                                in_poor_vis = True
+                            else:
+                                # 更新最低能見度
+                                period_min_vis = min(period_min_vis, r.visibility_meters)
+                        else:
+                            if in_poor_vis:
+                                # 結束時段
+                                poor_vis_periods.append({
+                                    'start_utc': period_start.time.strftime('%Y-%m-%d %H:%M'),
+                                    'end_utc': valid_vis_records[valid_vis_records.index(r) - 1].time.strftime('%Y-%m-%d %H:%M'),
+                                    'start_lct': period_start.lct_time.strftime('%Y-%m-%d %H:%M'),
+                                    'end_lct': valid_vis_records[valid_vis_records.index(r) - 1].lct_time.strftime('%Y-%m-%d %H:%M'),
+                                    'min_visibility_m': period_min_vis,
+                                    'min_visibility_km': period_min_vis / 1000
+                                })
+                                in_poor_vis = False
+                    
+                    # 如果最後還在能見度不良狀態
+                    if in_poor_vis:
+                        poor_vis_periods.append({
+                            'start_utc': period_start.time.strftime('%Y-%m-%d %H:%M'),
+                            'end_utc': valid_vis_records[-1].time.strftime('%Y-%m-%d %H:%M'),
+                            'start_lct': period_start.lct_time.strftime('%Y-%m-%d %H:%M'),
+                            'end_lct': valid_vis_records[-1].lct_time.strftime('%Y-%m-%d %H:%M'),
+                            'min_visibility_m': period_min_vis,
+                            'min_visibility_km': period_min_vis / 1000
+                        })
                     
                     # 建立能見度評估
                     assessment = RiskAssessment(
                         port_code=port_code,
-                        port_name=info.get('port_name', port_name_7d),
+                        port_name=info.get('port_name', port_name_48h),
                         country=info.get('country', 'N/A'),
-                        risk_level=0,  # 能見度不計入風險等級
-                        risk_factors=[f"能見度不良 ({len(poor_visibility_periods)} 時段)"],
+                        risk_level=0,
+                        risk_factors=[f"能見度不良 {min_vis_record.visibility_meters / 1000:.2f} km"],
                         
                         max_wind_kts=0,
                         max_wind_bft=0,
@@ -1493,26 +1641,29 @@ class WeatherMonitorService:
                         max_wave_time_utc="",
                         max_wave_time_lct="",
                         
-                        min_visibility=min(p['min_visibility_km'] for p in poor_visibility_periods) * 1000,
-                        poor_visibility_periods=poor_visibility_periods,
+                        min_visibility=min_vis_record.visibility_meters,
+                        min_visibility_time_utc=f"{min_vis_record.time.strftime('%m/%d %H:%M')} (UTC)",
+                        min_visibility_time_lct=f"{min_vis_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
+                        
+                        poor_visibility_periods=poor_vis_periods,
                         
                         risk_periods=[],
-                        issued_time=issued_7d,
+                        issued_time=issued_48h,
                         latitude=info.get('latitude', 0.0),
                         longitude=info.get('longitude', 0.0),
-                        weather_records=weather_records_7d
+                        weather_records=weather_records_48h  # ✅ 使用 48h 資料
                     )
                     
-                    visibility_assessments.append(assessment)
-                    min_vis_km = min(p['min_visibility_km'] for p in poor_visibility_periods)
-                    print(f"   [{i}/{total}] 🌫️ {port_code}: 能見度警報 {min_vis_km:.1f} km ({len(poor_visibility_periods)} 時段)")
+                    vis_assessments.append(assessment)
+                    print(f"   [{i}/{total}] 🌫️ {port_code}: 能見度不良 {min_vis_record.visibility_meters / 1000:.2f} km ({len(poor_vis_periods)} 個時段)")
                     
             except Exception as e:
                 print(f"   [{i}/{total}] ❌ {port_code}: {e}")
                 traceback.print_exc()
         
-        print(f"\n✅ 能見度分析完成：共找到 {len(visibility_assessments)} 個能見度不良港口")
-        return visibility_assessments
+        print(f"\n✅ 能見度分析完成：共找到 {len(vis_assessments)} 個能見度不良港口")
+        return vis_assessments
+
 
     def _analyze_all_ports(self) -> List[RiskAssessment]:
         """✅ 分析所有港口（風浪用 48h, 天氣用 7d）- 能見度不計入主報告"""
@@ -1562,7 +1713,7 @@ class WeatherMonitorService:
         return assessments
     
     def _generate_charts(self, assessments: List[RiskAssessment]):
-        """生成圖表並將 Base64 存入 assessment"""
+        """✅ 生成風浪圖表（不包含溫度圖）"""
         
         if not assessments:
             print("   ⚠️ 沒有風險港口需要生成圖表")
@@ -1570,7 +1721,7 @@ class WeatherMonitorService:
         
         chart_targets = assessments[:20]
         
-        print(f"   📊 準備為 {len(chart_targets)} 個港口生成圖表...")
+        print(f"   📊 準備為 {len(chart_targets)} 個港口生成風浪圖表...")
         
         success_count = 0
         for i, assessment in enumerate(chart_targets, 1):
@@ -1593,17 +1744,9 @@ class WeatherMonitorService:
                 if b64_wave:
                     assessment.chart_base64_list.append(b64_wave)
                     print(f"      ✅ 浪高圖已生成")
-            
-            # ✅ 3. 溫度圖（當有低溫警告時,使用 7 天資料）
-            if assessment.min_temperature < RISK_THRESHOLDS['temp_freezing']:
-                b64_temp = self.chart_generator.generate_temperature_chart(
-                    assessment, assessment.port_code
-                )
-                if b64_temp:
-                    assessment.chart_base64_list.append(b64_temp)
-                    print(f"      ✅ 溫度圖已生成 (7天資料)")
         
-        print(f"   ✅ 圖表生成完成：{success_count}/{len(chart_targets)} 個港口成功")
+        print(f"   ✅ 風浪圖表生成完成：{success_count}/{len(chart_targets)} 個港口成功")
+
         
     def _generate_data_report(self, stats, assessments, teams_sent):
         """生成 JSON 報告"""
@@ -1749,12 +1892,12 @@ class WeatherMonitorService:
                 'color': '#F59E0B', 
                 'bg': '#FFFBEB', 
                 'border': '#FCD34D',
-                'criteria': '風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m / 氣壓 < 1000 hPa'  # ✅ 移除能見度與低溫
+                'criteria': '風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m '  #
             },
             1: {
                 'emoji': '🟡', 
                 'label': 'LOW RISK', 
-                'label_zh': '低度風險', 
+                'label_zh': '輕度風險', 
                 'color': '#0EA5E9', 
                 'bg': '#F0F9FF', 
                 'border': '#7DD3FC',
@@ -1940,7 +2083,7 @@ class WeatherMonitorService:
             <table border="0" cellpadding="0" cellspacing="0" width="100%">
                 <tr>
                     <td style="padding-top: 20px; padding-bottom: 20px; border-top: 3px dashed #D1D5DB; text-align: center;">
-                        <strong style="font-size: 16px; color: #374151;">⬇️ 以下為各港口詳細氣象風險資料 ⬇️</strong>
+                        <strong style="font-size: 16px; color: #374151;">⬇️ 以下為各港詳細氣象風險資料 ⬇️</strong>
                         <br>
                         <span style="font-size: 12px; color: #9CA3AF; letter-spacing: 0.5px;">DETAILED WEATHER RISK DATA FOR EACH PORT</span>
                     </td>
@@ -1954,7 +2097,7 @@ class WeatherMonitorService:
             3: {
                 'color': '#DC2626', 
                 'bg': '#FEF2F2', 
-                'title_zh': '🔴 危險等級港口', 
+                'title_zh': '🔴 高度風險港口', 
                 'title_en': 'HIGH RISK LEVEL PORTS',
                 'border': '#DC2626', 
                 'header_bg': '#FEE2E2', 
@@ -1963,7 +2106,7 @@ class WeatherMonitorService:
             2: {
                 'color': '#F59E0B', 
                 'bg': '#FFFBEB', 
-                'title_zh': '🟠 警告等級港口', 
+                'title_zh': '🟠 中度風險港口', 
                 'title_en': 'MEDIUM RISK LEVEL PORTS',
                 'border': '#F59E0B', 
                 'header_bg': '#FEF3C7', 
@@ -1972,7 +2115,7 @@ class WeatherMonitorService:
             1: {
                 'color': '#0EA5E9', 
                 'bg': '#F0F9FF', 
-                'title_zh': '🟡 注意等級港口', 
+                'title_zh': '🟡 輕度風險港口', 
                 'title_en': 'LOW RISK LEVEL PORTS',
                 'border': '#0EA5E9', 
                 'header_bg': '#E0F2FE', 
@@ -2021,17 +2164,17 @@ class WeatherMonitorService:
                 if p.risk_level == 3:
                     risk_level_bg = "#FEF2F2"
                     risk_level_color = "#DC2626"
-                    risk_level_text = "高風險 HIGH RISK"
+                    risk_level_text = "高度風險 HIGH RISK"
                     risk_level_icon = "🔴"
                 elif p.risk_level == 2:
                     risk_level_bg = "#FFFBEB"
                     risk_level_color = "#F59E0B"
-                    risk_level_text = "中風險 MEDIUM RISK"
+                    risk_level_text = "中度風險 MEDIUM RISK"
                     risk_level_icon = "🟠"
                 else:
                     risk_level_bg = "#F0F9FF"
                     risk_level_color = "#0EA5E9"
-                    risk_level_text = "低風險 LOW RISK"
+                    risk_level_text = "輕度風險 LOW RISK"
                     risk_level_icon = "🟡"
 
                 if p.max_wind_kts >= 34:
@@ -2267,15 +2410,16 @@ class WeatherMonitorService:
             </table>
                         """
                     
-                    html += f"""
+            html += f"""
             <tr>
                 <td colspan="3" style="padding: 15px; background-color: {row_bg}; border-bottom: 1px solid #eee;">
                     <div style="font-size: 13px; color: #666; margin-bottom: 8px; font-weight: 600;">
-                        📈 氣象趨勢圖表 Weather Trend Chart:
+                        📈 風浪趨勢圖表 Wind & Wave Trend Chart:
                     </div>
                     {chart_imgs}
                 </td>
             </tr>
+
                     """
             
             html += """
@@ -2438,7 +2582,7 @@ class WeatherMonitorService:
                                             🌫️ WHL Port Poor Visibility Alert
                                         </h1>
                                         <p style="margin: 8px 0 0 0; color: #EDE9FE; font-size: 16px; font-weight: 500; {base_font}">
-                                            能見度不良警報：未來 7 天能見度低於 1.5 海浬 (2778 m) 之港口預報
+                                            能見度不良警報：未來 48 小時能見度低於 1.5 海浬之港口預報
                                         </p>
                                     </td>
                                     <td align="right" width="80">
@@ -2627,7 +2771,7 @@ class WeatherMonitorService:
             # 組合單一港口的 HTML
             html += f"""
                                 <tr bgcolor="{row_bg}">
-                                    <td style="padding: 20px; border: 1px solid {border_color};">
+                                    <td style="padding: 20px; border: 1px solid {border_color}; border-bottom: none;">
                                         <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                             <tr>
                                                 <td valign="top" width="35%">
@@ -2670,9 +2814,34 @@ class WeatherMonitorService:
                                 </tr>
             """
             
-            # 增加間距列
+            # ✅ 加入能見度趨勢圖
+            if hasattr(p, 'chart_base64_list') and p.chart_base64_list:
+                vis_chart = None
+                for b64 in p.chart_base64_list:
+                    if len(b64) > 0:
+                        vis_chart = b64
+                        break  # 找到第一張圖就跳出
+                
+                if vis_chart:
+                    # 清理 Base64 字串，避免 Outlook 渲染錯誤
+                    b64_clean = vis_chart.replace('\n', '').replace('\r', '').replace(' ', '')
+                    html += f"""
+                                <tr bgcolor="{row_bg}">
+                                    <td align="center" style="padding: 10px 20px 20px 20px; border: 1px solid {border_color}; border-top: none;">
+                                        <div style="font-size: 12px; color: #888888; margin-bottom: 5px; text-align: left; width: 100%; {base_font}">
+                                            📈 48小時能見度趨勢圖 48-Hour Visibility Forecast Chart:
+                                        </div>
+                                        <img src="data:image/png;base64,{b64_clean}" 
+                                            width="800" 
+                                            style="display: block; width: 100%; max-width: 800px; height: auto; border: 1px solid #DDDDDD; border-radius: 4px;" 
+                                            alt="Visibility Chart for {p.port_code}" border="0">
+                                    </td>
+                                </tr>
+                    """
+            
+            # 增加間距列 (Spacer Row)
             if index < len(vis_assessments) - 1:
-                html += '<tr><td height="15" style="font-size: 0; line-height: 0;">&nbsp;</td></tr>'
+                html += '<tr><td height="20" style="font-size: 0; line-height: 0;">&nbsp;</td></tr>'
 
         # --- Footer 結尾 ---
         html += f"""
@@ -2935,7 +3104,7 @@ class WeatherMonitorService:
                                                         <table border="0" cellpadding="4" cellspacing="0" width="100%">
                                                             <tr>
                                                                 <td valign="top" width="100" style="color: #0277BD; font-size: 12px; font-weight: bold; {base_font}">
-                                                                    ❄️ 首次低於 0°C<br>First Freeze:
+                                                                    ❄️ 氣溫低於 0°C 時段<br>First Freeze:
                                                                 </td>
                                                                 <td valign="top" style="font-size: 13px; color: #333333; {base_font}">
                                                                     <div style="font-weight: bold;">{first_freeze_utc} (UTC)</div>
@@ -2945,7 +3114,7 @@ class WeatherMonitorService:
                                                             <tr><td colspan="2" height="10"></td></tr>
                                                             <tr>
                                                                 <td valign="top" width="100" style="color: #C62828; font-size: 12px; font-weight: bold; {base_font}">
-                                                                    📉 最低溫時間<br>Min Temp Time:
+                                                                    📉 預測最低溫時間<br>Min Temp Time:
                                                                 </td>
                                                                 <td valign="top" style="font-size: 13px; color: #333333; {base_font}">
                                                                     <div style="font-weight: bold;">{temp_utc} (UTC)</div>
@@ -2959,7 +3128,6 @@ class WeatherMonitorService:
                                         </td>
                                     </tr>
                 """
-                
                 # --- 溫度圖表 (確保在同一區塊背景色中) ---
                 if hasattr(p, 'chart_base64_list') and p.chart_base64_list:
                     temp_chart = None
