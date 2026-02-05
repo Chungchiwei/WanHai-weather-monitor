@@ -611,8 +611,14 @@ class WeatherRiskAnalyzer:
         return 12
 
     @classmethod
-    def analyze_record(cls, record: WeatherRecord, weather_record=None) -> Dict:
-        """分析單筆記錄（含風浪 + 天氣狀況）"""
+    def analyze_record(cls, record: WeatherRecord, weather_record=None, include_temp=True) -> Dict:
+        """分析單筆記錄（含風浪 + 天氣狀況）
+        
+        Args:
+            record: 風浪記錄
+            weather_record: 天氣記錄
+            include_temp: 是否將低溫計入風險等級（False 表示低溫僅記錄，不影響風險等級）
+        """
         risks = []
         risk_level = 0
 
@@ -651,10 +657,10 @@ class WeatherRiskAnalyzer:
 
         # 天氣狀況檢查
         if weather_record:
-            # 氣溫檢查（< 0°C）
+            # ✅ 氣溫檢查（< 0°C）- 不計入風險等級，僅記錄
             if weather_record.temperature < RISK_THRESHOLDS['temp_freezing']:
                 risks.append(f"❄️ 低溫警告: {weather_record.temperature:.1f}°C")
-                risk_level = max(risk_level, 2)
+                # 不更新 risk_level，低溫僅記錄
             
             # 氣壓檢查（< 1000 hPa）
             if weather_record.pressure < RISK_THRESHOLDS['pressure_low']:
@@ -681,11 +687,84 @@ class WeatherRiskAnalyzer:
             3: "危險 Danger"
         }.get(risk_level, "未知 Unknown")
 
+    @staticmethod
+    def merge_visibility_periods(poor_visibility_periods: List[Dict]) -> List[Dict]:
+        """✅ 將連續的能見度不良時間點合併為時段
+        
+        Args:
+            poor_visibility_periods: 原始能見度不良時間點列表
+            
+        Returns:
+            合併後的時段列表，格式：[{'start_utc': ..., 'end_utc': ..., 'start_lct': ..., 'end_lct': ..., 'min_visibility_km': ...}]
+        """
+        if not poor_visibility_periods:
+            return []
+        
+        # 按時間排序
+        sorted_periods = sorted(poor_visibility_periods, key=lambda x: x['time_utc'])
+        
+        merged = []
+        current_start = None
+        current_end = None
+        current_start_lct = None
+        current_end_lct = None
+        min_vis = 999.0
+        
+        for i, period in enumerate(sorted_periods):
+            from datetime import datetime
+            current_time = datetime.strptime(period['time_utc'], '%Y-%m-%d %H:%M')
+            current_time_lct = period['time_lct']
+            current_vis = period['visibility_km']
+            
+            if current_start is None:
+                # 開始新時段
+                current_start = period['time_utc']
+                current_end = period['time_utc']
+                current_start_lct = current_time_lct
+                current_end_lct = current_time_lct
+                min_vis = current_vis
+            else:
+                # 檢查是否連續（間隔 <= 3 小時）
+                prev_time = datetime.strptime(current_end, '%Y-%m-%d %H:%M')
+                time_diff = (current_time - prev_time).total_seconds() / 3600
+                
+                if time_diff <= 3:
+                    # 延續當前時段
+                    current_end = period['time_utc']
+                    current_end_lct = current_time_lct
+                    min_vis = min(min_vis, current_vis)
+                else:
+                    # 儲存當前時段，開始新時段
+                    merged.append({
+                        'start_utc': current_start,
+                        'end_utc': current_end,
+                        'start_lct': current_start_lct,
+                        'end_lct': current_end_lct,
+                        'min_visibility_km': min_vis
+                    })
+                    current_start = period['time_utc']
+                    current_end = period['time_utc']
+                    current_start_lct = current_time_lct
+                    current_end_lct = current_time_lct
+                    min_vis = current_vis
+        
+        # 儲存最後一個時段
+        if current_start is not None:
+            merged.append({
+                'start_utc': current_start,
+                'end_utc': current_end,
+                'start_lct': current_start_lct,
+                'end_lct': current_end_lct,
+                'min_visibility_km': min_vis
+            })
+        
+        return merged
+
     @classmethod
     def analyze_port_risk_combined(cls, port_code: str, port_info: Dict[str, Any],
                                    content_48h: str, content_7d: str, 
                                    issued_time: str) -> Optional[RiskAssessment]:
-        """✅ 分析港口風險（風浪用 48h, 天氣用 7d）"""
+        """✅ 分析港口風險（風浪用 48h, 天氣用 7d）- 低溫不計入風險等級"""
         try:
             parser = WeatherParser()
             
@@ -718,26 +797,29 @@ class WeatherRiskAnalyzer:
             # ✅ 天氣狀況極值（使用 7d 資料）
             min_temp_record = None
             min_pressure_record = None
-            poor_visibility_periods = []
+            poor_visibility_points = []  # 原始時間點
             
             if weather_records:
                 min_temp_record = min(weather_records, key=lambda r: r.temperature)
                 min_pressure_record = min(weather_records, key=lambda r: r.pressure)
                 
-                # 收集所有能見度 < 5552m 的時段
+                # 收集所有能見度 < 5552m 的時間點
                 for wr in weather_records:
                     if wr.visibility_meters is not None and wr.visibility_meters < RISK_THRESHOLDS['visibility_poor']:
-                        poor_visibility_periods.append({
+                        poor_visibility_points.append({
                             'time_utc': wr.time.strftime('%Y-%m-%d %H:%M'),
                             'time_lct': wr.lct_time.strftime('%Y-%m-%d %H:%M'),
                             'visibility_m': wr.visibility_meters,
                             'visibility_km': wr.visibility_meters / 1000
                         })
             
+            # ✅ 合併能見度不良時段
+            poor_visibility_periods = cls.merge_visibility_periods(poor_visibility_points)
+            
             # 分析每個時段（使用 48h 風浪資料）
             for record in wind_records_48h:
                 wx_record = weather_dict.get(record.time)
-                analyzed = cls.analyze_record(record, wx_record)
+                analyzed = cls.analyze_record(record, wx_record, include_temp=False)  # ✅ 低溫不計入風險等級
                 
                 if analyzed['risks']:
                     period_data = {
@@ -762,10 +844,11 @@ class WeatherRiskAnalyzer:
                     risk_periods.append(period_data)
                     max_level = max(max_level, analyzed['risk_level'])
             
+            # ✅ 如果 max_level == 0，表示沒有風浪/氣壓/能見度風險，不納入主報告
             if max_level == 0:
                 return None
             
-            # 建立風險因素列表
+            # 建立風險因素列表（不包含低溫）
             risk_factors = []
             if max_wind_record.wind_speed_kts >= RISK_THRESHOLDS['wind_caution']:
                 risk_factors.append(f"風速 {max_wind_record.wind_speed_kts:.1f} kts")
@@ -774,9 +857,7 @@ class WeatherRiskAnalyzer:
             if max_wave_record.wave_height >= RISK_THRESHOLDS['wave_caution']:
                 risk_factors.append(f"浪高 {max_wave_record.wave_height:.1f} m")
             
-            # 加入天氣風險因素
-            if min_temp_record and min_temp_record.temperature < RISK_THRESHOLDS['temp_freezing']:
-                risk_factors.append(f"低溫 {min_temp_record.temperature:.1f}°C")
+            # 加入天氣風險因素（不包含低溫）
             if min_pressure_record and min_pressure_record.pressure < RISK_THRESHOLDS['pressure_low']:
                 risk_factors.append(f"低氣壓 {min_pressure_record.pressure:.0f} hPa")
             if poor_visibility_periods:
@@ -809,7 +890,7 @@ class WeatherRiskAnalyzer:
                 
                 min_temperature=min_temp_record.temperature if min_temp_record else 999,
                 min_pressure=min_pressure_record.pressure if min_pressure_record else 9999,
-                min_visibility=min(p['visibility_m'] for p in poor_visibility_periods) if poor_visibility_periods else 99999,
+                min_visibility=min(p['min_visibility_km'] for p in poor_visibility_periods) * 1000 if poor_visibility_periods else 99999,
                 
                 min_temp_time_utc=f"{min_temp_record.time.strftime('%m/%d %H:%M')} (UTC)" if min_temp_record else "",
                 min_temp_time_lct=f"{min_temp_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)" if min_temp_record else "",
@@ -817,7 +898,7 @@ class WeatherRiskAnalyzer:
                 min_pressure_time_utc=f"{min_pressure_record.time.strftime('%m/%d %H:%M')} (UTC)" if min_pressure_record else "",
                 min_pressure_time_lct=f"{min_pressure_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)" if min_pressure_record else "",
                 
-                poor_visibility_periods=poor_visibility_periods,
+                poor_visibility_periods=poor_visibility_periods,  # ✅ 使用合併後的時段
                 
                 risk_periods=risk_periods,
                 issued_time=issued_time,
@@ -833,6 +914,7 @@ class WeatherRiskAnalyzer:
             print(f"❌ 分析港口 {port_code} 時發生錯誤: {e}")
             traceback.print_exc()
             return None
+
 # ================= Teams 通知器 =================
 
 class TeamsNotifier:
@@ -1109,30 +1191,44 @@ class WeatherMonitorService:
         print("\n📡 步驟 1: 下載所有港口氣象資料 (48h + 7d)...")
         download_stats = self.crawler.fetch_all_ports_both()
         
-        # 2. 分析風險
-        print("\n🔍 步驟 2: 分析港口風險...")
+        # 2. 分析風險（不包含純低溫港口）
+        print("\n🔍 步驟 2: 分析港口風險（低溫單獨處理）...")
         risk_assessments = self._analyze_all_ports()
         
-        # 3. 生成圖表
-        print(f"\n📈 步驟 3: 生成氣象趨勢圖...")
+        # ✅ 3. 分析低溫港口（獨立分析，不計入主報告）
+        print("\n❄️ 步驟 3: 分析低溫港口...")
+        temp_assessments = self._analyze_temperature_ports()
+        
+        # 4. 生成圖表
+        print(f"\n📈 步驟 4: 生成氣象趨勢圖...")
         self._generate_charts(risk_assessments)
         charts_generated = sum(1 for r in risk_assessments if r.chart_base64_list)
         print(f"   ✅ 成功為 {charts_generated}/{len(risk_assessments)} 個港口生成圖表")
         
-        # 4. 發送 Teams 通知
+        # 5. 為低溫港口生成溫度圖
+        if temp_assessments:
+            print(f"\n❄️ 步驟 5: 為 {len(temp_assessments)} 個低溫港口生成溫度圖...")
+            for assessment in temp_assessments:
+                b64_temp = self.chart_generator.generate_temperature_chart(
+                    assessment, assessment.port_code
+                )
+                if b64_temp:
+                    assessment.chart_base64_list.append(b64_temp)
+        
+        # 6. 發送 Teams 通知
         teams_sent = False
         if self.notifier.webhook_url:
-            print("\n📢 步驟 4: 發送 Teams 通知...")
+            print("\n📢 步驟 6: 發送 Teams 通知...")
             teams_sent = self.notifier.send_risk_alert(risk_assessments)
         else:
-            print("\n⚠️ 步驟 4: 跳過 Teams 通知 (未設定 Webhook)")
+            print("\n⚠️ 步驟 6: 跳過 Teams 通知 (未設定 Webhook)")
         
-        # 5. 生成報告
-        print("\n📊 步驟 5: 生成數據報告...")
+        # 7. 生成報告
+        print("\n📊 步驟 7: 生成數據報告...")
         report_data = self._generate_data_report(download_stats, risk_assessments, teams_sent)
         
-        # 6. 發送主要氣象報告 Email
-        print("\n📧 步驟 6: 發送主要氣象報告 Email...")
+        # 8. 發送主要氣象報告 Email
+        print("\n📧 步驟 8: 發送主要氣象報告 Email...")
         report_html = self._generate_html_report(risk_assessments)
         
         email_sent = False
@@ -1144,9 +1240,8 @@ class WeatherMonitorService:
             print(f"⚠️ 主要報告發信過程發生異常: {e}")
             traceback.print_exc()
         
-        # ✅ 7. 發送低溫警報 Email（獨立郵件）
-        print("\n❄️ 步驟 7: 檢查是否需要發送低溫警報...")
-        temp_assessments = [a for a in risk_assessments if a.min_temperature < RISK_THRESHOLDS['temp_freezing']]
+        # ✅ 9. 發送低溫警報 Email（獨立郵件，不計入主報告）
+        print("\n❄️ 步驟 9: 檢查是否需要發送低溫警報...")
         
         temp_email_sent = False
         if temp_assessments:
@@ -1171,14 +1266,84 @@ class WeatherMonitorService:
         
         print("\n" + "=" * 80)
         print("✅ 每日監控執行完成")
-        print(f"   - 風險港口: {len(risk_assessments)}")
-        print(f"   - 低溫港口: {len(temp_assessments)}")
+        print(f"   - 風險港口（不含低溫）: {len(risk_assessments)}")
+        print(f"   - 低溫港口（獨立報告）: {len(temp_assessments)}")
         print(f"   - Teams 通知: {'✅' if teams_sent else '❌'}")
         print(f"   - 主要報告 Email: {'✅' if email_sent else '❌'}")
         print(f"   - 低溫警報 Email: {'✅' if temp_email_sent else '❌'}")
         print("=" * 80)
         
         return report_data
+    def _analyze_temperature_ports(self) -> List[RiskAssessment]:
+        """✅ 專門分析低溫港口（獨立於主風險分析）"""
+        temp_assessments = []
+        total = len(self.crawler.port_list)
+        
+        for i, port_code in enumerate(self.crawler.port_list, 1):
+            try:
+                # 取得 7d 天氣資料
+                data_7d = self.db.get_latest_content_7d(port_code)
+                if not data_7d:
+                    continue
+                
+                content_7d, issued_7d, name_7d = data_7d
+                
+                info = self.crawler.get_port_info(port_code)
+                if not info:
+                    continue
+                
+                # 解析 7d 資料
+                parser = WeatherParser()
+                port_name_7d, wind_records_7d, weather_records_7d, warnings_7d = parser.parse_content_7d(content_7d)
+                
+                if not weather_records_7d:
+                    continue
+                
+                # 檢查是否有低溫記錄
+                min_temp_record = min(weather_records_7d, key=lambda r: r.temperature)
+                
+                if min_temp_record.temperature < RISK_THRESHOLDS['temp_freezing']:
+                    # 建立低溫評估
+                    assessment = RiskAssessment(
+                        port_code=port_code,
+                        port_name=info.get('port_name', port_name_7d),
+                        country=info.get('country', 'N/A'),
+                        risk_level=0,  # 低溫不計入風險等級
+                        risk_factors=[f"低溫 {min_temp_record.temperature:.1f}°C"],
+                        
+                        max_wind_kts=0,
+                        max_wind_bft=0,
+                        max_gust_kts=0,
+                        max_gust_bft=0,
+                        max_wave=0,
+                        
+                        max_wind_time_utc="",
+                        max_wind_time_lct="",
+                        max_gust_time_utc="",
+                        max_gust_time_lct="",
+                        max_wave_time_utc="",
+                        max_wave_time_lct="",
+                        
+                        min_temperature=min_temp_record.temperature,
+                        min_temp_time_utc=f"{min_temp_record.time.strftime('%m/%d %H:%M')} (UTC)",
+                        min_temp_time_lct=f"{min_temp_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
+                        
+                        risk_periods=[],
+                        issued_time=issued_7d,
+                        latitude=info.get('latitude', 0.0),
+                        longitude=info.get('longitude', 0.0),
+                        weather_records=weather_records_7d
+                    )
+                    
+                    temp_assessments.append(assessment)
+                    print(f"   [{i}/{total}] ❄️ {port_code}: 低溫 {min_temp_record.temperature:.1f}°C")
+                    
+            except Exception as e:
+                print(f"   [{i}/{total}] ❌ {port_code}: {e}")
+                traceback.print_exc()
+        
+        return temp_assessments
+
     
     def _analyze_all_ports(self) -> List[RiskAssessment]:
         """✅ 分析所有港口（風浪用 48h, 天氣用 7d）"""
@@ -1383,7 +1548,7 @@ class WeatherMonitorService:
                 'color': '#F59E0B', 
                 'bg': '#FFFBEB', 
                 'border': '#FCD34D',
-                'criteria': '風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m / 氣溫 < 0°C / 氣壓 < 1000 hPa / 能見度 < 3 NM'
+                'criteria': '風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m / 氣壓 < 1000 hPa / 能見度 < 3 NM'  # ✅ 移除「氣溫 < 0°C」
             },
             1: {
                 'emoji': '🟡', 
@@ -1602,7 +1767,7 @@ class WeatherMonitorService:
                 'title_en': 'MEDIUM RISK LEVEL PORTS',
                 'border': '#F59E0B', 
                 'header_bg': '#FEF3C7', 
-                'desc': '條件 Criteria: 風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m / 氣溫 < 0°C / 氣壓 < 1000 hPa / 能見度 < 3 NM'
+                'desc': '條件 Criteria: 風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m / 氣壓 < 1000 hPa / 能見度 < 3 NM'  # ✅ 移除「氣溫 < 0°C」
             },
             1: {
                 'color': '#0EA5E9', 
@@ -1815,10 +1980,16 @@ class WeatherMonitorService:
                     """
                 
                 if show_vis_warning:
-                    vis_periods_html = "<br>".join([
-                        f"• {period['time_lct'].split()[1]}: {period['visibility_km']:.1f} km"
-                        for period in p.poor_visibility_periods[:3]
-                    ])
+                    # ✅ 顯示時段格式（已經是正確的）
+                    vis_periods_html = ""
+                    for i, period in enumerate(p.poor_visibility_periods[:3]):
+                        start_time = period['start_lct'].split()[1]  # 取時間部分
+                        end_time = period['end_lct'].split()[1]
+                        min_vis = period['min_visibility_km']
+                        
+                        if i > 0:
+                            vis_periods_html += "<br>"
+                        vis_periods_html += f"• {start_time}~{end_time}: {min_vis:.1f} km"
                     
                     if len(p.poor_visibility_periods) > 3:
                         vis_periods_html += f"<br>... 及其他 {len(p.poor_visibility_periods) - 3} 個時段"
@@ -2023,699 +2194,318 @@ class WeatherMonitorService:
         """
         
         return html
+
     def _generate_temperature_html_report(self, temp_assessments: List[RiskAssessment]) -> str:
-        """✅ 生成低溫警報專用 HTML 報告（含公司通告內容）- 完整版"""
-        
-        def format_time_display(time_str):
-            if not time_str:
-                return "N/A"
-            try:
-                if '(' in time_str:
-                    return time_str.split('(')[0].strip()
-                return time_str
-            except:
-                return time_str
-        
-        def find_first_freezing_time(weather_records):
-            """找出第一次低於 0°C 的時間"""
-            for record in weather_records:
-                if record.temperature < RISK_THRESHOLDS['temp_freezing']:
-                    return record.time
-            return None
-        
-        font_style = "font-family: 'Noto Sans TC', 'Microsoft JhengHei UI', 'Microsoft YaHei UI', 'Segoe UI', Arial, sans-serif;"
-        
-        try:
-            from zoneinfo import ZoneInfo
-            taipei_tz = ZoneInfo('Asia/Taipei')
-        except ImportError:
-            taipei_tz = timezone(timedelta(hours=8))
-        
-        utc_now = datetime.now(timezone.utc)
-        tpe_now = utc_now.astimezone(taipei_tz)
-        
-        now_str_TPE = f"{tpe_now.strftime('%Y-%m-%d %H:%M')} (TPE)"
-        now_str_UTC = f"{utc_now.strftime('%Y-%m-%d %H:%M')} (UTC)"
-
-        html = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body bgcolor="#F5F7FA" style="margin: 0; padding: 0; {font_style}">
-    <center>
-    <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="max-width: 900px; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-    <tr>
-        <td style="padding: 0 25px;">
-            <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                <tr>
-                    <td bgcolor="#2563EB" style="padding: 10px 20px; border-radius: 8px 8px 0 0;">
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                            <tr>
-                                <td align="left" style="font-size: 13px; color: #DBEAFE; font-weight: 600;">
-                                    📅 最後更新時間 Last Updated:
-                                </td>
-                                <td align="right" style="font-size: 13px; color: #ffffff; font-weight: 600;">
-                                    {now_str_TPE} | {now_str_UTC}
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-            </table>
-        </td>
-    </tr>
-    
-    <tr>
-        <td style="padding: 25px 25px 0 25px;">
-            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
-                <tr>
-                    <td bgcolor="#E74C3C" style="padding: 22px 25px; border-radius: 0 0 0 0; box-shadow: 0 2px 4px rgba(231, 76, 60, 0.15);">
-                        <h2 style="margin: 0; font-size: 24px; font-weight: 700; color: #ffffff; line-height: 1.4; letter-spacing: 0.3px;">
-                            ❄️ WHL Port Low Temperature Alert
-                        </h2>
-                        <p style="margin: 8px 0 0 0; font-size: 16px; font-weight: 500; color: #FADBD8; line-height: 1.3;">
-                            低溫警報 - 未來 7 天氣溫低於冰點港口
-                        </p>
-                    </td>
-                </tr>
-            </table>
-        </td>
-    </tr>
-    
-    <tr>
-        <td style="padding: 0 25px;">
-            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 3px solid #E74C3C; border-top: none;">
-                <tr>
-                    <td style="padding: 18px 20px; border-bottom: 2px solid #F5B7B1; background-color: #FADBD8;">
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                            <tr>
-                                <td width="240" valign="middle">
-                                    <div style="font-size: 22px; font-weight: bold; color: #C0392B; line-height: 1.2;">
-                                        ❄️ 低溫警告港口
-                                    </div>
-                                    <div style="font-size: 16px; color: #E74C3C; margin-top: 2px; font-weight: 600;">
-                                        FREEZING TEMPERATURE ALERT
-                                    </div>
-                                </td>
-                                <td width="120" valign="middle" align="center">
-                                    <div style="background: linear-gradient(135deg, #E74C3C 0%, #C0392B 100%); color: #ffffff; font-size: 32px; font-weight: bold; padding: 10px 18px; border-radius: 12px; display: inline-block; min-width: 60px; box-shadow: 0 4px 6px rgba(231, 76, 60, 0.3);">
-                                        {len(temp_assessments)}
-                                    </div>
-                                </td>
-                                <td style="padding-left: 20px;" valign="middle">
-                                    <div style="font-size: 17px; color: #2C3E50; line-height: 1.8; margin-bottom: 8px;">
-                                        {', '.join([f"<strong style='font-size: 17px; color: #E74C3C;'>{p.port_code}</strong>" for p in temp_assessments])}
-                                    </div>
-                                    <div style="font-size: 13px; color: #7F8C8D; line-height: 1.5; font-style: italic;">
-                                        條件 Criteria: 氣溫 Temperature < 0°C (32°F)
-                                    </div>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-            </table>
-        </td>
-    </tr>
-    
-    <tr>
-        <td style="padding: 0 25px 20px 25px;">
-            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#F8F9FA">
-                <tr>
-                    <td style="padding: 15px 20px; font-size: 13px; color: #7F8C8D; text-align: center; border: 1px solid #E0E0E0; border-top: none; border-radius: 0 0 8px 8px;">
-                        <strong style="color: #34495E;">資料來源: Weathernews Inc. (WNI)</strong><br>
-                        <span style="color: #95A5A6;">Data Source: Weathernews Inc. (WNI) - 7 Day Forecast</span>
-                    </td>
-                </tr>
-            </table>
-        </td>
-    </tr>
-    
-    <!-- ==================== ✅ 擴充：低溫應對措施（基於公司通告）==================== -->
-    <tr>
-        <td style="padding: 0 25px 25px 25px;">
-            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FADBD8">
-                <tr>
-                    <td style="padding: 22px 25px; border-left: 5px solid #E74C3C; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                            <tr>
-                                <td style="padding-bottom: 18px; border-bottom: 2px solid #F5B7B1;">
-                                    <strong style="font-size: 18px; color: #922B21;">❄️ 低溫應對措施 Low Temperature Response Actions</strong>
-                                    <br>
-                                    <span style="font-size: 12px; color: #A93226; margin-top: 5px; display: block;">
-                                        參考：海技通告 WRK-00-2412-379-2-000-T-CIR | Reference: Maritech Circular
-                                    </span>
-                                </td>
-                            </tr>
-                            
-                            <!-- 第一部分：管路防護 -->
-                            <tr>
-                                <td style="padding-top: 15px; padding-bottom: 5px;">
-                                    <strong style="font-size: 15px; color: #922B21;">🔧 一、管路與設備防護 Piping & Equipment Protection</strong>
-                                </td>
-                            </tr>
-                            
-                            <tr>
-                                <td style="padding-bottom: 12px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="20" valign="top" style="font-size: 14px;">1️⃣</td>
-                                            <td>
-                                                <strong style="font-size: 14px; color: #922B21; line-height: 1.5;">預先排空兩舷甲板淡水管路（Drain Pipes）</strong>
-                                                <br>
-                                                <span style="font-size: 13px; color: #A93226; line-height: 1.4;">
-                                                    Drain all fresh water pipes on both sides of passage way in advance to prevent freezing and bursting.
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td style="padding-bottom: 12px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="20" valign="top" style="font-size: 14px;">2️⃣</td>
-                                            <td>
-                                                <strong style="font-size: 14px; color: #922B21; line-height: 1.5;">排空其他易凍結設備（救生艇淡水櫃、駕駛台洗窗用水等）</strong>
-                                                <br>
-                                                <span style="font-size: 13px; color: #A93226; line-height: 1.4;">
-                                                    Drain lifeboat fresh water tanks, bridge window washing water, and other vulnerable equipment.
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td style="padding-bottom: 12px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="20" valign="top" style="font-size: 14px;">3️⃣</td>
-                                            <td>
-                                                <strong style="font-size: 14px; color: #922B21; line-height: 1.5;">檢查並保護暴露在外的管路、閥門及設備</strong>
-                                                <br>
-                                                <span style="font-size: 13px; color: #A93226; line-height: 1.4;">
-                                                    Inspect and protect exposed pipes, valves, and equipment to prevent freezing damage.
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td style="padding-bottom: 12px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="20" valign="top" style="font-size: 14px;">4️⃣</td>
-                                            <td>
-                                                <strong style="font-size: 14px; color: #922B21; line-height: 1.5;">對暴露的可活動部件塗抹油脂與防凍劑混合物</strong>
-                                                <br>
-                                                <span style="font-size: 13px; color: #A93226; line-height: 1.4;">
-                                                    Apply mixture of grease and anti-freeze to exposed movable parts (winches, valves, hinges, etc.).
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-                            
-                            <!-- 第二部分：甲板安全 -->
-                            <tr>
-                                <td style="padding-top: 10px; padding-bottom: 5px; border-top: 1px dashed #F5B7B1;">
-                                    <strong style="font-size: 15px; color: #922B21;">🧊 二、甲板防滑與除冰 Deck Anti-Slip & De-Icing</strong>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td style="padding-bottom: 12px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="20" valign="top" style="font-size: 14px;">5️⃣</td>
-                                            <td>
-                                                <strong style="font-size: 14px; color: #922B21; line-height: 1.5;">定期剷除甲板冰雪，並在走道撒鹽防止結冰</strong>
-                                                <br>
-                                                <span style="font-size: 13px; color: #A93226; line-height: 1.4;">
-                                                    Regularly shovel ice/snow from open decks and apply salt on walkways to reduce ice formation.
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td style="padding-bottom: 12px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="20" valign="top" style="font-size: 14px;">6️⃣</td>
-                                            <td>
-                                                <strong style="font-size: 14px; color: #922B21; line-height: 1.5;">備妥除冰設備（鏟子、撬棍、噴燈等）並置於易取得位置</strong>
-                                                <br>
-                                                <span style="font-size: 13px; color: #A93226; line-height: 1.4;">
-                                                    Keep de-icing equipment (shovels, crowbars, blow torch, etc.) ready in accessible sheltered areas.
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td style="padding-bottom: 12px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="20" valign="top" style="font-size: 14px;">7️⃣</td>
-                                            <td>
-                                                <strong style="font-size: 14px; color: #922B21; line-height: 1.5;">確保全體船員配發防寒衣物並加強防滑措施</strong>
-                                                <br>
-                                                <span style="font-size: 13px; color: #A93226; line-height: 1.4;">
-                                                    Ensure all crew are provided with winter wear and enhance anti-slip measures for crew safety.
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-                            
-                            <!-- 第三部分：機械設備 -->
-                            <tr>
-                                <td style="padding-top: 10px; padding-bottom: 5px; border-top: 1px dashed #F5B7B1;">
-                                    <strong style="font-size: 15px; color: #922B21;">⚙️ 三、機械設備保護 Machinery Protection</strong>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td style="padding-bottom: 12px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="20" valign="top" style="font-size: 14px;">8️⃣</td>
-                                            <td>
-                                                <strong style="font-size: 14px; color: #922B21; line-height: 1.5;">提前啟動並保持機械運轉（舷梯、吊車、起錨機、繫泊絞機等）</strong>
-                                                <br>
-                                                <span style="font-size: 13px; color: #A93226; line-height: 1.4;">
-                                                    Start machinery well in advance and keep running (gangways, cranes, windlass, mooring winches, etc.).
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td style="padding-bottom: 12px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="20" valign="top" style="font-size: 14px;">9️⃣</td>
-                                            <td>
-                                                <strong style="font-size: 14px; color: #922B21; line-height: 1.5;">遮蓋暴露的氣動/電動馬達，未使用的存放在溫暖區域</strong>
-                                                <br>
-                                                <span style="font-size: 13px; color: #A93226; line-height: 1.4;">
-                                                    Cover exposed air/electric motors. Store unused motors in warm areas.
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td style="padding-bottom: 12px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="20" valign="top" style="font-size: 14px;">🔟</td>
-                                            <td>
-                                                <strong style="font-size: 14px; color: #922B21; line-height: 1.5;">確保加熱系統正常運作（貨艙、壓載艙、生活區域）</strong>
-                                                <br>
-                                                <span style="font-size: 13px; color: #A93226; line-height: 1.4;">
-                                                    Ensure heating systems are functioning properly in cargo holds, ballast tanks, and accommodation areas.
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-                            
-                            <!-- 第四部分：救生設備 -->
-                            <tr>
-                                <td style="padding-top: 10px; padding-bottom: 5px; border-top: 1px dashed #F5B7B1;">
-                                    <strong style="font-size: 15px; color: #922B21;">🚤 四、救生設備準備 Life-Saving Equipment</strong>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td style="padding-bottom: 12px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="30" valign="top" style="font-size: 14px;">1️⃣1️⃣</td>
-                                            <td>
-                                                <strong style="font-size: 14px; color: #922B21; line-height: 1.5;">救生艇引擎加熱器保持開啟，燃油櫃液位降低（預留膨脹空間）</strong>
-                                                <br>
-                                                <span style="font-size: 13px; color: #A93226; line-height: 1.4;">
-                                                    Keep lifeboat engine heaters 'ON'. Lower fuel storage tank levels to allow for expansion.
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td style="padding-bottom: 12px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="30" valign="top" style="font-size: 14px;">1️⃣2️⃣</td>
-                                            <td>
-                                                <strong style="font-size: 14px; color: #922B21; line-height: 1.5;">救助艇完全遮蓋並固定，引水梯存放在遮蔽處</strong>
-                                                <br>
-                                                <span style="font-size: 13px; color: #A93226; line-height: 1.4;">
-                                                    Rescue boats fully covered and secured. Pilot ladder stowed in sheltered place.
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-                            
-                            <!-- 第五部分：航行安全 -->
-                            <tr>
-                                <td style="padding-top: 10px; padding-bottom: 5px; border-top: 1px dashed #F5B7B1;">
-                                    <strong style="font-size: 15px; color: #922B21;">⚓ 五、航行與靠泊安全 Navigation & Berthing Safety</strong>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td style="padding-bottom: 12px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="30" valign="top" style="font-size: 14px;">1️⃣3️⃣</td>
-                                            <td>
-                                                <strong style="font-size: 14px; color: #922B21; line-height: 1.5;">向船長報告並遵守平/停/靠離泊守則（寒風強、水流強）</strong>
-                                                <br>
-                                                <span style="font-size: 13px; color: #A93226; line-height: 1.4;">
-                                                    Report to Master and obey navigation/berthing/unberthing procedures (strong wind & current).
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td style="padding-bottom: 12px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="30" valign="top" style="font-size: 14px;">1️⃣4️⃣</td>
-                                            <td>
-                                                <strong style="font-size: 14px; color: #922B21; line-height: 1.5;">確認船舶穩度足以應對結冰造成的 GM 損失</strong>
-                                                <br>
-                                                <span style="font-size: 13px; color: #A93226; line-height: 1.4;">
-                                                    Ensure ship has stability sufficient to counter loss of GM due to ice accretion (refer to Stability Manual).
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td style="padding-bottom: 12px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                        <tr>
-                                            <td width="30" valign="top" style="font-size: 14px;">1️⃣5️⃣</td>
-                                            <td>
-                                                <strong style="font-size: 14px; color: #922B21; line-height: 1.5;">與船管 PIC、當地代理保持密切聯繫，及時報告船舶狀態</strong>
-                                                <br>
-                                                <span style="font-size: 13px; color: #A93226; line-height: 1.4;">
-                                                    Maintain close contact with PIC and local agents; promptly report vessel status and decisions.
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-                            
-                            <!-- 警告訊息 -->
-                            <tr>
-                                <td style="padding-top: 15px;">
-                                    <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#922B21" style="border-radius: 6px;">
-                                        <tr>
-                                            <td style="padding: 12px 15px;">
-                                                <strong style="font-size: 13px; color: #FADBD8; line-height: 1.6;">
-                                                    ⚠️ 警告：寒潮可能造成船舶沉沒、擱淺、主輔機冷卻吸口冰堵、錨泊設備損壞等嚴重後果，請務必提高警覺！
-                                                </strong>
-                                                <br>
-                                                <span style="font-size: 12px; color: #F5B7B1; line-height: 1.5;">
-                                                    WARNING: Cold fronts may cause serious consequences such as ship sinking, stranding, ice blockage on cooling suction, anchoring equipment damage, etc. Stay alert!
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-            </table>
-        </td>
-    </tr>
-
-    <tr>
-        <td style="padding: 0 25px 25px 25px;">
-            <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                <tr>
-                    <td style="padding-top: 20px; padding-bottom: 20px; border-top: 3px dashed #E0E0E0; text-align: center;">
-                        <strong style="font-size: 16px; color: #34495E;">⬇️ 以下為各港口詳細低溫資料 ⬇️</strong>
-                        <br>
-                        <span style="font-size: 12px; color: #95A5A6; letter-spacing: 0.5px;">DETAILED LOW TEMPERATURE DATA FOR EACH PORT</span>
-                    </td>
-                </tr>
-            </table>
-        </td>
-    </tr>
-    
-    <tr>
-        <td style="padding: 0 25px;">
-            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 1px solid #E0E0E0; margin-bottom: 30px; border-radius: 8px; overflow: hidden;">
-                <tr style="background-color: #FADBD8; font-size: 12px; color: #5D6D7E;">
-                    <th align="left" style="padding: 12px; border-bottom: 2px solid #E74C3C; width: 18%; font-weight: 600;">港口資訊<br>Port Info</th>
-                    <th align="left" style="padding: 12px; border-bottom: 2px solid #E74C3C; width: 25%; font-weight: 600;">溫度資訊<br>Temperature Data</th>
-                    <th align="left" style="padding: 12px; border-bottom: 2px solid #E74C3C; width: 57%; font-weight: 600;">低溫時間資訊<br>Freezing Time Information</th>
-                </tr>
-        """
-        
-        for index, p in enumerate(temp_assessments):
-            row_bg = "#FFFFFF" if index % 2 == 0 else "#F8FAFB"
+            """✅ 生成低溫警報專用 HTML 報告（完全 Inline Style 優化版）- 適用於 Outlook/Gmail"""
             
-            # ✅ 找出第一次低於 0°C 的時間
-            first_freezing_time = find_first_freezing_time(p.weather_records) if p.weather_records else None
-            
-            if first_freezing_time:
+            # --- 輔助函式 ---
+            def format_time_display(time_str):
+                if not time_str: return "N/A"
                 try:
-                    first_freeze_utc = first_freezing_time.strftime('%Y-%m-%d %H:%M')
-                    # 轉換為當地時間
-                    if hasattr(p, 'weather_records') and p.weather_records:
-                        # 使用第一筆記錄的時區偏移
-                        lct_offset = p.weather_records[0].lct_time.utcoffset()
-                        first_freeze_lct = (first_freezing_time + lct_offset).strftime('%Y-%m-%d %H:%M')
-                    else:
-                        first_freeze_lct = "N/A"
+                    # 移除括號後的時區資訊，保持版面簡潔
+                    return time_str.split('(')[0].strip() if '(' in time_str else time_str
                 except:
+                    return time_str
+            
+            def find_first_freezing_time(weather_records):
+                """找出第一次低於 0°C 的時間"""
+                for record in weather_records:
+                    if record.temperature < RISK_THRESHOLDS['temp_freezing']:
+                        return record.time
+                return None
+            
+            # --- 時間與環境設定 ---
+            # 定義統一字體，避免 Outlook 預設字體問題
+            base_font = "font-family: 'Microsoft JhengHei', 'Heiti TC', Arial, sans-serif;"
+            
+            try:
+                from zoneinfo import ZoneInfo
+                taipei_tz = ZoneInfo('Asia/Taipei')
+            except ImportError:
+                from datetime import timedelta, timezone
+                taipei_tz = timezone(timedelta(hours=8))
+            
+            utc_now = datetime.now(timezone.utc)
+            tpe_now = utc_now.astimezone(taipei_tz)
+            
+            now_str_TPE = f"{tpe_now.strftime('%Y-%m-%d %H:%M')} (TPE)"
+            now_str_UTC = f"{utc_now.strftime('%Y-%m-%d %H:%M')} (UTC)"
+
+            # --- HTML 本體 ---
+            html = f"""
+    <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+    <html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <title>WHL Low Temperature Alert</title>
+    </head>
+    <body bgcolor="#F2F4F8" style="margin: 0; padding: 0; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%;">
+        <center>
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 800px; margin: 0 auto;">
+            <tr>
+                <td align="center" valign="top" style="padding: 20px 10px;">
+                    
+                    <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FFFFFF" style="border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+                        
+                        <tr>
+                            <td bgcolor="#003366" style="padding: 12px 20px;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <tr>
+                                        <td align="left" style="{base_font} color: #AABBCB; font-size: 12px; font-weight: bold;">
+                                            FLEET RISK MANAGEMENT
+                                        </td>
+                                        <td align="right" style="{base_font} color: #FFFFFF; font-size: 12px; font-weight: bold;">
+                                            Last Updated: {now_str_TPE}
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td bgcolor="#D32F2F" style="padding: 25px 30px; border-bottom: 4px solid #B71C1C;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <tr>
+                                        <td align="left">
+                                            <h1 style="margin: 0; color: #FFFFFF; font-size: 26px; font-weight: 800; letter-spacing: 0.5px; line-height: 1.4; {base_font}">
+                                                ❄️ WHL Port Low Temperature Alert
+                                            </h1>
+                                            <p style="margin: 8px 0 0 0; color: #FFEBEE; font-size: 16px; font-weight: 500; {base_font}">
+                                                低溫警報：未來 7 天氣溫低於 0°C (32°F) 之港口預報
+                                            </p>
+                                        </td>
+                                        <td align="right" width="80">
+                                            <div style="background-color: #FFFFFF; color: #D32F2F; font-size: 24px; font-weight: 800; width: 50px; height: 50px; line-height: 50px; border-radius: 50%; text-align: center; {base_font}">
+                                                {len(temp_assessments)}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td bgcolor="#FFEBEE" style="padding: 15px 30px; border-bottom: 1px solid #FFCDD2;">
+                                <span style="color: #C62828; font-weight: bold; font-size: 14px; {base_font}">⚠️ 受影響港口 Affected Ports:</span>
+                                <br>
+                                <div style="margin-top: 5px; color: #333333; font-size: 15px; line-height: 1.5; {base_font}">
+                                    {', '.join([f"<b>{p.port_code}</b>" for p in temp_assessments])}
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td style="padding: 30px;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#F9FAFB" style="border: 1px solid #E0E0E0; border-radius: 6px;">
+                                    <tr>
+                                        <td style="padding: 15px 20px; border-bottom: 1px solid #E0E0E0; background-color: #F0F4F8;">
+                                            <strong style="color: #2C3E50; font-size: 16px; {base_font}">📋 低溫應對措施 (Reference: WRK-00-2412-379)</strong>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 20px;">
+                                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                <tr>
+                                                    <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">🔧</td>
+                                                    <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                        <strong style="color: #C62828;">管路防護：</strong>排空甲板兩舷淡水管路、救生艇淡水櫃及駕駛台洗窗水，防止凍裂。<br>
+                                                        <span style="color: #777777; font-size: 13px;">Drain fresh water pipes, lifeboat tanks, and window washing water to prevent bursting.</span>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">🧊</td>
+                                                    <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                        <strong style="color: #C62828;">甲板安全：</strong>定期剷除冰雪並撒鹽防滑；備妥除冰工具（鏟子、撬棍、噴燈）。<br>
+                                                        <span style="color: #777777; font-size: 13px;">Regularly remove ice/snow, apply salt, and keep de-icing tools ready.</span>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">⚙️</td>
+                                                    <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                        <strong style="color: #C62828;">機械保護：</strong>提前啟動並保持甲板機械（絞機、起錨機）運轉；遮蓋暴露馬達。<br>
+                                                        <span style="color: #777777; font-size: 13px;">Keep deck machinery running; cover exposed motors.</span>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td width="25" valign="top" style="padding-bottom: 0; font-size: 16px;">⚓</td>
+                                                    <td valign="top" style="padding-bottom: 0; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                        <strong style="color: #C62828;">航行安全：</strong>注意船舶穩度（結冰導致 GM 減少）；與船管/代理保持聯繫。<br>
+                                                        <span style="color: #777777; font-size: 13px;">Monitor stability (ice accretion); maintain contact with PIC/Agents.</span>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td style="padding: 0 30px 15px 30px; text-align: center;">
+                                <div style="border-top: 1px dashed #CCCCCC; height: 1px; width: 100%; margin-bottom: 20px;"></div>
+                                <strong style="color: #333333; font-size: 18px; {base_font}">⬇️ 各港口詳細低溫預報 Detailed Forecast ⬇️</strong>
+                                <div style="font-size: 12px; color: #888888; margin-top: 5px; {base_font}">Data Source: Weathernews Inc. (WNI)</div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td style="padding: 0 20px 40px 20px;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse;">
+            """
+
+            # --- 迴圈生成港口數據 ---
+            for index, p in enumerate(temp_assessments):
+                # 斑馬紋背景色設定
+                row_bg = "#FFFFFF" if index % 2 == 0 else "#F7F9FA"
+                border_color = "#E0E0E0"
+                
+                # 計算時間
+                first_freezing_time = find_first_freezing_time(p.weather_records) if p.weather_records else None
+                
+                if first_freezing_time:
+                    try:
+                        first_freeze_utc = first_freezing_time.strftime('%Y-%m-%d %H:%M')
+                        if hasattr(p, 'weather_records') and p.weather_records:
+                            lct_offset = p.weather_records[0].lct_time.utcoffset()
+                            first_freeze_lct = (first_freezing_time + lct_offset).strftime('%Y-%m-%d %H:%M')
+                        else:
+                            first_freeze_lct = "N/A"
+                    except:
+                        first_freeze_utc = "N/A"
+                        first_freeze_lct = "N/A"
+                else:
                     first_freeze_utc = "N/A"
                     first_freeze_lct = "N/A"
-            else:
-                first_freeze_utc = "N/A"
-                first_freeze_lct = "N/A"
-            
-            # 最低溫時間
-            temp_utc = format_time_display(p.min_temp_time_utc) if p.min_temp_time_utc else "N/A"
-            temp_lct = format_time_display(p.min_temp_time_lct) if p.min_temp_time_lct else "N/A"
-            
+                
+                temp_utc = format_time_display(p.min_temp_time_utc) if p.min_temp_time_utc else "N/A"
+                temp_lct = format_time_display(p.min_temp_time_lct) if p.min_temp_time_lct else "N/A"
+                
+                # 組合單一港口的 HTML
+                html += f"""
+                                    <tr bgcolor="{row_bg}">
+                                        <td style="padding: 20px; border: 1px solid {border_color}; border-bottom: none;">
+                                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                <tr>
+                                                    <td valign="top" width="40%">
+                                                        <div style="font-size: 24px; font-weight: 900; color: #D32F2F; line-height: 1; {base_font}">
+                                                            {p.port_code}
+                                                        </div>
+                                                        <div style="font-size: 14px; color: #555555; font-weight: bold; margin-top: 5px; {base_font}">
+                                                            {p.port_name}
+                                                        </div>
+                                                        <div style="font-size: 12px; color: #888888; margin-bottom: 10px; {base_font}">
+                                                            📍 {p.country}
+                                                        </div>
+                                                        
+                                                        <table border="0" cellpadding="0" cellspacing="0" bgcolor="#FFEBEE" style="border-radius: 4px;">
+                                                            <tr>
+                                                                <td style="padding: 8px 12px;">
+                                                                    <span style="font-size: 12px; color: #D32F2F; font-weight: bold; {base_font}">MIN TEMP</span><br>
+                                                                    <span style="font-size: 22px; font-weight: bold; color: #B71C1C; {base_font}">{p.min_temperature:.1f}°C</span>
+                                                                    <span style="font-size: 14px; color: #B71C1C; {base_font}">({p.min_temperature * 9/5 + 32:.1f}°F)</span>
+                                                                </td>
+                                                            </tr>
+                                                        </table>
+                                                    </td>
+                                                    
+                                                    <td valign="top" width="60%" style="padding-left: 15px;">
+                                                        <table border="0" cellpadding="4" cellspacing="0" width="100%">
+                                                            <tr>
+                                                                <td valign="top" width="100" style="color: #0277BD; font-size: 12px; font-weight: bold; {base_font}">
+                                                                    ❄️ 首次低於 0°C<br>First Freeze:
+                                                                </td>
+                                                                <td valign="top" style="font-size: 13px; color: #333333; {base_font}">
+                                                                    <div style="font-weight: bold;">{first_freeze_utc} (UTC)</div>
+                                                                    <div style="color: #666666;">{first_freeze_lct} (LT)</div>
+                                                                </td>
+                                                            </tr>
+                                                            <tr><td colspan="2" height="10"></td></tr>
+                                                            <tr>
+                                                                <td valign="top" width="100" style="color: #C62828; font-size: 12px; font-weight: bold; {base_font}">
+                                                                    📉 最低溫時間<br>Min Temp Time:
+                                                                </td>
+                                                                <td valign="top" style="font-size: 13px; color: #333333; {base_font}">
+                                                                    <div style="font-weight: bold;">{temp_utc} (UTC)</div>
+                                                                    <div style="color: #666666;">{temp_lct} (LT)</div>
+                                                                </td>
+                                                            </tr>
+                                                        </table>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+                """
+                
+                # --- 溫度圖表 (確保在同一區塊背景色中) ---
+                if hasattr(p, 'chart_base64_list') and p.chart_base64_list:
+                    temp_chart = None
+                    for b64 in p.chart_base64_list:
+                        if len(b64) > 0:
+                            temp_chart = b64
+                            break # 找到第一張圖就跳出
+                    
+                    if temp_chart:
+                        # 清理 Base64 字串，避免 Outlook 渲染錯誤
+                        b64_clean = temp_chart.replace('\n', '').replace('\r', '').replace(' ', '')
+                        html += f"""
+                                    <tr bgcolor="{row_bg}">
+                                        <td align="center" style="padding: 10px 20px 20px 20px; border: 1px solid {border_color}; border-top: none;">
+                                            <div style="font-size: 12px; color: #888888; margin-bottom: 5px; text-align: left; width: 100%; {base_font}">
+                                                📈 Temperature Trend (7-Day):
+                                            </div>
+                                            <img src="data:image/png;base64,{b64_clean}" 
+                                                width="700" 
+                                                style="display: block; width: 100%; max-width: 700px; height: auto; border: 1px solid #DDDDDD; border-radius: 4px;" 
+                                                alt="Temperature Chart for {p.port_code}" border="0">
+                                        </td>
+                                    </tr>
+                        """
+                
+                # 增加間距列 (Spacer Row)
+                html += '<tr><td height="20" style="font-size: 0; line-height: 0;">&nbsp;</td></tr>'
+
+            # --- Footer 結尾 ---
             html += f"""
-                <tr style="background-color: {row_bg}; border-bottom: 1px solid #ECF0F1;">
-                <td valign="top" style="padding: 15px; width: 25%;">
-                    <div style="font-size: 20px; font-weight: 800; color: #E74C3C; margin-bottom: 4px; line-height: 1;">
-                        {p.port_code}
-                    </div>
-                    <div style="font-size: 13px; color: #34495E; font-weight: 600; margin-bottom: 4px;">
-                        {p.port_name}
-                    </div>
-                    <div style="font-size: 12px; color: #7F8C8D; margin-bottom: 8px;">
-                        📍 {p.country}
-                    </div>
-                    <div>
-                        <span style="background-color: #FADBD8; color: #C0392B; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 4px; display: inline-block;">
-                            ❄️ 低溫警告 FREEZING
-                        </span>
-                    </div>
-                </td>
-
-                <td valign="top" style="padding: 15px; width: 30%;">
-                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                        <tr>
-                            <td width="24" valign="top" style="font-size: 16px; padding-top: 2px;">❄️</td>
-                            <td valign="top">
-                                <span style="font-size: 11px; color: #7F8C8D; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px;">最低氣溫 Min Temp</span>
-                                <span style="color: #E74C3C; font-size: 20px; font-weight: 700;">
-                                    {p.min_temperature:.1f} <span style="font-size: 14px; font-weight: 500;">°C</span>
-                                </span>
-                                <br>
-                                <span style="color: #E74C3C; font-size: 16px; font-weight: 600;">
-                                    ({p.min_temperature * 9/5 + 32:.1f} °F)
-                                </span>
+                                </table>
                             </td>
                         </tr>
+                        
+                        <tr>
+                            <td bgcolor="#FFF8E1" style="padding: 20px 30px; border-top: 1px solid #FFECB3;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <tr>
+                                        <td valign="top" width="24" style="font-size: 18px;">⚠️</td>
+                                        <td valign="top" style="padding-left: 10px; {base_font} color: #7F6000; font-size: 12px; line-height: 1.5;">
+                                            <strong>免責聲明 Disclaimer:</strong><br>
+                                            本信件內容僅供參考，船長仍應依據實際天候狀況與專業判斷採取適當措施。<br>
+                                            This report is for reference only. Captains should take appropriate actions based on actual weather conditions.
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td bgcolor="#003366" align="center" style="padding: 15px;">
+                                <font color="#829AB1" style="font-size: 11px; {base_font}">
+                                    &copy; {now_str_TPE[:4]} <strong>Wan Hai Lines Ltd.</strong> All Rights Reserved.<br>
+                                    Marine Technology Division | Fleet Risk Management Dept.
+                                </font>
+                            </td>
+                        </tr>
+                        
                     </table>
-                </td>
-
-                <td valign="top" style="padding: 15px; width: 45%;">
-                    <table border="0" cellpadding="4" cellspacing="0" width="100%" style="font-size: 12px; border-collapse: collapse;">
-                        <tr>
-                            <td valign="top" style="color: #3498DB; width: 95px; padding-bottom: 10px; line-height: 1.3; font-weight: 600;">
-                                開始低於0°C<br><span style="font-size: 10px;">First Below 0°C:</span>
-                            </td>
-                            <td valign="top" style="padding-bottom: 10px;">
-                                <div style="color: #3498DB; font-weight: 600;">{first_freeze_utc} <span style="color: #95A5A6; font-size: 10px; font-weight: normal;">UTC</span></div>
-                                <div style="color: #3498DB;">{first_freeze_lct} <span style="color: #95A5A6; font-size: 10px;">LT</span></div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td valign="top" style="color: #E74C3C; width: 95px; line-height: 1.3; font-weight: 600;">
-                                最低溫時間<br><span style="font-size: 10px;">Min Temp Time:</span>
-                            </td>
-                            <td valign="top">
-                                <div style="color: #E74C3C; font-weight: 600;">{temp_utc} <span style="color: #95A5A6; font-size: 10px; font-weight: normal;">UTC</span></div>
-                                <div style="color: #E74C3C;">{temp_lct} <span style="color: #95A5A6; font-size: 10px;">LT</span></div>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
+                    </td>
             </tr>
+        </table>
+        </center>
+    </body>
+    </html>
             """
             
-            # 溫度圖表
-            if hasattr(p, 'chart_base64_list') and p.chart_base64_list:
-                temp_chart = None
-                for b64 in p.chart_base64_list:
-                    if len(b64) > 0:
-                        temp_chart = b64
-                
-                if temp_chart:
-                    b64_clean = temp_chart.replace('\n', '').replace('\r', '').replace(' ', '')
-                    html += f"""
-            <tr>
-                <td colspan="3" style="padding: 15px; background-color: {row_bg}; border-bottom: 1px solid #ECF0F1;">
-                    <div style="font-size: 13px; color: #5D6D7E; margin-bottom: 8px; font-weight: 600;">
-                        📈 溫度趨勢圖表 Temperature Trend Chart (7-Day):
-                    </div>
-                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                        <tr>
-                            <td align="center">
-                                <img src="data:image/png;base64,{b64_clean}" 
-                                    width="750" 
-                                    style="display:block; max-width: 100%; height: auto; border: 1px solid #E0E0E0; border-radius: 6px;" 
-                                    alt="Temperature Chart">
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-                    """
-        
-        html += f"""
-            </table>
-        </td>
-    </tr>
-    
-    <tr>
-        <td bgcolor="#F8F9FA" align="center" style="padding: 40px 25px; border-top: 3px solid #E0E0E0;">
-            <table border="0" cellpadding="0" cellspacing="0" width="600">
-                <tr>
-                    <td align="center" style="padding-bottom: 8px;">
-                        <font size="5" color="#2C3E50" face="Arial, Noto Sans TC, Microsoft JhengHei UI, sans-serif">
-                            <strong>萬海航運股份有限公司</strong>
-                        </font>
-                    </td>
-                </tr>
-                <tr>
-                    <td align="center" style="padding-bottom: 20px;">
-                        <font size="3" color="#34495E" face="Arial, Noto Sans TC, Microsoft JhengHei UI, sans-serif">
-                            <strong>WAN HAI LINES LTD.</strong>
-                        </font>
-                    </td>
-                </tr>
-                
-                <tr>
-                    <td align="center" style="padding-bottom: 20px;">
-                        <table border="0" cellpadding="0" cellspacing="0" width="120">
-                            <tr>
-                                <td style="border-top: 2px solid #95A5A6;"></td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-                
-                <tr>
-                    <td align="center" style="padding-bottom: 25px;">
-                        <font size="2" color="#34495E" face="Arial, Noto Sans TC, Microsoft JhengHei UI, sans-serif">
-                            <strong>Marine Technology Division | Fleet Risk Management Dept.</strong>
-                        </font>
-                    </td>
-                </tr>
-                
-                <tr>
-                    <td>
-                        <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FFF3CD">
-                            <tr>
-                                <td style="padding: 18px 20px; border-left: 4px solid #F39C12; border-radius: 6px;">
-                                    <table border="0" cellpadding="0" cellspacing="0">
-                                        <tr>
-                                            <td style="padding-bottom: 8px;">
-                                                <font size="2" color="#7D6608" face="Arial, Noto Sans TC, Microsoft JhengHei UI, sans-serif">
-                                                    <strong>⚠️ 免責聲明 Disclaimer</strong>
-                                                </font>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td>
-                                                <font size="2" color="#856404" face="Arial, Noto Sans TC, Microsoft JhengHei UI, sans-serif">
-                                                    本信件內容僅供參考,船長仍應依據實際天候狀況與專業判斷採取適當措施。
-                                                    <br>
-                                                    <span style="color: #975A16;">This report is for reference only. Captains should take appropriate actions based on actual weather conditions.</span>
-                                                </font>
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-                
-                <tr>
-                    <td align="center" style="padding-top: 25px;">
-                        <font size="1" color="#95A5A6" face="Arial, Noto Sans TC, Microsoft JhengHei UI, sans-serif">
-                            &copy; {now_str_TPE[:4]} Wan Hai Lines Ltd. All Rights Reserved.
-                        </font>
-                    </td>
-                </tr>
-            </table>
-        </td>
-    </tr>
-    </table>
-    </center>
-</body>
-</html>
-        """
-        
-        return html
+            return html
     
     def save_report_to_file(self, report, output_dir='reports'):
         """儲存報告到檔案"""
