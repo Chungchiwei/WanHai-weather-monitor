@@ -69,8 +69,7 @@ RISK_THRESHOLDS = {
     # 天氣狀況閾值
     'temp_freezing': 0,          # 氣溫 < 0°C
     'pressure_low': 1000,        # 氣壓 < 1000 hPa
-    'visibility_poor': 6000,     # ✅ 能見度 < 6km (6000m) ≈ 3.24 海浬
-}
+    'visibility_poor': 5552,     # ✅ 能見度 < 3.0 海里 (約 5552 公尺)}
 
 @dataclass
 class RiskAssessment:
@@ -1628,13 +1627,314 @@ class WeatherMonitorService:
                     </tr>
                 """
 
-        # ✅ 詳細港口資料表格（由於篇幅限制，這裡繼續下一個回覆）
-        # 請讓我繼續完成...
+        # ✅ 詳細港口資料表格
+        styles_detail = {
+            3: {
+                'color': '#DC2626', 
+                'bg': '#FEF2F2', 
+                'title_zh': '🔴 危險等級港口', 
+                'title_en': 'HIGH RISK LEVEL PORTS',
+                'border': '#DC2626', 
+                'header_bg': '#FEE2E2'
+            },
+            2: {
+                'color': '#F59E0B', 
+                'bg': '#FFFBEB', 
+                'title_zh': '🟠 警告等級港口', 
+                'title_en': 'MEDIUM RISK LEVEL PORTS',
+                'border': '#F59E0B', 
+                'header_bg': '#FEF3C7'
+            },
+            1: {
+                'color': '#0EA5E9', 
+                'bg': '#F0F9FF', 
+                'title_zh': '🟡 注意等級港口', 
+                'title_en': 'LOW RISK LEVEL PORTS',
+                'border': '#0EA5E9', 
+                'header_bg': '#E0F2FE'
+            }
+        }
 
-    def _generate_temperature_html_report(self, temp_assessments: List[RiskAssessment]) -> str:
+        for level in [3, 2, 1]:
+            ports = risk_groups[level]
+            if not ports:
+                continue
+            
+            style = styles_detail[level]
+            
+            html += f"""
+                        <tr>
+                            <td style="padding: 0 25px;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 10px;">
+                                    <tr>
+                                        <td style="background-color: {style['color']}; color: white; padding: 10px 15px; font-weight: bold; font-size: 15px;">
+                                            {style['title_zh']} {style['title_en']}
+                                        </td>
+                                    </tr>
+                                </table>
+                                
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 1px solid #E5E7EB; margin-bottom: 30px;">
+                                    <tr style="background-color: {style['header_bg']}; font-size: 12px; color: #666;">
+                                        <th align="left" style="padding: 10px; border-bottom: 2px solid {style['border']}; width: 18%; font-weight: 600;">港口資訊<br>Port Info</th>
+                                        <th align="left" style="padding: 10px; border-bottom: 2px solid {style['border']}; width: 25%; font-weight: 600;">氣象數據<br>Weather Data</th>
+                                        <th align="left" style="padding: 10px; border-bottom: 2px solid {style['border']}; width: 57%; font-weight: 600;">高風險時段<br>High Risk Period</th>
+                                    </tr>
+            """
+            
+            for index, p in enumerate(ports):
+                row_bg = "#FFFFFF" if index % 2 == 0 else "#FAFBFC"
+                
+                # ✅ 能見度時段格式化
+                vis_periods_html = ""
+                if p.poor_visibility_periods:
+                    vis_list = []
+                    for period in p.poor_visibility_periods[:3]:
+                        vis_list.append(
+                            f"{period['start_time_lct']}~{period['end_time_lct']} "
+                            f"({period['min_visibility_nm']:.2f} NM)"
+                        )
+                    vis_periods_html = "<br>".join([f"• {v}" for v in vis_list])
+                    
+                    if len(p.poor_visibility_periods) > 3:
+                        vis_periods_html += f"<br>... 及其他 {len(p.poor_visibility_periods) - 3} 個時段"
+                
+                show_pressure_warning = p.min_pressure < RISK_THRESHOLDS['pressure_low']
+                show_vis_warning = len(p.poor_visibility_periods) > 0
+                
+                temp_utc = format_time_display(p.max_wind_time_utc)
+                temp_lct = format_time_display(p.max_wind_time_lct)
+                
+                html += f"""
+                            <tr style="background-color: {row_bg}; border-bottom: 1px solid #E5E7EB;">
+                            <td valign="top" style="padding: 15px;">
+                                <div style="font-size: 20px; font-weight: 800; color: #1E3A8A; margin-bottom: 4px;">
+                                    {p.port_code}
+                                </div>
+                                <div style="font-size: 13px; color: #4B5563; font-weight: 600; margin-bottom: 4px;">
+                                    {p.port_name}
+                                </div>
+                                <div style="font-size: 12px; color: #6B7280; margin-bottom: 8px;">
+                                    📍 {p.country}
+                                </div>
+                            </td>
+
+                            <td valign="top" style="padding: 15px;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                    <tr>
+                                        <td style="font-size: 11px; color: #6B7280;">💨 風速 Wind</td>
+                                        <td style="font-size: 16px; font-weight: 700; color: #DC2626;">
+                                            {p.max_wind_kts:.0f} kts
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="font-size: 11px; color: #6B7280;">🌪️ 陣風 Gust</td>
+                                        <td style="font-size: 16px; font-weight: 700; color: #DC2626;">
+                                            {p.max_gust_kts:.0f} kts
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="font-size: 11px; color: #6B7280;">🌊 浪高 Wave</td>
+                                        <td style="font-size: 16px; font-weight: 700; color: #DC2626;">
+                                            {p.max_wave:.1f} m
+                                        </td>
+                                    </tr>
+                """
+                
+                if show_pressure_warning:
+                    html += f"""
+                                    <tr>
+                                        <td style="font-size: 11px; color: #DC2626;">🌀 氣壓</td>
+                                        <td style="font-size: 16px; font-weight: 700; color: #DC2626;">
+                                            {p.min_pressure:.0f} hPa
+                                        </td>
+                                    </tr>
+                    """
+                
+                if show_vis_warning:
+                    html += f"""
+                                    <tr>
+                                        <td colspan="2" style="padding-top: 10px; font-size: 11px; color: #DC2626;">
+                                            🌫️ 能見度不良時段:<br>
+                                            <span style="font-size: 10px; line-height: 1.6;">
+                                                {vis_periods_html}
+                                            </span>
+                                        </td>
+                                    </tr>
+                    """
+                
+                html += f"""
+                                </table>
+                            </td>
+
+                            <td valign="top" style="padding: 15px;">
+                                <div style="font-size: 11px; color: #666; margin-bottom: 8px;">
+                                    ⚠️ 風險因素: {', '.join(p.risk_factors[:3])}
+                                </div>
+                                <table border="0" cellpadding="2" cellspacing="0" width="100%" style="font-size: 11px;">
+                                    <tr>
+                                        <td style="color: #6B7280;">最大風速時間:</td>
+                                        <td style="color: #111827; font-weight: 600;">{temp_lct}</td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                """
+                
+                # 圖表
+                if hasattr(p, 'chart_base64_list') and p.chart_base64_list:
+                    for idx, b64 in enumerate(p.chart_base64_list):
+                        b64_clean = b64.replace('\n', '').replace('\r', '').replace(' ', '')
+                        html += f"""
+                            <tr>
+                                <td colspan="3" style="padding: 15px; background-color: {row_bg};">
+                                    <img src="data:image/png;base64,{b64_clean}" 
+                                        width="750" 
+                                        style="display:block; max-width: 100%; height: auto; border: 1px solid #ddd;" 
+                                        alt="Chart {idx+1}">
+                                </td>
+                            </tr>
+                        """
+            
+            html += """
+                                </table>
+                            </td>
+                        </tr>
+            """
+
+        html += f"""
+                        <tr>
+                            <td bgcolor="#F8F9FA" align="center" style="padding: 40px 25px;">
+                                <strong style="font-size: 16px; color: #1F2937;">萬海航運股份有限公司 WAN HAI LINES LTD.</strong><br>
+                                <span style="font-size: 12px; color: #6B7280;">Marine Technology Division</span>
+                            </td>
+                        </tr>
+                    </table>
+                </center>
+            </body>
+            </html>
+        """
+        
+        return html
+
+        def _generate_temperature_html_report(self, temp_assessments: List[RiskAssessment]) -> str:
         """✅ 生成低溫警報專用 HTML 報告（只附溫度圖）"""
-        # 此方法的完整代碼將在下一個回覆中提供
-        pass
+        
+        def find_first_freezing_time(weather_records):
+            """找出第一次低於 0°C 的時間"""
+            for record in weather_records:
+                if record.temperature < RISK_THRESHOLDS['temp_freezing']:
+                    return record.time
+            return None
+        
+        font_style = "font-family: 'Noto Sans TC', 'Microsoft JhengHei UI', 'Microsoft YaHei UI', 'Segoe UI', Arial, sans-serif;"
+        
+        try:
+            from zoneinfo import ZoneInfo
+            taipei_tz = ZoneInfo('Asia/Taipei')
+        except ImportError:
+            taipei_tz = timezone(timedelta(hours=8))
+        
+        utc_now = datetime.now(timezone.utc)
+        tpe_now = utc_now.astimezone(taipei_tz)
+        
+        now_str_TPE = f"{tpe_now.strftime('%Y-%m-%d %H:%M')} (TPE)"
+        now_str_UTC = f"{utc_now.strftime('%Y-%m-%d %H:%M')} (UTC)"
+
+        html = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                </head>
+                <body bgcolor="#F5F7FA" style="margin: 0; padding: 0; {font_style}">
+                    <center>
+                    <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="max-width: 900px; margin: 20px auto;">
+                    <tr>
+                        <td style="padding: 25px;">
+                            <h2 style="color: #E74C3C; font-size: 24px; margin: 0 0 10px 0;">
+                                ❄️ WHL Port Low Temperature Alert
+                            </h2>
+                            <p style="color: #7F8C8D; font-size: 14px; margin: 0 0 20px 0;">
+                                低溫警報 - 未來 7 天氣溫低於冰點港口 | 更新時間: {now_str_TPE}
+                            </p>
+                            
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 20px;">
+                                <tr style="background-color: #FADBD8;">
+                                    <th align="left" style="padding: 10px; border-bottom: 2px solid #E74C3C;">港口 Port</th>
+                                    <th align="left" style="padding: 10px; border-bottom: 2px solid #E74C3C;">最低溫 Min Temp</th>
+                                    <th align="left" style="padding: 10px; border-bottom: 2px solid #E74C3C;">時間 Time</th>
+                                </tr>
+        """
+        
+        for index, p in enumerate(temp_assessments):
+            row_bg = "#FFFFFF" if index % 2 == 0 else "#F8FAFB"
+            
+            first_freezing_time = find_first_freezing_time(p.weather_records)
+            first_freeze_lct = first_freezing_time.strftime('%m/%d %H:%M') if first_freezing_time else "N/A"
+            
+            html += f"""
+                                <tr style="background-color: {row_bg};">
+                                    <td style="padding: 10px; border-bottom: 1px solid #ECF0F1;">
+                                        <strong style="color: #E74C3C;">{p.port_code}</strong> - {p.port_name}
+                                    </td>
+                                    <td style="padding: 10px; border-bottom: 1px solid #ECF0F1;">
+                                        <strong style="color: #E74C3C; font-size: 18px;">{p.min_temperature:.1f}°C</strong>
+                                        ({p.min_temperature * 9/5 + 32:.1f}°F)
+                                    </td>
+                                    <td style="padding: 10px; border-bottom: 1px solid #ECF0F1;">
+                                        開始: {first_freeze_lct}<br>
+                                        最低: {p.min_temp_time_lct.split('(')[0].strip() if p.min_temp_time_lct else 'N/A'}
+                                    </td>
+                                </tr>
+            """
+            
+            # ✅ 只附溫度圖
+            if hasattr(p, 'chart_base64_list') and p.chart_base64_list:
+                # 找出溫度圖（通常是最後一張）
+                for b64 in p.chart_base64_list:
+                    if len(b64) > 10000:  # 溫度圖通常較大
+                        b64_clean = b64.replace('\n', '').replace('\r', '').replace(' ', '')
+                        html += f"""
+                                <tr>
+                                    <td colspan="3" style="padding: 15px; background-color: {row_bg};">
+                                        <img src="data:image/png;base64,{b64_clean}" 
+                                            width="750" 
+                                            style="display:block; max-width: 100%; height: auto; border: 1px solid #E0E0E0;" 
+                                            alt="Temperature Chart">
+                                    </td>
+                                </tr>
+                        """
+                        break  # 只取一張溫度圖
+        
+        html += f"""
+                            </table>
+                            
+                            <div style="background-color: #FFF3CD; padding: 20px; border-left: 4px solid #F39C12; margin-top: 20px;">
+                                <strong style="color: #7D6608;">⚠️ 低溫應對措施 Low Temperature Response Actions</strong>
+                                <ul style="margin: 10px 0; padding-left: 20px; color: #856404; line-height: 1.8;">
+                                    <li>預先排空兩舷甲板淡水管路</li>
+                                    <li>檢查並保護暴露在外的管路、閥門及設備</li>
+                                    <li>定期剷除甲板冰雪，並在走道撒鹽防止結冰</li>
+                                    <li>提前啟動並保持機械運轉（舷梯、吊車、起錨機等）</li>
+                                    <li>確保全體船員配發防寒衣物並加強防滑措施</li>
+                                </ul>
+                            </div>
+                            
+                            <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #E0E0E0; text-align: center; color: #95A5A6; font-size: 12px;">
+                                萬海航運股份有限公司 WAN HAI LINES LTD.<br>
+                                Marine Technology Division | Fleet Risk Management Dept.
+                            </div>
+                        </td>
+                    </tr>
+                    </table>
+                </center>
+            </body>
+            </html>
+        """
+        
+        return html
     
     def save_report_to_file(self, report, output_dir='reports'):
         """儲存報告到檔案"""
@@ -1654,50 +1954,175 @@ class WeatherMonitorService:
 def main():
     """主程式進入點"""
     
-    # 檢查必要環境變數
+    print("=" * 80)
+    print("🚀 WHL 港口氣象監控系統啟動")
+    print("=" * 80)
+    
+    # 1. 檢查必要環境變數
+    print("\n🔍 步驟 1: 檢查環境變數...")
+    
     if not AEDYN_USERNAME or not AEDYN_PASSWORD:
         print("❌ 錯誤: 未設定 AEDYN_USERNAME 或 AEDYN_PASSWORD")
+        print("   請在 .env 檔案中設定 WNI 登入帳密")
         sys.exit(1)
+    else:
+        print(f"   ✅ WNI 帳號: {AEDYN_USERNAME}")
     
     if not MAIL_USER or not MAIL_PASSWORD:
-        print("⚠️ 警告: 未設定 MAIL_USER 或 MAIL_PASSWORD,將無法發送 Email")
+        print("   ⚠️ 警告: 未設定 MAIL_USER 或 MAIL_PASSWORD")
+        print("   將無法發送 Email 通知")
+    else:
+        print(f"   ✅ Gmail 帳號: {MAIL_USER}")
+        print(f"   ✅ 目標信箱: {TARGET_EMAIL}")
+    
+    if TEAMS_WEBHOOK_URL:
+        print(f"   ✅ Teams Webhook 已設定")
+    else:
+        print(f"   ⚠️ Teams Webhook 未設定，將跳過 Teams 通知")
+    
+    # 2. 檢查檔案是否存在
+    print("\n🔍 步驟 2: 檢查必要檔案...")
+    
+    if not os.path.exists(EXCEL_FILE_PATH):
+        print(f"   ❌ 錯誤: 找不到港口清單檔案: {EXCEL_FILE_PATH}")
+        sys.exit(1)
+    else:
+        print(f"   ✅ 港口清單檔案: {EXCEL_FILE_PATH}")
+    
+    # 3. 初始化服務
+    print("\n🔧 步驟 3: 初始化氣象監控服務...")
     
     try:
-        # 初始化服務
         service = WeatherMonitorService(
             username=AEDYN_USERNAME,
             password=AEDYN_PASSWORD,
-            teams_webhook_url=TEAMS_WEBHOOK_URL
+            teams_webhook_url=TEAMS_WEBHOOK_URL,
+            excel_path=EXCEL_FILE_PATH
         )
+        print("   ✅ 服務初始化成功")
         
-        # 執行監控
+    except Exception as e:
+        print(f"   ❌ 服務初始化失敗: {e}")
+        traceback.print_exc()
+        sys.exit(1)
+    
+    # 4. 執行監控
+    print("\n" + "=" * 80)
+    print("📡 步驟 4: 開始執行每日監控...")
+    print("=" * 80)
+    
+    try:
         report = service.run_daily_monitoring()
         
-        # 儲存報告
-        service.save_report_to_file(report)
-        
-        # 輸出 JSON (供 GitHub Actions 使用)
-        print("\n" + "="*80)
-        print("📤 JSON OUTPUT (for GitHub Actions):")
-        print("="*80)
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-        
-        # 根據結果設定退出碼
-        if report.get('email_sent', False):
-            sys.exit(0)  # 成功
-        else:
-            sys.exit(1)  # 失敗
-        
     except KeyboardInterrupt:
-        print("\n⚠️ 使用者中斷執行")
+        print("\n⚠️ 使用者中斷執行 (Ctrl+C)")
         sys.exit(130)
         
     except Exception as e:
-        print(f"\n❌ 執行過程發生嚴重錯誤: {e}")
+        print(f"\n❌ 監控執行過程發生嚴重錯誤: {e}")
         traceback.print_exc()
+        
+        # 嘗試產生錯誤報告
+        error_report = {
+            "timestamp": datetime.now().isoformat(),
+            "status": "ERROR",
+            "error_message": str(e),
+            "error_type": type(e).__name__,
+            "traceback": traceback.format_exc()
+        }
+        
+        try:
+            service.save_report_to_file(error_report, output_dir='error_reports')
+            print("   ✅ 錯誤報告已儲存")
+        except:
+            pass
+        
         sys.exit(1)
+    
+    # 5. 儲存報告
+    print("\n📄 步驟 5: 儲存執行報告...")
+    
+    try:
+        report_path = service.save_report_to_file(report)
+        print(f"   ✅ 報告已儲存至: {report_path}")
+    except Exception as e:
+        print(f"   ⚠️ 報告儲存失敗: {e}")
+    
+    # 6. 輸出執行摘要
+    print("\n" + "=" * 80)
+    print("📊 執行摘要 EXECUTION SUMMARY")
+    print("=" * 80)
+    
+    summary = report.get('summary', {})
+    print(f"✅ 檢查港口數: {summary.get('total_ports_checked', 0)}")
+    print(f"⚠️ 風險港口數: {summary.get('risk_ports_found', 0)}")
+    print(f"   - 🔴 高度風險: {summary.get('danger_count', 0)}")
+    print(f"   - 🟠 中度風險: {summary.get('warning_count', 0)}")
+    print(f"   - 🟡 低度風險: {summary.get('caution_count', 0)}")
+    
+    print(f"\n📧 通知發送狀態:")
+    print(f"   - Teams 通知: {'✅ 成功' if report.get('teams_sent', False) else '❌ 失敗/跳過'}")
+    print(f"   - 主要報告 Email: {'✅ 成功' if report.get('email_sent', False) else '❌ 失敗'}")
+    print(f"   - 低溫警報 Email: {'✅ 成功' if report.get('temp_email_sent', False) else '❌ 失敗/無需發送'}")
+    
+    if report.get('temp_ports_count', 0) > 0:
+        print(f"\n❄️ 低溫警告港口: {report.get('temp_ports_count', 0)} 個")
+    
+    # 7. 輸出 JSON (供 GitHub Actions 使用)
+    print("\n" + "=" * 80)
+    print("📤 JSON OUTPUT (for GitHub Actions)")
+    print("=" * 80)
+    
+    try:
+        # 建立簡化版 JSON (移除過大的資料)
+        simplified_report = {
+            "timestamp": report.get("timestamp"),
+            "summary": report.get("summary"),
+            "notifications": report.get("notifications"),
+            "email_sent": report.get("email_sent"),
+            "teams_sent": report.get("teams_sent"),
+            "temp_email_sent": report.get("temp_email_sent"),
+            "temp_ports_count": report.get("temp_ports_count"),
+            "risk_ports": [
+                {
+                    "port_code": a.get("port_code"),
+                    "port_name": a.get("port_name"),
+                    "risk_level": a.get("risk_level"),
+                    "max_wind_kts": a.get("max_wind_kts"),
+                    "max_gust_kts": a.get("max_gust_kts"),
+                    "max_wave": a.get("max_wave")
+                }
+                for a in report.get("risk_assessments", [])
+            ]
+        }
+        
+        print(json.dumps(simplified_report, ensure_ascii=False, indent=2))
+        
+    except Exception as e:
+        print(f"⚠️ JSON 輸出失敗: {e}")
+        print(json.dumps({"error": str(e)}, ensure_ascii=False))
+    
+    # 8. 設定退出碼
+    print("\n" + "=" * 80)
+    
+    email_sent = report.get('email_sent', False)
+    risk_count = summary.get('risk_ports_found', 0)
+    
+    if email_sent:
+        if risk_count > 0:
+            print(f"✅ 執行成功 - 發現 {risk_count} 個風險港口，已發送通知")
+            exit_code = 0
+        else:
+            print("✅ 執行成功 - 所有港口安全")
+            exit_code = 0
+    else:
+        print("❌ 執行失敗 - Email 發送失敗")
+        exit_code = 1
+    
+    print("=" * 80)
+    
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
     main()
-
