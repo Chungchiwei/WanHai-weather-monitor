@@ -4,8 +4,8 @@ import sys
 import json
 import traceback
 import smtplib
-import io  # 新增
-import base64 # 新增
+import io
+import base64
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict, field
@@ -64,6 +64,11 @@ RISK_THRESHOLDS = {
     'wave_caution': 2.5,
     'wave_warning': 3.5,
     'wave_danger': 4.0,
+    
+    # ✅ 新增：天氣狀況閾值
+    'temp_freezing': 0,          # 氣溫 < 0°C
+    'pressure_low': 1000,        # 氣壓 < 1000 hPa
+    'visibility_poor': 5000,     # 能見度 < 5km (5000m)
 }
 
 @dataclass
@@ -87,20 +92,33 @@ class RiskAssessment:
     max_wave_time_utc: str
     max_wave_time_lct: str
     
+    # ✅ 新增：天氣狀況欄位
+    min_temperature: float = 0.0
+    min_pressure: float = 0.0
+    min_visibility: float = 0.0
+    min_temp_time_utc: str = ""
+    min_temp_time_lct: str = ""
+    min_pressure_time_utc: str = ""
+    min_pressure_time_lct: str = ""
+    min_vis_time_utc: str = ""
+    min_vis_time_lct: str = ""
+    
     risk_periods: List[Dict[str, Any]]
     issued_time: str
     latitude: float
     longitude: float
     
     raw_records: Optional[List[WeatherRecord]] = None
+    weather_records: Optional[List] = None  # ✅ 新增：天氣狀況記錄
     chart_base64_list: List[str] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
-        for key in ['raw_records', 'chart_base64_list']:
+        for key in ['raw_records', 'weather_records', 'chart_base64_list']:
             d.pop(key, None)
         return d
-# ================= 繪圖模組 (修改版) =================
+
+# ================= 繪圖模組 =================
 
 class ChartGenerator:
     """圖表生成器 - 支援 Base64 輸出（高解析度版）"""
@@ -397,7 +415,6 @@ class ChartGenerator:
             traceback.print_exc()
             return None
 
-
     def generate_wave_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
         """繪製浪高趨勢圖，回傳 Base64 字串（專業優化版）"""
         if not assessment.raw_records:
@@ -621,10 +638,10 @@ class ChartGenerator:
             return None
 
 
-# ================= 風險分析模組 (修正版) =================
+# ================= 風險分析模組 =================
 
 class WeatherRiskAnalyzer:
-    """氣象風險分析器"""
+    """氣象風險分析器（含天氣狀況）"""
     
     @staticmethod
     def kts_to_bft(speed_kts: float) -> int:
@@ -643,11 +660,12 @@ class WeatherRiskAnalyzer:
         return 12
 
     @classmethod
-    def analyze_record(cls, record: WeatherRecord) -> Dict:
+    def analyze_record(cls, record: WeatherRecord, weather_record=None) -> Dict:
+        """分析單筆記錄（含風浪 + 天氣狀況）"""
         risks = []
         risk_level = 0
 
-        # 風速檢查
+        # ==================== 風速檢查 ====================
         if record.wind_speed_kts >= RISK_THRESHOLDS['wind_danger']:
             risks.append(f"⛔ 風速危險: {record.wind_speed_kts:.1f} kts")
             risk_level = max(risk_level, 3)
@@ -658,7 +676,7 @@ class WeatherRiskAnalyzer:
             risks.append(f"⚡ 風速注意: {record.wind_speed_kts:.1f} kts")
             risk_level = max(risk_level, 1)
 
-        # 陣風檢查
+        # ==================== 陣風檢查 ====================
         if record.wind_gust_kts >= RISK_THRESHOLDS['gust_danger']:
             risks.append(f"⛔ 陣風危險: {record.wind_gust_kts:.1f} kts")
             risk_level = max(risk_level, 3)
@@ -669,7 +687,7 @@ class WeatherRiskAnalyzer:
             risks.append(f"⚡ 陣風注意: {record.wind_gust_kts:.1f} kts")
             risk_level = max(risk_level, 1)
 
-        # 浪高檢查
+        # ==================== 浪高檢查 ====================
         if record.wave_height >= RISK_THRESHOLDS['wave_danger']:
             risks.append(f"⛔ 浪高危險: {record.wave_height:.1f} m")
             risk_level = max(risk_level, 3)
@@ -679,6 +697,24 @@ class WeatherRiskAnalyzer:
         elif record.wave_height >= RISK_THRESHOLDS['wave_caution']:
             risks.append(f"⚡ 浪高注意: {record.wave_height:.1f} m")
             risk_level = max(risk_level, 1)
+
+        # ==================== ✅ 新增：天氣狀況檢查 ====================
+        if weather_record:
+            # 氣溫檢查（< 0°C）
+            if weather_record.temperature < RISK_THRESHOLDS['temp_freezing']:
+                risks.append(f"❄️ 低溫警告: {weather_record.temperature:.1f}°C")
+                risk_level = max(risk_level, 2)  # 低溫視為中度風險
+            
+            # 氣壓檢查（< 1000 hPa）
+            if weather_record.pressure < RISK_THRESHOLDS['pressure_low']:
+                risks.append(f"🌀 低氣壓警告: {weather_record.pressure:.0f} hPa")
+                risk_level = max(risk_level, 2)  # 低氣壓視為中度風險
+            
+            # 能見度檢查（< 5km）
+            vis_m = weather_record.visibility_meters
+            if vis_m is not None and vis_m < RISK_THRESHOLDS['visibility_poor']:
+                risks.append(f"🌫️ 能見度不良: {vis_m:.0f} m")
+                risk_level = max(risk_level, 2)  # 低能見度視為中度風險
 
         return {
             'risk_level': risk_level,
@@ -697,27 +733,53 @@ class WeatherRiskAnalyzer:
     @classmethod
     def analyze_port_risk(cls, port_code: str, port_info: Dict[str, Any],
                         content: str, issued_time: str) -> Optional[RiskAssessment]:
+        """分析港口風險（含天氣狀況）"""
         try:
             parser = WeatherParser()
-            port_name, records, warnings = parser.parse_content(content)
             
-            if not records:
+            # ✅ 解析風浪 + 天氣狀況
+            port_name, wind_records, weather_records, warnings = parser.parse_content(content)
+            
+            if not wind_records:
                 return None
+            
+            # 建立時間對應的天氣狀況字典
+            weather_dict = {}
+            if weather_records:
+                for wr in weather_records:
+                    weather_dict[wr.time] = wr
             
             risk_periods = []
             max_level = 0
             
-            # 找出風速最大的那一筆記錄
-            max_wind_record = max(records, key=lambda r: r.wind_speed_kts)
-            # 找出陣風最大的那一筆記錄
-            max_gust_record = max(records, key=lambda r: r.wind_gust_kts)
-            # 浪高最大的記錄
-            max_wave_record = max(records, key=lambda r: r.wave_height)
+            # 找出極值記錄
+            max_wind_record = max(wind_records, key=lambda r: r.wind_speed_kts)
+            max_gust_record = max(wind_records, key=lambda r: r.wind_gust_kts)
+            max_wave_record = max(wind_records, key=lambda r: r.wave_height)
             
-            for record in records:
-                analyzed = cls.analyze_record(record)
+            # ✅ 天氣狀況極值
+            min_temp_record = None
+            min_pressure_record = None
+            min_vis_record = None
+            
+            if weather_records:
+                min_temp_record = min(weather_records, key=lambda r: r.temperature)
+                min_pressure_record = min(weather_records, key=lambda r: r.pressure)
+                
+                # 能見度處理（排除 None）
+                valid_vis_records = [r for r in weather_records if r.visibility_meters is not None]
+                if valid_vis_records:
+                    min_vis_record = min(valid_vis_records, key=lambda r: r.visibility_meters)
+            
+            # 分析每個時段
+            for record in wind_records:
+                # 找對應時間的天氣狀況
+                wx_record = weather_dict.get(record.time)
+                
+                analyzed = cls.analyze_record(record, wx_record)
+                
                 if analyzed['risks']:
-                    risk_periods.append({
+                    period_data = {
                         'time': record.time.strftime('%Y-%m-%d %H:%M'),
                         'wind_speed_kts': record.wind_speed_kts,
                         'wind_speed_bft': record.wind_speed_bft,
@@ -726,12 +788,24 @@ class WeatherRiskAnalyzer:
                         'wave_height': record.wave_height,
                         'risks': analyzed['risks'],
                         'risk_level': analyzed['risk_level']
-                    })
+                    }
+                    
+                    # ✅ 加入天氣狀況資訊
+                    if wx_record:
+                        period_data.update({
+                            'temperature': wx_record.temperature,
+                            'pressure': wx_record.pressure,
+                            'visibility': wx_record.visibility,
+                            'weather_code': wx_record.weather_code
+                        })
+                    
+                    risk_periods.append(period_data)
                     max_level = max(max_level, analyzed['risk_level'])
             
             if max_level == 0:
                 return None
             
+            # 建立風險因素列表
             risk_factors = []
             if max_wind_record.wind_speed_kts >= RISK_THRESHOLDS['wind_caution']:
                 risk_factors.append(f"風速 {max_wind_record.wind_speed_kts:.1f} kts")
@@ -740,38 +814,63 @@ class WeatherRiskAnalyzer:
             if max_wave_record.wave_height >= RISK_THRESHOLDS['wave_caution']:
                 risk_factors.append(f"浪高 {max_wave_record.wave_height:.1f} m")
             
-            # ✅ 計算 LCT 時區偏移（用於顯示）
-            lct_offset_hours = int(max_wind_record.lct_time.utcoffset().total_seconds() / 3600)
-            lct_offset_str = f"UTC{lct_offset_hours:+d}"
+            # ✅ 加入天氣風險因素
+            if min_temp_record and min_temp_record.temperature < RISK_THRESHOLDS['temp_freezing']:
+                risk_factors.append(f"低溫 {min_temp_record.temperature:.1f}°C")
+            if min_pressure_record and min_pressure_record.pressure < RISK_THRESHOLDS['pressure_low']:
+                risk_factors.append(f"低氣壓 {min_pressure_record.pressure:.0f} hPa")
+            if min_vis_record and min_vis_record.visibility_meters < RISK_THRESHOLDS['visibility_poor']:
+                risk_factors.append(f"低能見度 {min_vis_record.visibility_meters:.0f} m")
             
-            return RiskAssessment(
+            # 計算 LCT 時區偏移
+            lct_offset_hours = int(max_wind_record.lct_time.utcoffset().total_seconds() / 3600)
+            
+            # ✅ 建立 RiskAssessment（含天氣狀況）
+            assessment = RiskAssessment(
                 port_code=port_code,
                 port_name=port_info.get('port_name', port_name),
                 country=port_info.get('country', 'N/A'),
                 risk_level=max_level,
                 risk_factors=risk_factors,
+                
+                # 風浪資訊
                 max_wind_kts=max_wind_record.wind_speed_kts,
                 max_wind_bft=max_wind_record.wind_speed_bft,
-                max_gust_kts=max_wind_record.wind_gust_kts,
-                max_gust_bft=max_wind_record.wind_gust_bft,
+                max_gust_kts=max_gust_record.wind_gust_kts,
+                max_gust_bft=max_gust_record.wind_gust_bft,
                 max_wave=max_wave_record.wave_height,
                 
-                # ✅ 格式：MM/DD 08:00 (UTC)
                 max_wind_time_utc=f"{max_wind_record.time.strftime('%m/%d %H:%M')} (UTC)",
                 max_gust_time_utc=f"{max_gust_record.time.strftime('%m/%d %H:%M')} (UTC)",
                 max_wave_time_utc=f"{max_wave_record.time.strftime('%m/%d %H:%M')} (UTC)",
                 
-                # ✅ 格式：08:00 (LT) 或 08:00 (UTC+8)
                 max_wind_time_lct=f"{max_wind_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
                 max_gust_time_lct=f"{max_gust_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
                 max_wave_time_lct=f"{max_wave_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
+                
+                # ✅ 天氣狀況資訊
+                min_temperature=min_temp_record.temperature if min_temp_record else 999,
+                min_pressure=min_pressure_record.pressure if min_pressure_record else 9999,
+                min_visibility=min_vis_record.visibility_meters if min_vis_record else 99999,
+                
+                min_temp_time_utc=f"{min_temp_record.time.strftime('%m/%d %H:%M')} (UTC)" if min_temp_record else "",
+                min_temp_time_lct=f"{min_temp_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)" if min_temp_record else "",
+                
+                min_pressure_time_utc=f"{min_pressure_record.time.strftime('%m/%d %H:%M')} (UTC)" if min_pressure_record else "",
+                min_pressure_time_lct=f"{min_pressure_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)" if min_pressure_record else "",
+                
+                min_vis_time_utc=f"{min_vis_record.time.strftime('%m/%d %H:%M')} (UTC)" if min_vis_record else "",
+                min_vis_time_lct=f"{min_vis_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)" if min_vis_record else "",
                 
                 risk_periods=risk_periods,
                 issued_time=issued_time,
                 latitude=port_info.get('latitude', 0.0),
                 longitude=port_info.get('longitude', 0.0),
-                raw_records=records
+                raw_records=wind_records,
+                weather_records=weather_records  # ✅ 儲存天氣記錄
             )
+            
+            return assessment
             
         except Exception as e:
             print(f"❌ 分析港口 {port_code} 時發生錯誤: {e}")
@@ -779,7 +878,7 @@ class WeatherRiskAnalyzer:
             return None
 
 
-# ================= Teams 通知器 (無變動) =================
+# ================= Teams 通知器 =================
 
 class TeamsNotifier:
     """Teams 通知發送器"""
@@ -935,7 +1034,7 @@ class TeamsNotifier:
         }
 
 
-# ================= Gmail 通知器 (無變動) =================
+# ================= Gmail 通知器 =================
 
 class GmailRelayNotifier:
     """Gmail 接力發信器"""
@@ -947,85 +1046,55 @@ class GmailRelayNotifier:
         self.subject_trigger = TRIGGER_SUBJECT
 
     def send_trigger_email(self, report_data: dict, report_html: str, 
-                       images: Dict[str, str] = None) -> bool:
+                           images: Dict[str, str] = None) -> bool:
         """發送觸發信件"""
         if not self.user or not self.password:
             print("⚠️ 未設定 Gmail 帳密 (MAIL_USER / MAIL_PASSWORD)")
             return False
-    
-        # ✅ 新增:檢查密碼格式
-        print(f"🔍 Gmail 設定檢查:")
-        print(f"   帳號: {self.user}")
-        print(f"   密碼長度: {len(self.password)}")
-        print(f"   密碼格式: {'✅ 正確 (16字元)' if len(self.password) == 16 else '❌ 錯誤'}")
-        print(f"   密碼包含空格: {'❌ 是' if ' ' in self.password else '✅ 否'}")
-    
+
         msg = MIMEMultipart('alternative')
         msg['From'] = self.user
         msg['To'] = self.target
         msg['Subject'] = self.subject_trigger
         
+        # 1. 純文字 (JSON)
         json_text = json.dumps(report_data, ensure_ascii=False, indent=2)
         msg.attach(MIMEText(json_text, 'plain', 'utf-8'))
+        
+        # 2. HTML (內含 Base64 圖片)
         msg.attach(MIMEText(report_html, 'html', 'utf-8'))
-    
+
         try:
             print(f"📧 正在透過 Gmail 發送報表給 {self.target}...")
-            
-            # ✅ 新增:更詳細的連線過程
-            print("   🔌 正在連線到 smtp.gmail.com:587...")
             server = smtplib.SMTP("smtp.gmail.com", 587, timeout=30)
-            print("   ✅ 連線成功")
-            
-            print("   🤝 正在發送 EHLO...")
             server.ehlo()
-            print("   ✅ EHLO 成功")
-            
-            print("   🔒 正在啟動 TLS 加密...")
             server.starttls()
-            print("   ✅ TLS 啟動成功")
-            
-            print("   🤝 正在重新發送 EHLO...")
             server.ehlo()
-            print("   ✅ EHLO 成功")
             
-            print(f"   🔑 正在登入 {self.user}...")
+            print("   🔑 正在登入...")
             server.login(self.user, self.password)
-            print("   ✅ 登入成功")
             
-            print("   📨 正在傳送郵件...")
+            print("   📨 正在傳送...")
             server.sendmail(self.user, self.target, msg.as_string())
-            print("   ✅ 郵件傳送成功")
-            
             server.quit()
-            print(f"✅ Email 發送成功!")
+            
+            print(f"✅ Email 發送成功！")
             return True
             
-        except smtplib.SMTPAuthenticationError as e:
-            print(f"❌ Gmail 認證失敗: {e}")
-            print(f"   錯誤代碼: {e.smtp_code}")
-            print(f"   錯誤訊息: {e.smtp_error}")
-            print("\n   可能原因:")
-            print("   1. 應用程式密碼錯誤或已過期")
-            print("   2. 帳號被 Google 標記為可疑")
-            print("   3. 帳號曾被盜用,目前受限")
-            print("\n   解決方法:")
-            print("   → 前往: https://accounts.google.com/DisplayUnlockCaptcha")
-            print("   → 完成驗證後重新產生應用程式密碼")
-            return False
-        
-        except smtplib.SMTPException as e:
-            print(f"❌ SMTP 錯誤: {e}")
+        except smtplib.SMTPAuthenticationError:
+            print("❌ Gmail 認證失敗！請檢查:")
+            print("   1. MAIL_USER 是否正確")
+            print("   2. MAIL_PASSWORD 是否為「應用程式密碼」(非一般密碼)")
+            print("   3. Google 帳戶是否已啟用「兩步驟驗證」")
             return False
             
         except Exception as e:
             print(f"❌ Gmail 發送失敗: {e}")
-            print(f"   錯誤類型: {type(e).__name__}")
             traceback.print_exc()
             return False
 
 
-# ================= 主服務類別 (修改版) =================
+# ================= 主服務類別 =================
 
 class WeatherMonitorService:
     """氣象監控服務"""
@@ -1060,10 +1129,10 @@ class WeatherMonitorService:
         
         # 3. 生成圖表
         print(f"\n📈 步驟 3: 生成氣象趨勢圖 (針對 {len([r for r in risk_assessments if r.risk_level >= 2])} 個高風險港口)...")
-        # 修改：不再回傳 dict，而是直接更新 assessment 物件內部
         self._generate_charts(risk_assessments)
         charts_generated = sum(1 for r in risk_assessments if r.chart_base64_list)
         print(f"   ✅ 成功為 {charts_generated}/{len(risk_assessments)} 個港口生成圖表")
+        
         # 4. 發送 Teams 通知
         teams_sent = False
         if self.notifier.webhook_url:
@@ -1139,7 +1208,7 @@ class WeatherMonitorService:
             print("   ⚠️ 沒有風險港口需要生成圖表")
             return
         
-        chart_targets = assessments[:20]  # 最多生成 20 個港口的圖表（避免郵件過大）
+        chart_targets = assessments[:20]  # 最多生成 20 個港口的圖表
         
         print(f"   📊 準備為 {len(chart_targets)} 個港口生成圖表...")
         
@@ -1158,12 +1227,13 @@ class WeatherMonitorService:
             else:
                 print(f"      ❌ 風速圖生成失敗")
             
-            # 浪高圖 (只在有高浪風險時生成)
+            # 浪高圖
             if assessment.max_wave >= RISK_THRESHOLDS['wave_caution']:
                 b64_wave = self.chart_generator.generate_wave_chart(
                     assessment, assessment.port_code
                 )
                 if b64_wave:
+                    
                     assessment.chart_base64_list.append(b64_wave)
                     print(f"      ✅ 浪高圖已生成 (Base64 長度: {len(b64_wave)} 字元)")
                 else:
@@ -1190,7 +1260,7 @@ class WeatherMonitorService:
         }
         
     def _generate_html_report(self, assessments: List[RiskAssessment]) -> str:
-        """生成 HTML 格式的精美報告 (通知屬輪版本)"""
+        """生成 HTML 格式的精美報告"""
         
         # ==================== 輔助函數定義區 ====================
         def format_time_display(time_str):
@@ -1198,7 +1268,6 @@ class WeatherMonitorService:
             if not time_str:
                 return "N/A"
             try:
-                # 移除 (UTC) 或 (LT) 標記
                 if '(' in time_str:
                     return time_str.split('(')[0].strip()
                 return time_str
@@ -1206,10 +1275,9 @@ class WeatherMonitorService:
                 return time_str
         
         # ==================== 初始化設定 ====================
-        # 定義字型 - 更改為更現代的字體組合
         font_style = "font-family: 'Noto Sans TC', 'Microsoft JhengHei UI', 'Microsoft YaHei UI', 'Segoe UI', Arial, sans-serif;"
         
-        # ✅ 時間計算（使用正確的時區處理）
+        # ✅ 時間計算
         try:
             from zoneinfo import ZoneInfo
             taipei_tz = ZoneInfo('Asia/Taipei')
@@ -1272,7 +1340,7 @@ class WeatherMonitorService:
                 'color': '#F59E0B', 
                 'bg': '#FFFBEB', 
                 'border': '#FCD34D',
-                'criteria': '風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m'
+                'criteria': '風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m / 氣溫 < 0°C / 氣壓 < 1000 hPa / 能見度 < 5km'
             },
             1: {
                 'emoji': '🟡', 
@@ -1385,7 +1453,7 @@ class WeatherMonitorService:
                                 </tr>
                 """
         
-        # ==================== 快速統計列 ====================
+        # ==================== 資料來源說明 ====================
         html += f"""
                             </table>
                         </td>
@@ -1406,73 +1474,73 @@ class WeatherMonitorService:
                     </tr>
                       <!-- ==================== 4. 應對措施 ==================== -->
                     <tr>
-    <td style="padding: 0 25px 25px 25px;">
-        <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FFFBEB">
-            <tr>
-                <td style="padding: 22px 25px; border-left: 5px solid #F59E0B; border-radius: 4px;">
-                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                        <!-- 標題 -->
-                        <tr>
-                            <td style="padding-bottom: 18px; border-bottom: 2px solid #FCD34D;">
-                                <strong style="font-size: 16px; color: #78350F;">📋 船隊風險應對措施 Fleet Risk Response Actions</strong>
-                            </td>
-                        </tr>
-                        
-                        <!-- 措施 1: 增加與代理核實氣象 -->
-                        <tr>
-                            <td style="padding-top: 15px; padding-bottom: 12px;">
-                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                    <tr>
-                                        <td width="20" valign="top" style="font-size: 14px;">✅</td>
-                                        <td>
-                                            <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">請立即確認貴輪靠泊港口是否在風險名單中。除參照氣象預報外，亦務必與當地代理核實港口現場天候，以綜合評估潛在影響。</strong>
-                                            <br>
-                                            <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Immediately verify if your vessel's port of call is on the alert list. In addition to weather forecasts, cross-check local weather conditions with the local agent to assess potential impacts.</span>
-                                        </td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
+                        <td style="padding: 0 25px 25px 25px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FFFBEB">
+                                <tr>
+                                    <td style="padding: 22px 25px; border-left: 5px solid #F59E0B; border-radius: 4px;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                            <!-- 標題 -->
+                                            <tr>
+                                                <td style="padding-bottom: 18px; border-bottom: 2px solid #FCD34D;">
+                                                    <strong style="font-size: 16px; color: #78350F;">📋 船隊風險應對措施 Fleet Risk Response Actions</strong>
+                                                </td>
+                                            </tr>
+                                            
+                                            <!-- 措施 1 -->
+                                            <tr>
+                                                <td style="padding-top: 15px; padding-bottom: 12px;">
+                                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                        <tr>
+                                                            <td width="20" valign="top" style="font-size: 14px;">✅</td>
+                                                            <td>
+                                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">請立即確認貴輪靠泊港口是否在風險名單中,並評估可能影響</strong>
+                                                                <br>
+                                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Immediately verify if your vessel's port of call is on the alert list and assess potential impacts.</span>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
 
-                        <!-- 措施 2: 修正漂航英文術語 -->
-                        <tr>
-                            <td style="padding-bottom: 12px;">
-                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                    <tr>
-                                        <td width="20" valign="top" style="font-size: 14px;">✅</td>
-                                        <td>
-                                            <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">根據風險等級制定應對策略，如：改至安全水域備車漂航以替代拋錨、提前申請額外拖船協助、加強繫泊纜繩、或調整靠離泊計畫等。</strong>
-                                            <br>
-                                            <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Formulate response strategies based on risk levels, such as drifting in safe waters with engines on standby instead of anchoring, arranging extra tug assistance in advance, reinforcing mooring arrangements, or adjusting berthing/unberthing schedules.</span>
-                                        </td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
+                                            <!-- 措施 2 -->
+                                            <tr>
+                                                <td style="padding-bottom: 12px;">
+                                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                        <tr>
+                                                            <td width="20" valign="top" style="font-size: 14px;">✅</td>
+                                                            <td>
+                                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">根據風險等級制定應對策略,如:拋錨候泊改為安全水域備車漂航、提前申請額外拖船協助、加強繫泊纜繩、或調整靠離泊計畫等</strong>
+                                                                <br>
+                                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Formulate response strategies based on risk levels, including Drifting instant anchor, strengthening mooring lines, arranging extra tug assistance in advance, or adjusting berthing/unberthing schedules.</span>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
 
-                        <!-- 措施 3: 優化溝通決策用語 -->
-                        <tr>
-                            <td>
-                                <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                                    <tr>
-                                        <td width="20" valign="top" style="font-size: 14px;">✅</td>
-                                        <td>
-                                            <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">與船管PIC、當地代理保持密切聯繫，及時報告船舶狀態和決策。</strong>
-                                            <br>
-                                            <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Maintain close contact with the PIC and local agents; promptly report vessel status and operational decisions.</span>
-                                        </td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-    </td>
-</tr>
+                                            <!-- 措施 3 -->
+                                            <tr>
+                                                <td>
+                                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                        <tr>
+                                                            <td width="20" valign="top" style="font-size: 14px;">✅</td>
+                                                            <td>
+                                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">與船管PIC、當地代理保持密切聯繫,及時報告船舶狀態和決策</strong>
+                                                                <br>
+                                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Maintain close contact with the PIC and local agents; promptly report vessel status and decisions.</span>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-                    <!-- ==================== 6. 分隔線與提示 ==================== -->
+                    <!-- ==================== 5. 分隔線與提示 ==================== -->
                     <tr>
                         <td style="padding: 0 25px 25px 25px;">
                             <table border="0" cellpadding="0" cellspacing="0" width="100%">
@@ -1490,34 +1558,34 @@ class WeatherMonitorService:
 
         # ==================== 6. 詳細港口資料區 ====================
         styles_detail = {
-                    3: {
-                        'color': '#DC2626', 
-                        'bg': '#FEF2F2', 
-                        'title_zh': '🔴 危險等級港口', 
-                        'title_en': 'HIGH RISK LEVEL PORTS',
-                        'border': '#DC2626', 
-                        'header_bg': '#FEE2E2', 
-                        'desc': '條件 Criteria: 風速 Wind > 34 kts / 陣風 Gust > 41 kts / 浪高 Wave > 4.0 m'
-                    },
-                    2: {
-                        'color': '#F59E0B', 
-                        'bg': '#FFFBEB', 
-                        'title_zh': '🟠 警告等級港口', 
-                        'title_en': 'MEDIUM RISK LEVEL PORTS',
-                        'border': '#F59E0B', 
-                        'header_bg': '#FEF3C7', 
-                        'desc': '條件 Criteria: 風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m'
-                    },
-                    1: {
-                        'color': '#0EA5E9', 
-                        'bg': '#F0F9FF', 
-                        'title_zh': '🟡 注意等級港口', 
-                        'title_en': 'LOW RISK LEVEL PORTS',
-                        'border': '#0EA5E9', 
-                        'header_bg': '#E0F2FE', 
-                        'desc': '條件 Criteria: 風速 Wind > 22 kts / 陣風 Gust > 28 kts / 浪高 Wave > 2.5 m'
-                    }
-                }
+            3: {
+                'color': '#DC2626', 
+                'bg': '#FEF2F2', 
+                'title_zh': '🔴 危險等級港口', 
+                'title_en': 'HIGH RISK LEVEL PORTS',
+                'border': '#DC2626', 
+                'header_bg': '#FEE2E2', 
+                'desc': '條件 Criteria: 風速 Wind > 34 kts / 陣風 Gust > 41 kts / 浪高 Wave > 4.0 m'
+            },
+            2: {
+                'color': '#F59E0B', 
+                'bg': '#FFFBEB', 
+                'title_zh': '🟠 警告等級港口', 
+                'title_en': 'MEDIUM RISK LEVEL PORTS',
+                'border': '#F59E0B', 
+                'header_bg': '#FEF3C7', 
+                'desc': '條件 Criteria: 風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m / 氣溫 < 0°C / 氣壓 < 1000 hPa / 能見度 < 5km'
+            },
+            1: {
+                'color': '#0EA5E9', 
+                'bg': '#F0F9FF', 
+                'title_zh': '🟡 注意等級港口', 
+                'title_en': 'LOW RISK LEVEL PORTS',
+                'border': '#0EA5E9', 
+                'header_bg': '#E0F2FE', 
+                'desc': '條件 Criteria: 風速 Wind > 22 kts / 陣風 Gust > 28 kts / 浪高 Wave > 2.5 m'
+            }
+        }
 
         # 遍歷每個風險等級
         for level in [3, 2, 1]:
@@ -1557,12 +1625,12 @@ class WeatherMonitorService:
                 # 1. 樣式與背景邏輯
                 row_bg = "#FFFFFF" if index % 2 == 0 else "#FAFBFC"
                 
-                # 2. 數值強調樣式 (閾值判斷)
+                # 2. 數值強調樣式
                 wind_style = "color: #DC2626; font-weight: bold;" if p.max_wind_kts >= 28 else "color: #333;"
                 gust_style = "color: #DC2626; font-weight: bold;" if p.max_gust_kts >= 34 else "color: #333;"
                 wave_style = "color: #DC2626; font-weight: bold;" if p.max_wave >= 3.5 else "color: #333;"
                 
-                # 3. 風險等級 (顏色、文字、圖示)
+                # 3. 風險等級
                 if p.risk_level == 3:
                     risk_level_bg = "#FEF2F2"
                     risk_level_color = "#DC2626"
@@ -1579,7 +1647,7 @@ class WeatherMonitorService:
                     risk_level_text = "低風險 LOW RISK"
                     risk_level_icon = "🟡"
 
-                # 4. 風速等級 (文字、顏色)
+                # 4. 風速等級
                 if p.max_wind_kts >= 34:
                     wind_level_text = "強風"
                     wind_level_color = "#DC2626"
@@ -1593,7 +1661,7 @@ class WeatherMonitorService:
                     wind_level_text = ""
                     wind_level_color = "#333"
 
-                # 5. 陣風等級 (文字、顏色)
+                # 5. 陣風等級
                 if p.max_gust_kts >= 41:
                     gust_level_text = "危險陣風"
                     gust_level_color = "#DC2626"
@@ -1607,7 +1675,7 @@ class WeatherMonitorService:
                     gust_level_text = ""
                     gust_level_color = "#333"
 
-                # 6. 浪高等級 (文字、顏色)
+                # 6. 浪高等級
                 if p.max_wave >= 4.0:
                     wave_level_text = "危險浪高"
                     wave_level_color = "#DC2626"
@@ -1627,11 +1695,8 @@ class WeatherMonitorService:
                         first_risk = datetime.strptime(p.risk_periods[0]['time'], '%Y-%m-%d %H:%M')
                         last_risk = datetime.strptime(p.risk_periods[-1]['time'], '%Y-%m-%d %H:%M')
                         duration_hours = int((last_risk - first_risk).total_seconds() / 3600) + 3
-                        
-                        # 限制最大 48 小時
                         risk_duration = str(min(duration_hours, 48))
                         
-                        # 如果超過 48 小時，記錄警告
                         if duration_hours > 48:
                             print(f"   ⚠️ {p.port_code} 風險持續時間異常: {duration_hours} 小時 (已限制為 48)")
                     except Exception as e:
@@ -1647,6 +1712,19 @@ class WeatherMonitorService:
                 g_lct = format_time_display(p.max_gust_time_lct)
                 v_utc = format_time_display(p.max_wave_time_utc)
                 v_lct = format_time_display(p.max_wave_time_lct)
+                
+                # ✅ 新增：天氣狀況時間格式化
+                temp_utc = format_time_display(p.min_temp_time_utc) if p.min_temp_time_utc else "N/A"
+                temp_lct = format_time_display(p.min_temp_time_lct) if p.min_temp_time_lct else "N/A"
+                pres_utc = format_time_display(p.min_pressure_time_utc) if p.min_pressure_time_utc else "N/A"
+                pres_lct = format_time_display(p.min_pressure_time_lct) if p.min_pressure_time_lct else "N/A"
+                vis_utc = format_time_display(p.min_vis_time_utc) if p.min_vis_time_utc else "N/A"
+                vis_lct = format_time_display(p.min_vis_time_lct) if p.min_vis_time_lct else "N/A"
+
+                # ✅ 判斷是否顯示天氣警告
+                show_temp_warning = p.min_temperature < RISK_THRESHOLDS['temp_freezing']
+                show_pressure_warning = p.min_pressure < RISK_THRESHOLDS['pressure_low']
+                show_vis_warning = p.min_visibility < RISK_THRESHOLDS['visibility_poor']
                 
                 # 主要資料列
                 html += f"""
@@ -1711,12 +1789,72 @@ class WeatherMonitorService:
                                         </td>
                                     </tr>
                                 </table>
+                """
+                
+                # ✅ 新增：氣溫（只在低溫時顯示）
+                if show_temp_warning:
+                    html += f"""
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 10px;">
+                                    <tr>
+                                        <td width="24" valign="top" style="font-size: 16px; padding-top: 2px;">❄️</td>
+                                        <td valign="top">
+                                            <span style="font-size: 11px; color: #6B7280; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px;">氣溫 Temp</span>
+                                            <span style="color: #DC2626; font-size: 16px; font-weight: 700;">
+                                                {p.min_temperature:.1f} <span style="font-size: 12px; font-weight: 500;">°C</span>
+                                            </span>
+                                            <span style="font-size: 11px; color: #DC2626; margin-left: 6px; font-weight: 600;">
+                                                低溫警告
+                                            </span>
+                                        </td>
+                                    </tr>
+                                </table>
+                    """
+                
+                # ✅ 新增：氣壓（只在低氣壓時顯示）
+                if show_pressure_warning:
+                    html += f"""
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 10px;">
+                                    <tr>
+                                        <td width="24" valign="top" style="font-size: 16px; padding-top: 2px;">🌀</td>
+                                        <td valign="top">
+                                            <span style="font-size: 11px; color: #6B7280; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px;">氣壓 Pressure</span>
+                                            <span style="color: #DC2626; font-size: 16px; font-weight: 700;">
+                                                {p.min_pressure:.0f} <span style="font-size: 12px; font-weight: 500;">hPa</span>
+                                            </span>
+                                            <span style="font-size: 11px; color: #DC2626; margin-left: 6px; font-weight: 600;">
+                                                低氣壓
+                                            </span>
+                                        </td>
+                                    </tr>
+                                </table>
+                    """
+                
+                # ✅ 新增：能見度（只在低能見度時顯示）
+                if show_vis_warning:
+                    html += f"""
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 10px;">
+                                    <tr>
+                                        <td width="24" valign="top" style="font-size: 16px; padding-top: 2px;">🌫️</td>
+                                        <td valign="top">
+                                            <span style="font-size: 11px; color: #6B7280; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px;">能見度 Visibility</span>
+                                            <span style="color: #DC2626; font-size: 16px; font-weight: 700;">
+                                                {p.min_visibility:.0f} <span style="font-size: 12px; font-weight: 500;">m</span>
+                                            </span>
+                                            <span style="font-size: 11px; color: #DC2626; margin-left: 6px; font-weight: 600;">
+                                                能見度不良
+                                            </span>
+                                        </td>
+                                    </tr>
+                                </table>
+                    """
+                
+                html += f"""
                             </td>
 
                             <td valign="top" style="padding: 15px; width: 45%;">
                                 <div style="margin-bottom: 12px;">
                                     <span style="background-color: #FEF2F2; color: #B91C1C; border: 1px solid #FCA5A5; font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 4px; display: inline-block; line-height: 1.4;">
-                                        ⚠️ 風險因素 Risk Factors: {', '.join(p.risk_factors[:2])}
+                                        ⚠️ 風險因素 Risk Factors: {', '.join(p.risk_factors[:3])}
                                     </span>
                                 </div>
                                 
@@ -1748,6 +1886,49 @@ class WeatherMonitorService:
                                             <div style="color: #4B5563;">{v_lct} <span style="color: #9CA3AF; font-size: 10px;">LT</span></div>
                                         </td>
                                     </tr>
+                """
+                
+                # ✅ 新增：天氣狀況時間（只在有警告時顯示）
+                if show_temp_warning:
+                    html += f"""
+                                    <tr>
+                                        <td valign="top" style="color: #DC2626; width: 85px; padding-bottom: 8px; line-height: 1.3; font-weight: 600;">
+                                            最低溫度<br><span style="font-size: 10px;">Min Temp:</span>
+                                        </td>
+                                        <td valign="top" style="padding-bottom: 8px;">
+                                            <div style="color: #DC2626; font-weight: 600;">{temp_utc} <span style="color: #9CA3AF; font-size: 10px; font-weight: normal;">UTC</span></div>
+                                            <div style="color: #DC2626;">{temp_lct} <span style="color: #9CA3AF; font-size: 10px;">LT</span></div>
+                                        </td>
+                                    </tr>
+                    """
+                
+                if show_pressure_warning:
+                    html += f"""
+                                    <tr>
+                                        <td valign="top" style="color: #DC2626; width: 85px; padding-bottom: 8px; line-height: 1.3; font-weight: 600;">
+                                            最低氣壓<br><span style="font-size: 10px;">Min Pressure:</span>
+                                        </td>
+                                        <td valign="top" style="padding-bottom: 8px;">
+                                            <div style="color: #DC2626; font-weight: 600;">{pres_utc} <span style="color: #9CA3AF; font-size: 10px; font-weight: normal;">UTC</span></div>
+                                            <div style="color: #DC2626;">{pres_lct} <span style="color: #9CA3AF; font-size: 10px;">LT</span></div>
+                                        </td>
+                                    </tr>
+                    """
+                
+                if show_vis_warning:
+                    html += f"""
+                                    <tr>
+                                        <td valign="top" style="color: #DC2626; width: 85px; padding-bottom: 8px; line-height: 1.3; font-weight: 600;">
+                                            最低能見度<br><span style="font-size: 10px;">Min Visibility:</span>
+                                        </td>
+                                        <td valign="top" style="padding-bottom: 8px;">
+                                            <div style="color: #DC2626; font-weight: 600;">{vis_utc} <span style="color: #9CA3AF; font-size: 10px; font-weight: normal;">UTC</span></div>
+                                            <div style="color: #DC2626;">{vis_lct} <span style="color: #9CA3AF; font-size: 10px;">LT</span></div>
+                                        </td>
+                                    </tr>
+                    """
+                
+                html += f"""
                                     <tr>
                                         <td valign="top" style="color: #991B1B; width: 85px; padding-top: 8px; border-top: 1px dashed #E5E7EB; font-weight: 600; line-height: 1.3;">
                                             風險持續<br><span style="font-size: 10px;">Duration:</span>
@@ -1901,6 +2082,7 @@ class WeatherMonitorService:
         print(f"📄 報告已儲存: {path}")
         return path
 
+
 # ================= 主程式 =================
 
 def main():
@@ -1952,7 +2134,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
