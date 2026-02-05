@@ -46,6 +46,7 @@ MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')
 TARGET_EMAIL = os.getenv('TARGET_EMAIL', 'harry_chung@wanhai.com')
 TRIGGER_SUBJECT = "GITHUB_TRIGGER_WEATHER_REPORT"
 TRIGGER_SUBJECT_TEMP = "GITHUB_TRIGGER_TEMPERATURE_ALERT"
+TRIGGER_SUBJECT_VISIBILITY = "GITHUB_TRIGGER_VISIBILITY_ALERT"  # ✅ 新增能見度警報主旨
 
 # 4. Teams Webhook
 TEAMS_WEBHOOK_URL = os.getenv('TEAMS_WEBHOOK_URL', '')
@@ -592,7 +593,7 @@ class ChartGenerator:
 # ================= 風險分析模組 =================
 
 class WeatherRiskAnalyzer:
-    """氣象風險分析器（含天氣狀況）"""
+    """氣象風險分析器（✅ 能見度從主報告移除，獨立處理）"""
     
     @staticmethod
     def kts_to_bft(speed_kts: float) -> int:
@@ -611,13 +612,14 @@ class WeatherRiskAnalyzer:
         return 12
 
     @classmethod
-    def analyze_record(cls, record: WeatherRecord, weather_record=None, include_temp=True) -> Dict:
-        """分析單筆記錄（含風浪 + 天氣狀況）
+    def analyze_record(cls, record: WeatherRecord, weather_record=None, include_temp=True, include_visibility=False) -> Dict:
+        """✅ 分析單筆記錄（能見度不計入風險等級）
         
         Args:
             record: 風浪記錄
             weather_record: 天氣記錄
             include_temp: 是否將低溫計入風險等級（False 表示低溫僅記錄，不影響風險等級）
+            include_visibility: 是否將能見度計入風險等級（False 表示能見度僅記錄，不影響風險等級）
         """
         risks = []
         risk_level = 0
@@ -667,11 +669,12 @@ class WeatherRiskAnalyzer:
                 risks.append(f"🌀 低氣壓警告: {weather_record.pressure:.0f} hPa")
                 risk_level = max(risk_level, 2)
             
-            # 能見度檢查（< 2778m）
+            # ✅ 能見度檢查（< 2778m）- 不計入風險等級，僅記錄
             vis_m = weather_record.visibility_meters
             if vis_m is not None and vis_m < RISK_THRESHOLDS['visibility_poor']:
-                risks.append(f"🌫️ 能見度不良: {vis_m:.0f} m")
-                risk_level = max(risk_level, 2)
+                if include_visibility:  # 只有在明確要求時才加入 risks
+                    risks.append(f"🌫️ 能見度不良: {vis_m:.0f} m")
+                # 不更新 risk_level，能見度僅記錄
 
         return {
             'risk_level': risk_level,
@@ -764,7 +767,7 @@ class WeatherRiskAnalyzer:
     def analyze_port_risk_combined(cls, port_code: str, port_info: Dict[str, Any],
                                    content_48h: str, content_7d: str, 
                                    issued_time: str) -> Optional[RiskAssessment]:
-        """✅ 分析港口風險（風浪用 48h, 天氣用 7d）- 低溫不計入風險等級"""
+        """✅ 分析港口風險（風浪用 48h, 天氣用 7d）- 低溫與能見度不計入風險等級"""
         try:
             parser = WeatherParser()
             
@@ -816,10 +819,10 @@ class WeatherRiskAnalyzer:
             # ✅ 合併能見度不良時段
             poor_visibility_periods = cls.merge_visibility_periods(poor_visibility_points)
             
-            # 分析每個時段（使用 48h 風浪資料）
+            # ✅ 分析每個時段（使用 48h 風浪資料，能見度不計入風險等級）
             for record in wind_records_48h:
                 wx_record = weather_dict.get(record.time)
-                analyzed = cls.analyze_record(record, wx_record, include_temp=False)  # ✅ 低溫不計入風險等級
+                analyzed = cls.analyze_record(record, wx_record, include_temp=False, include_visibility=False)  # ✅ 低溫與能見度都不計入
                 
                 if analyzed['risks']:
                     period_data = {
@@ -844,11 +847,11 @@ class WeatherRiskAnalyzer:
                     risk_periods.append(period_data)
                     max_level = max(max_level, analyzed['risk_level'])
             
-            # ✅ 如果 max_level == 0，表示沒有風浪/氣壓/能見度風險，不納入主報告
+            # ✅ 如果 max_level == 0，表示沒有風浪/氣壓風險，不納入主報告
             if max_level == 0:
                 return None
             
-            # 建立風險因素列表（不包含低溫）
+            # ✅ 建立風險因素列表（不包含低溫與能見度）
             risk_factors = []
             if max_wind_record.wind_speed_kts >= RISK_THRESHOLDS['wind_caution']:
                 risk_factors.append(f"風速 {max_wind_record.wind_speed_kts:.1f} kts")
@@ -857,11 +860,9 @@ class WeatherRiskAnalyzer:
             if max_wave_record.wave_height >= RISK_THRESHOLDS['wave_caution']:
                 risk_factors.append(f"浪高 {max_wave_record.wave_height:.1f} m")
             
-            # 加入天氣風險因素（不包含低溫）
+            # ✅ 加入氣壓風險因素（不包含低溫與能見度）
             if min_pressure_record and min_pressure_record.pressure < RISK_THRESHOLDS['pressure_low']:
                 risk_factors.append(f"低氣壓 {min_pressure_record.pressure:.0f} hPa")
-            if poor_visibility_periods:
-                risk_factors.append(f"低能見度 ({len(poor_visibility_periods)} 時段)")
             
             # 計算 LCT 時區偏移
             lct_offset_hours = int(max_wind_record.lct_time.utcoffset().total_seconds() / 3600)
@@ -898,7 +899,7 @@ class WeatherRiskAnalyzer:
                 min_pressure_time_utc=f"{min_pressure_record.time.strftime('%m/%d %H:%M')} (UTC)" if min_pressure_record else "",
                 min_pressure_time_lct=f"{min_pressure_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)" if min_pressure_record else "",
                 
-                poor_visibility_periods=poor_visibility_periods,  # ✅ 使用合併後的時段
+                poor_visibility_periods=poor_visibility_periods,  # ✅ 保留能見度資料供獨立報告使用
                 
                 risk_periods=risk_periods,
                 issued_time=issued_time,
@@ -914,7 +915,6 @@ class WeatherRiskAnalyzer:
             print(f"❌ 分析港口 {port_code} 時發生錯誤: {e}")
             traceback.print_exc()
             return None
-
 # ================= Teams 通知器 =================
 
 class TeamsNotifier:
@@ -1067,12 +1067,10 @@ class TeamsNotifier:
                 }
             }]
         }
-
-
 # ================= Gmail 通知器 =================
 
 class GmailRelayNotifier:
-    """Gmail 接力發信器"""
+    """Gmail 接力發信器（✅ 新增能見度警報功能）"""
     
     def __init__(self):
         self.user = MAIL_USER
@@ -1080,6 +1078,7 @@ class GmailRelayNotifier:
         self.target = TARGET_EMAIL
         self.subject_trigger = TRIGGER_SUBJECT
         self.subject_temp = TRIGGER_SUBJECT_TEMP
+        self.subject_visibility = TRIGGER_SUBJECT_VISIBILITY  # ✅ 新增能見度警報主旨
 
     def send_trigger_email(self, report_data: dict, report_html: str, 
                            images: Dict[str, str] = None) -> bool:
@@ -1162,10 +1161,47 @@ class GmailRelayNotifier:
             print(f"❌ 低溫警報發送失敗: {e}")
             traceback.print_exc()
             return False
+
+    def send_visibility_alert(self, vis_report_data: dict, vis_report_html: str) -> bool:
+        """✅ 發送能見度警報專用報告（參考 2010-006 碰撞案例）"""
+        if not self.user or not self.password:
+            print("⚠️ 未設定 Gmail 帳密 (MAIL_USER / MAIL_PASSWORD)")
+            return False
+
+        msg = MIMEMultipart('alternative')
+        msg['From'] = self.user
+        msg['To'] = self.target
+        msg['Subject'] = self.subject_visibility
+        
+        json_text = json.dumps(vis_report_data, ensure_ascii=False, indent=2)
+        msg.attach(MIMEText(json_text, 'plain', 'utf-8'))
+        msg.attach(MIMEText(vis_report_html, 'html', 'utf-8'))
+
+        try:
+            print(f"🌫️ 正在透過 Gmail 發送能見度警報給 {self.target}...")
+            server = smtplib.SMTP("smtp.gmail.com", 587, timeout=30)
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            
+            print("   🔑 正在登入...")
+            server.login(self.user, self.password)
+            
+            print("   📨 正在傳送...")
+            server.sendmail(self.user, self.target, msg.as_string())
+            server.quit()
+            
+            print(f"✅ 能見度警報發送成功！")
+            return True
+            
+        except Exception as e:
+            print(f"❌ 能見度警報發送失敗: {e}")
+            traceback.print_exc()
+            return False
 # ================= 主服務類別 =================
 
 class WeatherMonitorService:
-    """氣象監控服務"""
+    """氣象監控服務（✅ 新增能見度獨立分析與報告）"""
     
     def __init__(self, username: str, password: str,
                  teams_webhook_url: str = '',
@@ -1182,7 +1218,7 @@ class WeatherMonitorService:
         print(f"✅ 系統初始化完成,共載入 {len(self.crawler.port_list)} 個港口")
     
     def run_daily_monitoring(self) -> Dict[str, Any]:
-        """執行每日監控"""
+        """執行每日監控（✅ 新增能見度獨立處理）"""
         print("=" * 80)
         print(f"🚀 開始執行每日氣象監控 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("=" * 80)
@@ -1191,23 +1227,27 @@ class WeatherMonitorService:
         print("\n📡 步驟 1: 下載所有港口氣象資料 (48h + 7d)...")
         download_stats = self.crawler.fetch_all_ports_both()
         
-        # 2. 分析風險（不包含純低溫港口）
-        print("\n🔍 步驟 2: 分析港口風險（低溫單獨處理）...")
+        # 2. 分析風險（不包含純低溫與能見度港口）
+        print("\n🔍 步驟 2: 分析港口風險（低溫與能見度單獨處理）...")
         risk_assessments = self._analyze_all_ports()
         
         # ✅ 3. 分析低溫港口（獨立分析，不計入主報告）
         print("\n❄️ 步驟 3: 分析低溫港口...")
         temp_assessments = self._analyze_temperature_ports()
         
-        # 4. 生成圖表
-        print(f"\n📈 步驟 4: 生成氣象趨勢圖...")
+        # ✅ 4. 分析能見度不良港口（獨立分析，不計入主報告）
+        print("\n🌫️ 步驟 4: 分析能見度不良港口...")
+        visibility_assessments = self._analyze_visibility_ports()
+        
+        # 5. 生成圖表
+        print(f"\n📈 步驟 5: 生成氣象趨勢圖...")
         self._generate_charts(risk_assessments)
         charts_generated = sum(1 for r in risk_assessments if r.chart_base64_list)
         print(f"   ✅ 成功為 {charts_generated}/{len(risk_assessments)} 個港口生成圖表")
         
-        # 5. 為低溫港口生成溫度圖
+        # 6. 為低溫港口生成溫度圖
         if temp_assessments:
-            print(f"\n❄️ 步驟 5: 為 {len(temp_assessments)} 個低溫港口生成溫度圖...")
+            print(f"\n❄️ 步驟 6: 為 {len(temp_assessments)} 個低溫港口生成溫度圖...")
             for assessment in temp_assessments:
                 b64_temp = self.chart_generator.generate_temperature_chart(
                     assessment, assessment.port_code
@@ -1215,20 +1255,20 @@ class WeatherMonitorService:
                 if b64_temp:
                     assessment.chart_base64_list.append(b64_temp)
         
-        # 6. 發送 Teams 通知
+        # 7. 發送 Teams 通知
         teams_sent = False
         if self.notifier.webhook_url:
-            print("\n📢 步驟 6: 發送 Teams 通知...")
+            print("\n📢 步驟 7: 發送 Teams 通知...")
             teams_sent = self.notifier.send_risk_alert(risk_assessments)
         else:
-            print("\n⚠️ 步驟 6: 跳過 Teams 通知 (未設定 Webhook)")
+            print("\n⚠️ 步驟 7: 跳過 Teams 通知 (未設定 Webhook)")
         
-        # 7. 生成報告
-        print("\n📊 步驟 7: 生成數據報告...")
+        # 8. 生成報告
+        print("\n📊 步驟 8: 生成數據報告...")
         report_data = self._generate_data_report(download_stats, risk_assessments, teams_sent)
         
-        # 8. 發送主要氣象報告 Email
-        print("\n📧 步驟 8: 發送主要氣象報告 Email...")
+        # 9. 發送主要氣象報告 Email
+        print("\n📧 步驟 9: 發送主要氣象報告 Email...")
         report_html = self._generate_html_report(risk_assessments)
         
         email_sent = False
@@ -1240,8 +1280,8 @@ class WeatherMonitorService:
             print(f"⚠️ 主要報告發信過程發生異常: {e}")
             traceback.print_exc()
         
-        # ✅ 9. 發送低溫警報 Email（獨立郵件，不計入主報告）
-        print("\n❄️ 步驟 9: 檢查是否需要發送低溫警報...")
+        # ✅ 10. 發送低溫警報 Email（獨立郵件，不計入主報告）
+        print("\n❄️ 步驟 10: 檢查是否需要發送低溫警報...")
         
         temp_email_sent = False
         if temp_assessments:
@@ -1259,21 +1299,45 @@ class WeatherMonitorService:
         else:
             print("   ✅ 無低溫警告港口,跳過低溫警報發送")
         
+        # ✅ 11. 發送能見度警報 Email（獨立郵件，參考 2010-006 案例）
+        print("\n🌫️ 步驟 11: 檢查是否需要發送能見度警報...")
+        
+        vis_email_sent = False
+        if visibility_assessments:
+            print(f"   🔍 發現 {len(visibility_assessments)} 個港口有能見度警告,準備發送專用報告...")
+            vis_report_data = self._generate_visibility_report_data(visibility_assessments)
+            vis_report_html = self._generate_visibility_html_report(visibility_assessments)
+            
+            try:
+                vis_email_sent = self.email_notifier.send_visibility_alert(
+                    vis_report_data, vis_report_html
+                )
+            except Exception as e:
+                print(f"⚠️ 能見度警報發信過程發生異常: {e}")
+                traceback.print_exc()
+        else:
+            print("   ✅ 無能見度警告港口,跳過能見度警報發送")
+        
         report_data['email_sent'] = email_sent
         report_data['teams_sent'] = teams_sent
         report_data['temp_email_sent'] = temp_email_sent
         report_data['temp_ports_count'] = len(temp_assessments)
+        report_data['vis_email_sent'] = vis_email_sent  # ✅ 新增
+        report_data['vis_ports_count'] = len(visibility_assessments)  # ✅ 新增
         
         print("\n" + "=" * 80)
         print("✅ 每日監控執行完成")
-        print(f"   - 風險港口（不含低溫）: {len(risk_assessments)}")
+        print(f"   - 風險港口（不含低溫/能見度）: {len(risk_assessments)}")
         print(f"   - 低溫港口（獨立報告）: {len(temp_assessments)}")
+        print(f"   - 能見度不良港口（獨立報告）: {len(visibility_assessments)}")  # ✅ 新增
         print(f"   - Teams 通知: {'✅' if teams_sent else '❌'}")
         print(f"   - 主要報告 Email: {'✅' if email_sent else '❌'}")
         print(f"   - 低溫警報 Email: {'✅' if temp_email_sent else '❌'}")
+        print(f"   - 能見度警報 Email: {'✅' if vis_email_sent else '❌'}")  # ✅ 新增
         print("=" * 80)
         
         return report_data
+
     def _analyze_temperature_ports(self) -> List[RiskAssessment]:
         """✅ 專門分析低溫港口（獨立於主風險分析）"""
         temp_assessments = []
@@ -1344,9 +1408,88 @@ class WeatherMonitorService:
         
         return temp_assessments
 
-    
+    def _analyze_visibility_ports(self) -> List[RiskAssessment]:
+        """✅ 專門分析能見度不良港口（獨立於主風險分析）"""
+        visibility_assessments = []
+        total = len(self.crawler.port_list)
+        
+        for i, port_code in enumerate(self.crawler.port_list, 1):
+            try:
+                # 取得 7d 天氣資料
+                data_7d = self.db.get_latest_content_7d(port_code)
+                if not data_7d:
+                    continue
+                
+                content_7d, issued_7d, name_7d = data_7d
+                
+                info = self.crawler.get_port_info(port_code)
+                if not info:
+                    continue
+                
+                # 解析 7d 資料
+                parser = WeatherParser()
+                port_name_7d, wind_records_7d, weather_records_7d, warnings_7d = parser.parse_content_7d(content_7d)
+                
+                if not weather_records_7d:
+                    continue
+                
+                # 收集能見度不良時間點
+                poor_visibility_points = []
+                for wr in weather_records_7d:
+                    if wr.visibility_meters is not None and wr.visibility_meters < RISK_THRESHOLDS['visibility_poor']:
+                        poor_visibility_points.append({
+                            'time_utc': wr.time.strftime('%Y-%m-%d %H:%M'),
+                            'time_lct': wr.lct_time.strftime('%Y-%m-%d %H:%M'),
+                            'visibility_m': wr.visibility_meters,
+                            'visibility_km': wr.visibility_meters / 1000
+                        })
+                
+                if poor_visibility_points:
+                    # 合併時段
+                    poor_visibility_periods = self.analyzer.merge_visibility_periods(poor_visibility_points)
+                    
+                    # 建立能見度評估
+                    assessment = RiskAssessment(
+                        port_code=port_code,
+                        port_name=info.get('port_name', port_name_7d),
+                        country=info.get('country', 'N/A'),
+                        risk_level=0,  # 能見度不計入風險等級
+                        risk_factors=[f"能見度不良 ({len(poor_visibility_periods)} 時段)"],
+                        
+                        max_wind_kts=0,
+                        max_wind_bft=0,
+                        max_gust_kts=0,
+                        max_gust_bft=0,
+                        max_wave=0,
+                        
+                        max_wind_time_utc="",
+                        max_wind_time_lct="",
+                        max_gust_time_utc="",
+                        max_gust_time_lct="",
+                        max_wave_time_utc="",
+                        max_wave_time_lct="",
+                        
+                        min_visibility=min(p['min_visibility_km'] for p in poor_visibility_periods) * 1000,
+                        poor_visibility_periods=poor_visibility_periods,
+                        
+                        risk_periods=[],
+                        issued_time=issued_7d,
+                        latitude=info.get('latitude', 0.0),
+                        longitude=info.get('longitude', 0.0),
+                        weather_records=weather_records_7d
+                    )
+                    
+                    visibility_assessments.append(assessment)
+                    min_vis_km = min(p['min_visibility_km'] for p in poor_visibility_periods)
+                    print(f"   [{i}/{total}] 🌫️ {port_code}: 最低能見度 {min_vis_km:.1f} km ({len(poor_visibility_periods)} 時段)")
+                    
+            except Exception as e:
+                print(f"   [{i}/{total}] ❌ {port_code}: {e}")
+                traceback.print_exc()
+        
+        return visibility_assessments
     def _analyze_all_ports(self) -> List[RiskAssessment]:
-        """✅ 分析所有港口（風浪用 48h, 天氣用 7d）"""
+        """✅ 分析所有港口（風浪用 48h, 天氣用 7d）- 能見度不計入主報告"""
         assessments = []
         total = len(self.crawler.port_list)
         
@@ -1474,8 +1617,40 @@ class WeatherMonitorService:
                 } for a in temp_assessments
             ]
         }
+
+    def _generate_visibility_report_data(self, vis_assessments: List[RiskAssessment]) -> dict:
+        """✅ 生成能見度警報專用 JSON 報告"""
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "alert_type": "POOR_VISIBILITY",
+            "summary": {
+                "total_ports_with_poor_visibility": len(vis_assessments),
+                "min_visibility_km": min(a.min_visibility / 1000 for a in vis_assessments),
+            },
+            "poor_visibility_ports": [
+                {
+                    "port_code": a.port_code,
+                    "port_name": a.port_name,
+                    "country": a.country,
+                    "min_visibility_km": a.min_visibility / 1000,
+                    "poor_visibility_periods": a.poor_visibility_periods,
+                } for a in vis_assessments
+            ]
+        }
+
+    def save_report_to_file(self, report, output_dir='reports'):
+        """儲存報告到檔案"""
+        os.makedirs(output_dir, exist_ok=True)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        path = os.path.join(output_dir, f"report_{timestamp}.json")
+        
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+        
+        print(f"📄 報告已儲存: {path}")
+        return path
     def _generate_html_report(self, assessments: List[RiskAssessment]) -> str:
-        """生成主要氣象風險 HTML 報告（完整版，包含詳細港口表格）"""
+        """✅ 生成主要氣象風險 HTML 報告（完整版，能見度已移除）"""
         
         def format_time_display(time_str):
             if not time_str:
@@ -1548,7 +1723,7 @@ class WeatherMonitorService:
                 'color': '#F59E0B', 
                 'bg': '#FFFBEB', 
                 'border': '#FCD34D',
-                'criteria': '風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m / 氣壓 < 1000 hPa / 能見度 < 1.5 NM'  # ✅ 移除「氣溫 < 0°C」
+                'criteria': '風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m / 氣壓 < 1000 hPa'  # ✅ 移除能見度與低溫
             },
             1: {
                 'emoji': '🟡', 
@@ -1748,8 +1923,7 @@ class WeatherMonitorService:
         </td>
     </tr>
         """
-
-        # ✅ 詳細港口資料表格
+        # ✅ 詳細港口資料表格（能見度已移除）
         styles_detail = {
             3: {
                 'color': '#DC2626', 
@@ -1767,7 +1941,7 @@ class WeatherMonitorService:
                 'title_en': 'MEDIUM RISK LEVEL PORTS',
                 'border': '#F59E0B', 
                 'header_bg': '#FEF3C7', 
-                'desc': '條件 Criteria: 風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m / 氣壓 < 1000 hPa / 能見度 < 3 NM'  # ✅ 移除「氣溫 < 0°C」
+                'desc': '條件 Criteria: 風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m / 氣壓 < 1000 hPa'  # ✅ 移除能見度與低溫
             },
             1: {
                 'color': '#0EA5E9', 
@@ -1895,7 +2069,7 @@ class WeatherMonitorService:
                 pres_lct = format_time_display(p.min_pressure_time_lct) if p.min_pressure_time_lct else "N/A"
 
                 show_pressure_warning = p.min_pressure < RISK_THRESHOLDS['pressure_low']
-                show_vis_warning = len(p.poor_visibility_periods) > 0
+                # ✅ 能見度不再顯示在主報告中
                 
                 html += f"""
                 <tr style="background-color: {row_bg}; border-bottom: 1px solid #E5E7EB;">
@@ -1979,34 +2153,7 @@ class WeatherMonitorService:
                     </table>
                     """
                 
-                if show_vis_warning:
-                    # ✅ 顯示時段格式（已經是正確的）
-                    vis_periods_html = ""
-                    for i, period in enumerate(p.poor_visibility_periods[:3]):
-                        start_time = period['start_lct'].split()[1]  # 取時間部分
-                        end_time = period['end_lct'].split()[1]
-                        min_vis = period['min_visibility_km']
-                        
-                        if i > 0:
-                            vis_periods_html += "<br>"
-                        vis_periods_html += f"• {start_time}~{end_time}: {min_vis:.1f} km"
-                    
-                    if len(p.poor_visibility_periods) > 3:
-                        vis_periods_html += f"<br>... 及其他 {len(p.poor_visibility_periods) - 3} 個時段"
-                    
-                    html += f"""
-                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 10px;">
-                        <tr>
-                            <td width="24" valign="top" style="font-size: 16px; padding-top: 2px;">🌫️</td>
-                            <td valign="top">
-                                <span style="font-size: 11px; color: #6B7280; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px;">能見度不良時段</span>
-                                <span style="color: #DC2626; font-size: 11px; font-weight: 600; line-height: 1.6;">
-                                    {vis_periods_html}
-                                </span>
-                            </td>
-                        </tr>
-                    </table>
-                    """
+                # ✅ 能見度區塊已完全移除
                 
                 html += f"""
                 </td>
@@ -2111,6 +2258,7 @@ class WeatherMonitorService:
     </tr>
             """
 
+        # Footer（繼續下一部分）
         html += f"""
     <tr>
         <td bgcolor="#F8F9FA" align="center" style="padding: 40px 25px; border-top: 3px solid #D1D5DB;">
@@ -2187,6 +2335,354 @@ class WeatherMonitorService:
             </table>
         </td>
     </tr>
+    </table>
+    </center>
+</body>
+</html>
+        """
+        
+        return html
+    def _generate_visibility_html_report(self, vis_assessments: List[RiskAssessment]) -> str:
+        """✅ 生成能見度警報專用 HTML 報告（參考 2010-006 碰撞案例）- 完全 Inline Style 優化版"""
+        
+        # --- 輔助函式 ---
+        def format_time_display(time_str):
+            if not time_str: return "N/A"
+            try:
+                return time_str.split('(')[0].strip() if '(' in time_str else time_str
+            except:
+                return time_str
+        
+        # --- 時間與環境設定 ---
+        base_font = "font-family: 'Microsoft JhengHei', 'Heiti TC', Arial, sans-serif;"
+        
+        try:
+            from zoneinfo import ZoneInfo
+            taipei_tz = ZoneInfo('Asia/Taipei')
+        except ImportError:
+            from datetime import timedelta, timezone
+            taipei_tz = timezone(timedelta(hours=8))
+        
+        utc_now = datetime.now(timezone.utc)
+        tpe_now = utc_now.astimezone(taipei_tz)
+        
+        now_str_TPE = f"{tpe_now.strftime('%Y-%m-%d %H:%M')} (TPE)"
+        now_str_UTC = f"{utc_now.strftime('%Y-%m-%d %H:%M')} (UTC)"
+
+        # --- HTML 本體 ---
+        html = f"""
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>WHL Poor Visibility Alert</title>
+</head>
+<body bgcolor="#F2F4F8" style="margin: 0; padding: 0; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%;">
+    <center>
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 900px; margin: 0 auto;">
+        <tr>
+            <td align="center" valign="top" style="padding: 20px 10px;">
+                
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FFFFFF" style="border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+                    
+                    <!-- 頂部時間列 -->
+                    <tr>
+                        <td bgcolor="#1E3A8A" style="padding: 12px 20px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="left" style="{base_font} color: #93C5FD; font-size: 12px; font-weight: bold;">
+                                        FLEET RISK MANAGEMENT
+                                    </td>
+                                    <td align="right" style="{base_font} color: #FFFFFF; font-size: 12px; font-weight: bold;">
+                                        Last Updated: {now_str_TPE}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- 主標題區 -->
+                    <tr>
+                        <td bgcolor="#7C3AED" style="padding: 25px 30px; border-bottom: 4px solid #5B21B6;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="left">
+                                        <h1 style="margin: 0; color: #FFFFFF; font-size: 26px; font-weight: 800; letter-spacing: 0.5px; line-height: 1.4; {base_font}">
+                                            🌫️ WHL Port Poor Visibility Alert
+                                        </h1>
+                                        <p style="margin: 8px 0 0 0; color: #EDE9FE; font-size: 16px; font-weight: 500; {base_font}">
+                                            能見度不良警報：未來 7 天能見度低於 1.5 海浬 (2778 m) 之港口預報
+                                        </p>
+                                    </td>
+                                    <td align="right" width="80">
+                                        <div style="background-color: #FFFFFF; color: #7C3AED; font-size: 24px; font-weight: 800; width: 50px; height: 50px; line-height: 50px; border-radius: 50%; text-align: center; {base_font}">
+                                            {len(vis_assessments)}
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- 受影響港口摘要 -->
+                    <tr>
+                        <td bgcolor="#F3E8FF" style="padding: 15px 30px; border-bottom: 1px solid #DDD6FE;">
+                            <span style="color: #6B21A8; font-weight: bold; font-size: 14px; {base_font}">⚠️ 受影響港口 Affected Ports:</span>
+                            <br>
+                            <div style="margin-top: 5px; color: #333333; font-size: 15px; line-height: 1.5; {base_font}">
+                                {', '.join([f"<b>{p.port_code}</b>" for p in vis_assessments])}
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- ✅ 2010-006 案例警示區 -->
+                    <tr>
+                        <td style="padding: 30px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FEF2F2" style="border: 2px solid #DC2626; border-radius: 6px;">
+                                <tr>
+                                    <td style="padding: 20px;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                            <tr>
+                                                <td style="padding-bottom: 15px; border-bottom: 2px solid #FCA5A5;">
+                                                    <strong style="color: #991B1B; font-size: 18px; {base_font}">⚠️ 案例警示 Case Study Alert (Ref: 2010-006)</strong>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding-top: 15px;">
+                                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                        <tr>
+                                                            <td width="30" valign="top" style="font-size: 18px;">⚓</td>
+                                                            <td valign="top" style="{base_font} color: #7F1D1D; font-size: 14px; line-height: 1.6; padding-bottom: 12px;">
+                                                                <strong style="color: #991B1B;">2010年威海碰撞事故：</strong>一艘香港籍散裝船與貝里斯籍雜貨船在能見度僅約 <span style="background-color: #FEE2E2; padding: 2px 6px; border-radius: 3px; font-weight: bold;">20 公尺</span> 的極端惡劣條件下相撞，導致雜貨船沉沒、數人罹難。<br>
+                                                                <span style="color: #991B1B; font-size: 13px;">In 2010, a Hong Kong bulk carrier collided with a Belizean cargo ship off Weihai in visibility of only <strong>20 meters</strong>, resulting in the sinking of the cargo ship and loss of lives.</span>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- ✅ 能見度不良應對措施（參考 2010-006 調查結果） -->
+                    <tr>
+                        <td style="padding: 0 30px 30px 30px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#F9FAFB" style="border: 1px solid #E0E0E0; border-radius: 6px;">
+                                <tr>
+                                    <td style="padding: 15px 20px; border-bottom: 1px solid #E0E0E0; background-color: #F0F4F8;">
+                                        <strong style="color: #2C3E50; font-size: 16px; {base_font}">📋 能見度不良航行安全措施 (Reference: COLREG Rule 19 & Case 2010-006)</strong>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 20px;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                            <tr>
+                                                <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">👀</td>
+                                                <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                    <strong style="color: #7C3AED;">加強瞭望 (Proper Look-out)：</strong>使用一切可用手段保持適當瞭望，包括<span style="background-color: #F3E8FF; padding: 2px 6px; border-radius: 3px; font-weight: bold;">正確使用雷達與 AIS</span>，調整雷達至最佳狀態以偵測小目標。<br>
+                                                    <span style="color: #777777; font-size: 13px;">Maintain proper look-out by all available means, especially proper use of Radar and AIS. Adjust radar functions to optimum settings to detect even small targets.</span>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">🐢</td>
+                                                <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                    <strong style="color: #7C3AED;">保持安全速度 (Safe Speed)：</strong>依 COLREG Rule 19 規定，在能見度受限時必須以安全速度行駛，確保能在適當距離內停船。<br>
+                                                    <span style="color: #777777; font-size: 13px;">Proceed at a safe speed as per COLREG Rule 19. Ensure the vessel can take proper action to avoid collision and stop within appropriate distance.</span>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">📡</td>
+                                                <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                    <strong style="color: #7C3AED;">雙雷達運作 (Dual Radar Operation)：</strong>開啟第二部雷達（尤其是 S-Band），配合 AIS 快速識別目標船名、航向、船速，以便及時採取有效避讓行動。<br>
+                                                    <span style="color: #777777; font-size: 13px;">Switch on another radar (especially S-band) to easily locate small targets. Use AIS to promptly identify target ship's name, course, and speed for effective collision avoidance.</span>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">🔄</td>
+                                                <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                    <strong style="color: #7C3AED;">避免小角度轉向 (Avoid Small Alterations)：</strong>採取<span style="background-color: #FEF3C7; padding: 2px 6px; border-radius: 3px; font-weight: bold;">明顯且足夠大的轉向角度</span>，避免連續小角度轉向導致對方船舶無法察覺。<br>
+                                                    <span style="color: #777777; font-size: 13px;">Take substantial and obvious alterations of course. Avoid a succession of small alterations which may not be detected by other vessels.</span>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td width="25" valign="top" style="padding-bottom: 15px; font-size: 16px;">📢</td>
+                                                <td valign="top" style="padding-bottom: 15px; {base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                    <strong style="color: #7C3AED;">鳴放霧號 (Sound Signals)：</strong>依規定鳴放霧號，提醒周圍船舶注意；必要時使用 VHF 與附近船舶溝通確認動態。<br>
+                                                    <span style="color: #777777; font-size: 13px;">Sound appropriate fog signals as required. Use VHF to communicate with nearby vessels when necessary to confirm intentions.</span>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td width="25" valign="top" style="font-size: 16px;">⚓</td>
+                                                <td valign="top" style="{base_font} color: #444444; font-size: 14px; line-height: 1.5;">
+                                                    <strong style="color: #7C3AED;">考慮延遲進港或錨泊候泊 (Consider Delay or Anchoring)：</strong>若能見度極差（< 500m），考慮在安全水域錨泊候泊或延遲進港，直到能見度改善。<br>
+                                                    <span style="color: #777777; font-size: 13px;">If visibility is extremely poor (< 500m), consider anchoring in safe waters or delaying port entry until visibility improves.</span>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- 分隔線 -->
+                    <tr>
+                        <td style="padding: 0 30px 15px 30px; text-align: center;">
+                            <div style="border-top: 1px dashed #CCCCCC; height: 1px; width: 100%; margin-bottom: 20px;"></div>
+                            <strong style="color: #333333; font-size: 18px; {base_font}">⬇️ 各港口詳細能見度預報 Detailed Forecast ⬇️</strong>
+                            <div style="font-size: 12px; color: #888888; margin-top: 5px; {base_font}">Data Source: Weathernews Inc. (WNI)</div>
+                        </td>
+                    </tr>
+
+                    <!-- 港口詳細資料 -->
+                    <tr>
+                        <td style="padding: 0 20px 40px 20px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse;">
+        """
+
+        # --- 迴圈生成港口數據 ---
+        for index, p in enumerate(vis_assessments):
+            row_bg = "#FFFFFF" if index % 2 == 0 else "#F7F9FA"
+            border_color = "#E0E0E0"
+            
+            # 能見度時段資訊
+            vis_periods_html = ""
+            for i, period in enumerate(p.poor_visibility_periods[:5]):  # 最多顯示 5 個時段
+                start_date = period['start_lct'].split()[0]
+                start_time = period['start_lct'].split()[1]
+                end_time = period['end_lct'].split()[1]
+                min_vis_km = period['min_visibility_km']
+                min_vis_nm = min_vis_km / 1.852  # 轉換為海浬
+                
+                # 計算時段長度
+                try:
+                    from datetime import datetime
+                    start_dt = datetime.strptime(period['start_utc'], '%Y-%m-%d %H:%M')
+                    end_dt = datetime.strptime(period['end_utc'], '%Y-%m-%d %H:%M')
+                    duration_hours = (end_dt - start_dt).total_seconds() / 3600
+                except:
+                    duration_hours = 0
+                
+                if i > 0:
+                    vis_periods_html += "<br>"
+                
+                # 根據能見度設定顏色
+                if min_vis_km < 0.5:  # < 500m (極危險)
+                    vis_color = "#7F1D1D"
+                    vis_bg = "#FEE2E2"
+                    vis_label = "極低"
+                elif min_vis_km < 1.0:  # < 1km
+                    vis_color = "#991B1B"
+                    vis_bg = "#FEF2F2"
+                    vis_label = "很低"
+                else:  # < 2.778km
+                    vis_color = "#C2410C"
+                    vis_bg = "#FFF7ED"
+                    vis_label = "低"
+                
+                vis_periods_html += f"""
+                <div style="background-color: {vis_bg}; padding: 8px 10px; border-left: 3px solid {vis_color}; margin-bottom: 6px; border-radius: 3px;">
+                    <strong style="color: {vis_color}; font-size: 13px;">時段 {i+1} (Period {i+1}):</strong><br>
+                    <span style="color: #333333; font-size: 12px;">
+                        📅 {start_date} {start_time} ~ {end_time} (LT)<br>
+                        🌫️ 最低能見度: <strong style="color: {vis_color};">{min_vis_km:.2f} km ({min_vis_nm:.2f} NM)</strong> - {vis_label}<br>
+                        ⏱️ 持續時間: {duration_hours:.1f} 小時
+                    </span>
+                </div>
+                """
+            
+            if len(p.poor_visibility_periods) > 5:
+                vis_periods_html += f"<div style='font-size: 12px; color: #888888; margin-top: 5px;'>... 及其他 {len(p.poor_visibility_periods) - 5} 個時段</div>"
+            
+            # 組合單一港口的 HTML
+            html += f"""
+                                <tr bgcolor="{row_bg}">
+                                    <td style="padding: 20px; border: 1px solid {border_color};">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                            <tr>
+                                                <td valign="top" width="35%">
+                                                    <div style="font-size: 24px; font-weight: 900; color: #7C3AED; line-height: 1; {base_font}">
+                                                        {p.port_code}
+                                                    </div>
+                                                    <div style="font-size: 14px; color: #555555; font-weight: bold; margin-top: 5px; {base_font}">
+                                                        {p.port_name}
+                                                    </div>
+                                                    <div style="font-size: 12px; color: #888888; margin-bottom: 15px; {base_font}">
+                                                        📍 {p.country}
+                                                    </div>
+                                                    
+                                                    <table border="0" cellpadding="0" cellspacing="0" bgcolor="#F3E8FF" style="border-radius: 4px; border: 1px solid #DDD6FE;">
+                                                        <tr>
+                                                            <td style="padding: 10px 12px;">
+                                                                <span style="font-size: 12px; color: #6B21A8; font-weight: bold; {base_font}">MIN VISIBILITY</span><br>
+                                                                <span style="font-size: 20px; font-weight: bold; color: #5B21B6; {base_font}">{p.min_visibility / 1000:.2f} km</span><br>
+                                                                <span style="font-size: 14px; color: #7C3AED; {base_font}">({p.min_visibility / 1852:.2f} NM)</span>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                    
+                                                    <div style="margin-top: 12px; padding: 8px; background-color: #FEF2F2; border-left: 3px solid #DC2626; border-radius: 3px;">
+                                                        <span style="font-size: 11px; color: #991B1B; font-weight: bold; {base_font}">⚠️ 能見度不良時段數量:</span><br>
+                                                        <span style="font-size: 18px; font-weight: bold; color: #DC2626; {base_font}">{len(p.poor_visibility_periods)}</span>
+                                                        <span style="font-size: 12px; color: #991B1B; {base_font}">個時段</span>
+                                                    </div>
+                                                </td>
+                                                
+                                                <td valign="top" width="65%" style="padding-left: 20px;">
+                                                    <div style="font-size: 14px; color: #6B21A8; font-weight: bold; margin-bottom: 10px; {base_font}">
+                                                        🌫️ 能見度不良時段詳情 Poor Visibility Periods:
+                                                    </div>
+                                                    {vis_periods_html}
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+            """
+            
+            # 增加間距列
+            if index < len(vis_assessments) - 1:
+                html += '<tr><td height="15" style="font-size: 0; line-height: 0;">&nbsp;</td></tr>'
+
+        # --- Footer 結尾 ---
+        html += f"""
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- 免責聲明 -->
+                    <tr>
+                        <td bgcolor="#FFF8E1" style="padding: 20px 30px; border-top: 1px solid #FFECB3;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td valign="top" width="24" style="font-size: 18px;">⚠️</td>
+                                    <td valign="top" style="padding-left: 10px; {base_font} color: #7F6000; font-size: 12px; line-height: 1.5;">
+                                        <strong>免責聲明 Disclaimer:</strong><br>
+                                        本信件內容僅供參考，船長仍應依據實際天候狀況、雷達觀測與專業判斷採取適當措施。能見度不良時務必遵守 COLREG Rule 19 相關規定。<br>
+                                        This report is for reference only. Captains should take appropriate actions based on actual weather conditions, radar observations, and professional judgment. Comply with COLREG Rule 19 in restricted visibility.
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td bgcolor="#1E3A8A" align="center" style="padding: 15px;">
+                            <font color="#93C5FD" style="font-size: 11px; {base_font}">
+                                &copy; {now_str_TPE[:4]} <strong>Wan Hai Lines Ltd.</strong> All Rights Reserved.<br>
+                                Marine Technology Division | Fleet Risk Management Dept.
+                            </font>
+                        </td>
+                    </tr>
+                    
+                </table>
+            </td>
+        </tr>
     </table>
     </center>
 </body>
@@ -2518,7 +3014,8 @@ class WeatherMonitorService:
         
         print(f"📄 報告已儲存: {path}")
         return path
-# ================= 主程式 =================
+    
+    # ================= 主程式 =================
 
 def main():
     """主程式進入點"""
