@@ -451,6 +451,15 @@ class ChartGenerator:
             fig.patch.set_facecolor('#FFFFFF')
             ax1.set_facecolor('#F0F9FF')
             
+            # 🔥 關鍵修正：計算完整 7 天的時間範圍
+            time_min = df['time'].min()
+            time_max = df['time'].max()
+            
+            # 確保顯示完整 7 天（168 小時）
+            from datetime import timedelta
+            if (time_max - time_min).total_seconds() < 168 * 3600:
+                time_max = time_min + timedelta(days=7)
+            
             # 繪製冰點以下的背景區域
             min_temp = df['temperature'].min()
             y_min = min(min_temp - 2, -5)
@@ -522,6 +531,9 @@ class ChartGenerator:
             ax1.grid(True, alpha=0.3, linestyle='--', linewidth=0.8, color='#9CA3AF', zorder=1)
             ax1.set_axisbelow(True)
             
+            # 🔥 關鍵修正：設定 X 軸範圍為完整 7 天
+            ax1.set_xlim(time_min, time_max)
+            
             # X軸格式（7天資料，間隔調整為 12 小時）
             ax1.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d\n%H:%M'))
             ax1.xaxis.set_major_locator(mdates.HourLocator(interval=12))
@@ -567,6 +579,7 @@ class ChartGenerator:
             print(f"      ❌ 繪製7天溫度圖失敗 {port_code}: {e}")
             traceback.print_exc()
             return None
+
 
     def generate_visibility_chart(self, assessment: RiskAssessment, port_code: str) -> Optional[str]:
         """✅ 繪製能見度趨勢圖（改用 48h 資料）"""
