@@ -1450,53 +1450,80 @@ class WeatherMonitorService:
         for i, port_code in enumerate(self.crawler.port_list, 1):
             try:
                 # ✅ 優先使用 7d 資料，無則用 48h
-                data = self.db.get_latest_content_7d(port_code)
-                if not data:
-                    data = self.db.get_latest_content(port_code)
-                    if not data:
-                        continue
+                data_7d = self.db.get_latest_content_7d(port_code)
+                data_48h = self.db.get_latest_content(port_code)
                 
-                content, issued, name = data
+                # 決定使用哪個資料來源
+                if data_7d:
+                    content, issued, name = data_7d
+                    is_7d = True
+                    print(f"   [{i}/{total}] 🔍 {port_code}: 使用 7d 資料")
+                elif data_48h:
+                    content, issued, name = data_48h
+                    is_7d = False
+                    print(f"   [{i}/{total}] 🔍 {port_code}: 使用 48h 資料")
+                else:
+                    print(f"   [{i}/{total}] ⚠️ {port_code}: 無可用資料")
+                    continue
                 
                 info = self.crawler.get_port_info(port_code)
                 if not info:
+                    print(f"   [{i}/{total}] ⚠️ {port_code}: 無港口資訊")
                     continue
                 
-                # ✅ 自動偵測並解析
+                # ✅ 根據資料來源解析
                 parser = WeatherParser()
-                forecast_type = parser.detect_forecast_type(content)
                 
-                if forecast_type == '7d':
-                    port_name, wind_records, weather_records, warnings = parser.parse_content_7d(content)
-                else:
-                    port_name, wind_records, weather_records, warnings = parser.parse_content_48h(content)
+                try:
+                    if is_7d:
+                        port_name, wind_records, weather_records, warnings = parser.parse_content_7d(content)
+                    else:
+                        port_name, wind_records, weather_records, warnings = parser.parse_content_48h(content)
+                except Exception as parse_error:
+                    print(f"   [{i}/{total}] ❌ {port_code}: 解析失敗 - {parse_error}")
+                    continue
                 
                 if not weather_records:
+                    print(f"   [{i}/{total}] ⚠️ {port_code}: 無天氣記錄")
                     continue
+                
+                print(f"   [{i}/{total}] 📊 {port_code}: 找到 {len(weather_records)} 筆天氣記錄")
                 
                 # ✅ 過濾有效的溫度記錄
-                valid_temp_records = [
-                    r for r in weather_records 
-                    if r.temperature is not None 
-                    and isinstance(r.temperature, (int, float))
-                    and -100 < r.temperature < 100
-                ]
+                valid_temp_records = []
+                for r in weather_records:
+                    if r.temperature is not None and isinstance(r.temperature, (int, float)):
+                        if -100 < r.temperature < 100:  # 排除異常值
+                            valid_temp_records.append(r)
                 
                 if not valid_temp_records:
+                    print(f"   [{i}/{total}] ⚠️ {port_code}: 無有效溫度資料")
                     continue
+                
+                print(f"   [{i}/{total}] 🌡️ {port_code}: 有效溫度記錄 {len(valid_temp_records)} 筆")
                 
                 # 檢查是否有低溫記錄
                 min_temp_record = min(valid_temp_records, key=lambda r: r.temperature)
                 
+                print(f"   [{i}/{total}] 📉 {port_code}: 最低溫 {min_temp_record.temperature:.1f}°C (閾值: {RISK_THRESHOLDS['temp_freezing']}°C)")
+                
                 if min_temp_record.temperature < RISK_THRESHOLDS['temp_freezing']:
+                    # ✅ 計算 LCT 時區偏移
+                    try:
+                        lct_offset_hours = int(min_temp_record.lct_time.utcoffset().total_seconds() / 3600)
+                    except Exception as tz_error:
+                        print(f"   [{i}/{total}] ⚠️ {port_code}: 時區計算失敗 - {tz_error}")
+                        lct_offset_hours = 0
+                    
                     # 建立低溫評估
                     assessment = RiskAssessment(
                         port_code=port_code,
                         port_name=info.get('port_name', port_name),
                         country=info.get('country', 'N/A'),
-                        risk_level=0,
+                        risk_level=0,  # 低溫不計入風險等級
                         risk_factors=[f"低溫 {min_temp_record.temperature:.1f}°C"],
                         
+                        # 風浪資料（低溫警報不需要）
                         max_wind_kts=0,
                         max_wind_bft=0,
                         max_gust_kts=0,
@@ -1510,22 +1537,26 @@ class WeatherMonitorService:
                         max_wave_time_utc="",
                         max_wave_time_lct="",
                         
+                        # 溫度資料
                         min_temperature=min_temp_record.temperature,
                         min_temp_time_utc=f"{min_temp_record.time.strftime('%m/%d %H:%M')} (UTC)",
-                        min_temp_time_lct=f"{min_temp_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
+                        min_temp_time_lct=f"{min_temp_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT+{lct_offset_hours})",
                         
                         risk_periods=[],
                         issued_time=issued,
                         latitude=info.get('latitude', 0.0),
                         longitude=info.get('longitude', 0.0),
-                        weather_records=weather_records
+                        weather_records=weather_records  # ✅ 保留完整天氣記錄供繪圖使用
                     )
                     
                     temp_assessments.append(assessment)
                     print(f"   [{i}/{total}] ❄️ {port_code}: 低溫警報 {min_temp_record.temperature:.1f}°C")
+                else:
+                    print(f"   [{i}/{total}] ✅ {port_code}: 無低溫風險")
                     
             except Exception as e:
-                print(f"   [{i}/{total}] ❌ {port_code}: {e}")
+                print(f"   [{i}/{total}] ❌ {port_code}: 處理失敗 - {e}")
+                import traceback
                 traceback.print_exc()
         
         print(f"\n✅ 低溫分析完成：共找到 {len(temp_assessments)} 個低溫港口")
