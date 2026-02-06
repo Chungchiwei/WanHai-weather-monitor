@@ -1583,145 +1583,125 @@ class WeatherMonitorService:
 
 
     def _analyze_visibility_ports(self) -> List[RiskAssessment]:
-            """✅ 專門分析能見度不良港口（改用 48h 資料）- 修正強健版"""
+
+            """✅ 專門分析能見度不良港口（改用 48h 資料）"""
             vis_assessments = []
-            total = len(self.crawler.port_list)
-            
-            print(f"   🔍 開始分析 {total} 個港口的能見度資料...")
-            
+            total = len(self.crawler.port_list)    
+
             for i, port_code in enumerate(self.crawler.port_list, 1):
                 try:
-                    # 1. 取得資料
+                    # ✅ 改用 48h 資料
                     data_48h = self.db.get_latest_content(port_code)
                     if not data_48h:
-                        continue
-                    
-                    content_48h, issued_48h, name_48h = data_48h
-                    
+                        continue            
+                    content_48h, issued_48h, name_48h = data_48h              
                     info = self.crawler.get_port_info(port_code)
                     if not info:
                         continue
-                    
-                    # 2. 解析資料
+                    # ✅ 修正：正確呼叫 48h 解析函式
                     parser = WeatherParser()
-                    # 為了避免變數名稱混淆，這裡明確接收變數
-                    p_name, w_records, wx_records, _ = parser.parse_content_48h(content_48h)
-                    
-                    if not wx_records:
+                    port_name_48h, wind_records_48h, weather_records_48h, warnings_48h = parser.parse_content_48h(content_48h)
+                    if not weather_records_48h:
                         print(f"   [{i}/{total}] ⚠️ {port_code}: 無天氣記錄")
                         continue
-                    
-                    # 3. 🔥修正：更強健的資料清洗與過濾
+                    # 過濾有效的能見度記錄
                     valid_vis_records = []
-                    for r in wx_records: # 注意：能見度通常在 weather_records (wx_records) 中
-                        try:
-                            # 強制轉型為 float，處理字串型態的數值
-                            if r.visibility_meters is not None:
-                                vis_val = float(r.visibility_meters)
-                                
-                                # 合理性檢查 (0 ~ 100km)
-                                if 0 <= vis_val < 100000:
-                                    # 更新物件數值確保後續計算正確
-                                    r.visibility_meters = vis_val 
-                                    valid_vis_records.append(r)
-                        except (ValueError, TypeError):
-                            continue
-                    
+                    for r in weather_records_48h:
+                        vis_m = r.visibility_meters
+                        if vis_m is not None and isinstance(vis_m, (int, float)) and vis_m > 0:
+                            valid_vis_records.append(r)     
                     if not valid_vis_records:
                         print(f"   [{i}/{total}] ⚠️ {port_code}: 無有效能見度資料")
                         continue
                     
-                    # 4. 找出最低能見度
+                    # 找出最低能見度
                     min_vis_record = min(valid_vis_records, key=lambda r: r.visibility_meters)
-                    min_vis_val = min_vis_record.visibility_meters
-                    
-                    # print(f"   [{i}/{total}] 🔍 {port_code}: 檢查能見度 {min_vis_val:.0f}m")
-                    
-                    # 5. 判斷風險 (Threshold Check)
-                    if min_vis_val < RISK_THRESHOLDS['visibility_poor']:
-                        
-                        # 6. 🔥修正：更安全的時段計算邏輯 (移除 .index() )
+                    print(f"   [{i}/{total}] 🔍 {port_code}: 檢查能見度 {min_vis_record.visibility_meters / 1000:.2f} km (閾值: {RISK_THRESHOLDS['visibility_poor'] / 1000:.2f} km)")
+                    # 檢查是否低於閾值
+                    if min_vis_record.visibility_meters < RISK_THRESHOLDS['visibility_poor']:
+                        # 找出所有能見度不良時段
                         poor_vis_periods = []
                         in_poor_vis = False
                         period_start = None
-                        period_min_vis = float('inf')
-                        last_record = None # 用來記錄上一筆資料
-                        
+                        period_min_vis = float('inf')                   
+
                         for r in valid_vis_records:
-                            current_vis = r.visibility_meters
-                            
-                            if current_vis < RISK_THRESHOLDS['visibility_poor']:
+                            if r.visibility_meters < RISK_THRESHOLDS['visibility_poor']:
                                 if not in_poor_vis:
                                     # 開始新時段
                                     period_start = r
-                                    period_min_vis = current_vis
+                                    period_min_vis = r.visibility_meters
                                     in_poor_vis = True
                                 else:
-                                    # 保持在時段內，更新最低值
-                                    period_min_vis = min(period_min_vis, current_vis)
+                                    # 更新最低能見度
+                                    period_min_vis = min(period_min_vis, r.visibility_meters)
                             else:
                                 if in_poor_vis:
-                                    # 結束時段 (使用上一筆資料作為結束點)
-                                    # 如果 last_record 是 None (邏輯上不應該發生，除非第一筆就結束)，則用當前
-                                    end_rec = last_record if last_record else r
-                                    
+                                    # 結束時段
+                                    prev_record = valid_vis_records[valid_vis_records.index(r) - 1]
                                     poor_vis_periods.append({
                                         'start_utc': period_start.time.strftime('%Y-%m-%d %H:%M'),
-                                        'end_utc': end_rec.time.strftime('%Y-%m-%d %H:%M'),
+                                        'end_utc': prev_record.time.strftime('%Y-%m-%d %H:%M'),
                                         'start_lct': period_start.lct_time.strftime('%Y-%m-%d %H:%M'),
-                                        'end_lct': end_rec.lct_time.strftime('%Y-%m-%d %H:%M'),
+                                        'end_lct': prev_record.lct_time.strftime('%Y-%m-%d %H:%M'),
                                         'min_visibility_m': period_min_vis,
                                         'min_visibility_km': period_min_vis / 1000
                                     })
+
                                     in_poor_vis = False
-                            
-                            # 更新 last_record
-                            last_record = r
-                        
-                        # 處理迴圈結束後仍未關閉的時段 (一直到最後都不良)
-                        if in_poor_vis and period_start and last_record:
+                        # 如果最後還在能見度不良狀態
+                        if in_poor_vis:
                             poor_vis_periods.append({
                                 'start_utc': period_start.time.strftime('%Y-%m-%d %H:%M'),
-                                'end_utc': last_record.time.strftime('%Y-%m-%d %H:%M'),
+                                'end_utc': valid_vis_records[-1].time.strftime('%Y-%m-%d %H:%M'),
                                 'start_lct': period_start.lct_time.strftime('%Y-%m-%d %H:%M'),
-                                'end_lct': last_record.lct_time.strftime('%Y-%m-%d %H:%M'),
+                                'end_lct': valid_vis_records[-1].lct_time.strftime('%Y-%m-%d %H:%M'),
                                 'min_visibility_m': period_min_vis,
                                 'min_visibility_km': period_min_vis / 1000
                             })
-                        
-                        # 建立評估報告
+                        # 建立能見度評估
                         assessment = RiskAssessment(
                             port_code=port_code,
-                            port_name=info.get('port_name', p_name),
+                            port_name=info.get('port_name', port_name_48h),
                             country=info.get('country', 'N/A'),
                             risk_level=0,
-                            risk_factors=[f"能見度不良 {min_vis_val / 1000:.2f} km"],
-                            
-                            # 填補 Dummy 資料
-                            max_wind_kts=0, max_wind_bft=0, max_gust_kts=0, max_gust_bft=0, max_wave=0,
-                            max_wind_time_utc="", max_wind_time_lct="", max_gust_time_utc="", max_gust_time_lct="", max_wave_time_utc="", max_wave_time_lct="",
-                            
-                            # 能見度資料
-                            min_visibility=min_vis_val,
+                            risk_factors=[f"能見度不良 {min_vis_record.visibility_meters / 1000:.2f} km"],                      
+                            max_wind_kts=0,
+                            max_wind_bft=0,
+                            max_gust_kts=0,
+                            max_gust_bft=0,
+                            max_wave=0,                       
+                            max_wind_time_utc="",
+                            max_wind_time_lct="",
+                            max_gust_time_utc="",
+                            max_gust_time_lct="",
+                            max_wave_time_utc="",
+                            max_wave_time_lct="",                        
+
+                            min_visibility=min_vis_record.visibility_meters,
                             min_visibility_time_utc=f"{min_vis_record.time.strftime('%m/%d %H:%M')} (UTC)",
                             min_visibility_time_lct=f"{min_vis_record.lct_time.strftime('%Y-%m-%d %H:%M')} (LT)",
-                            
                             poor_visibility_periods=poor_vis_periods,
+                            
                             risk_periods=[],
                             issued_time=issued_48h,
                             latitude=info.get('latitude', 0.0),
                             longitude=info.get('longitude', 0.0),
-                            weather_records=wx_records # 保留原始資料供繪圖
+                            weather_records=weather_records_48h  # ✅ 使用 48h 資料
                         )
-                        
                         vis_assessments.append(assessment)
-                        print(f"   [{i}/{total}] 🌫️ {port_code}: 能見度不良 {min_vis_val:.0f}m ({len(poor_vis_periods)} 時段)")
-                        
+
+                        print(f"   [{i}/{total}] 🌫️ {port_code}: 能見度不良 {min_vis_record.visibility_meters / 1000:.2f} km ({len(poor_vis_periods)} 個時段)")
                 except Exception as e:
-                    print(f"   [{i}/{total}] ❌ {port_code}: 能見度分析錯誤 - {e}")
-                    # traceback.print_exc() # 除錯時可打開
-            
+
+                    print(f"   [{i}/{total}] ❌ {port_code}: {e}")
+
+                    traceback.print_exc()
+
+        
+
             print(f"\n✅ 能見度分析完成：共找到 {len(vis_assessments)} 個能見度不良港口")
+
             return vis_assessments
 
 
