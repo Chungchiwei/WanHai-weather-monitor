@@ -2052,7 +2052,7 @@ class WeatherMonitorService:
                 """
         
         html += f"""
-            </table>
+                        </table>
         </td>
     </tr>
     
@@ -2102,9 +2102,24 @@ class WeatherMonitorService:
                                         <tr>
                                             <td width="20" valign="top" style="font-size: 14px;">✅</td>
                                             <td>
+                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">靠離泊前務必確認所有橋式機吊臂已升起或淨空船席,若無法配合應通知引水並要求港務單位改正,必要時增加拖船或採取其他安全措施</strong>
+                                                <br>
+                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Before berthing/unberthing, ensure all gantry crane arms are raised or cleared from berth. If unable to comply, notify pilot and request port authority to rectify. Add tugs or take other safety measures if necessary.</span>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td style="padding-bottom: 12px;">
+                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                        <tr>
+                                            <td width="20" valign="top" style="font-size: 14px;">✅</td>
+                                            <td>
                                                 <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">根據風險等級制定應對策略,如:拋錨候泊改為安全水域備車漂航、提前申請額外拖船協助、加強繫泊纜繩、或調整靠離泊計畫等</strong>
                                                 <br>
-                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Formulate response strategies based on risk levels, including Drifting instant anchor, strengthening mooring lines, arranging extra tug assistance in advance, or adjusting berthing/unberthing schedules.</span>
+                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Formulate response strategies based on risk levels, including drifting instead of anchoring, strengthening mooring lines, arranging extra tug assistance in advance, or adjusting berthing/unberthing schedules.</span>
                                             </td>
                                         </tr>
                                     </table>
@@ -2164,7 +2179,7 @@ class WeatherMonitorService:
                 'title_en': 'MEDIUM RISK LEVEL PORTS',
                 'border': '#F59E0B', 
                 'header_bg': '#FEF3C7', 
-                'desc': '條件 Criteria: 風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m / 氣壓 < 1000 hPa'  # ✅ 移除能見度與低溫
+                'desc': '條件 Criteria: 風速 Wind > 28 kts / 陣風 Gust > 34 kts / 浪高 Wave > 3.5 m '
             },
             1: {
                 'color': '#0EA5E9', 
