@@ -2085,11 +2085,11 @@ class WeatherMonitorService:
                                 <td style="padding-top: 15px; padding-bottom: 12px;">
                                     <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                         <tr>
-                                            <td width="20" valign="top" style="font-size: 14px;">✅</td>
+                                            <td width="20" valign="top" style="font-size: 14px;">🔴</td>
                                             <td>
-                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">請立即確認貴輪靠泊港口是否在風險名單中,並評估可能影響</strong>
+                                                <strong style="font-size: 15px; color: #DC2626; line-height: 1.6;">靠離泊前務必確認所有橋式機已擺放正確位置(吊臂升起/船席淨空)。若無法配合應立即通知引水並要求港務單位改正,必要時增加拖船或採取其他安全措施</strong>
                                                 <br>
-                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Immediately verify if your vessel's port of call is on the alert list and assess potential impacts.</span>
+                                                <span style="font-size: 13px; color: #B91C1C; line-height: 1.5;">Before berthing or unberthing, ensure all gantry cranes are positioned correctly (booms raised/berth clearance). If compliance is not possible, immediately notify the pilot and request the port authority to rectify the situation. If necessary, arrange for additional tugboats or take other safety measures.</span>
                                             </td>
                                         </tr>
                                     </table>
@@ -2102,9 +2102,9 @@ class WeatherMonitorService:
                                         <tr>
                                             <td width="20" valign="top" style="font-size: 14px;">✅</td>
                                             <td>
-                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">靠離泊前務必確認所有橋式機吊臂已升起或淨空船席,若無法配合應通知引水並要求港務單位改正,必要時增加拖船或採取其他安全措施</strong>
+                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.6;">立即確認貴輪靠泊港口是否在風險名單中,並評估可能影響</strong>
                                                 <br>
-                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Before berthing/unberthing, ensure all gantry crane arms are raised or cleared from berth. If unable to comply, notify pilot and request port authority to rectify. Add tugs or take other safety measures if necessary.</span>
+                                                <span style="font-size: 13px; color: #92400E; line-height: 1.5;">Immediately verify if your vessel's port of call is on the alert list and assess potential impacts.</span>
                                             </td>
                                         </tr>
                                     </table>
@@ -2117,9 +2117,9 @@ class WeatherMonitorService:
                                         <tr>
                                             <td width="20" valign="top" style="font-size: 14px;">✅</td>
                                             <td>
-                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">根據風險等級制定應對策略,如:拋錨候泊改為安全水域備車漂航、提前申請額外拖船協助、加強繫泊纜繩、或調整靠離泊計畫等</strong>
+                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.6;">根據風險等級制定應對策略:改為安全水域備車漂航、提前申請額外拖船、加強繫泊纜繩、或調整靠離泊計畫</strong>
                                                 <br>
-                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Formulate response strategies based on risk levels, including drifting instead of anchoring, strengthening mooring lines, arranging extra tug assistance in advance, or adjusting berthing/unberthing schedules.</span>
+                                                <span style="font-size: 13px; color: #92400E; line-height: 1.5;">Formulate response strategies based on risk levels: drift in safe waters, arrange extra tugs in advance, strengthen mooring lines, or adjust berthing/unberthing schedules.</span>
                                             </td>
                                         </tr>
                                     </table>
@@ -2132,9 +2132,9 @@ class WeatherMonitorService:
                                         <tr>
                                             <td width="20" valign="top" style="font-size: 14px;">✅</td>
                                             <td>
-                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.5;">與船管PIC、當地代理保持密切聯繫,及時報告船舶狀態和決策</strong>
+                                                <strong style="font-size: 14px; color: #451A03; line-height: 1.6;">與船管PIC、當地代理保持密切聯繫,即時回報船舶狀態和決策</strong>
                                                 <br>
-                                                <span style="font-size: 13px; color: #92400E; line-height: 1.4;">Maintain close contact with the PIC and local agents; promptly report vessel status and decisions.</span>
+                                                <span style="font-size: 13px; color: #92400E; line-height: 1.5;">Maintain close contact with PIC and local agents; promptly report vessel status and decisions.</span>
                                             </td>
                                         </tr>
                                     </table>
@@ -2160,6 +2160,8 @@ class WeatherMonitorService:
             </table>
         </td>
     </tr>
+
+
         """
         # ✅ 詳細港口資料表格（能見度已移除）
         styles_detail = {
